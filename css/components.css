@@ -1,0 +1,98 @@
+/**
+ * Componentes (components.css)
+ *
+ * Responsabilidades:
+ * - botões, cards, tags, progresso, modais, toasts
+ * - menu recolhível, estabilidade de layout, impressão/PDF
+ *   (estas últimas regras DEVEM permanecer no fim da cascata)
+ *
+ * Dependências:
+ * - css/variables.css
+ *
+ * Não modificar:
+ * - a posição deste arquivo como último <link> no index.html
+ */
+/* ===== Buttons ===== */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;font-weight:600;font-size:.88rem;border:1px solid transparent;transition:all .15s;white-space:nowrap}
+.btn svg{width:15px;height:15px}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{filter:brightness(1.08);box-shadow:0 4px 12px color-mix(in srgb,var(--blue) 35%,transparent)}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-sm{padding:5px 10px;font-size:.8rem;border-radius:7px}
+
+
+/* ===== Cards ===== */
+.grid{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;transition:box-shadow .2s;animation:fadeUp .35s ease both}
+.card:hover{box-shadow:var(--shadow-lg)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ===== Tags / status ===== */
+.tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:.73rem;font-weight:600;white-space:nowrap}
+.tag-blue{background:var(--blue-soft);color:var(--blue)}
+.tag-green{background:var(--green-soft);color:var(--green)}
+.tag-red{background:var(--red-soft);color:var(--red)}
+.tag-amber{background:var(--amber-soft);color:var(--amber)}
+.tag-gray{background:var(--border2);color:var(--text2)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot-green{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+.dot-amber{background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
+.dot-red{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+
+/* ===== Progress ===== */
+.progress{height:7px;background:var(--border2);border-radius:99px;overflow:hidden}
+.progress>div{height:100%;border-radius:99px;background:var(--blue);transition:width .6s cubic-bezier(.4,0,.2,1)}
+.progress.warn>div{background:var(--amber)}.progress.crit>div{background:var(--red)}
+
+/* ===== Modal ===== */
+#modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:200;animation:fadeIn .2s}
+#modal-overlay.open{display:flex}
+@keyframes fadeIn{from{opacity:0}}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg);width:min(640px,94vw);max-height:88vh;display:flex;flex-direction:column;animation:pop .25s cubic-bezier(.34,1.4,.64,1)}
+.modal.wide{width:min(980px,96vw)}
+@keyframes pop{from{opacity:0;transform:scale(.96) translateY(10px)}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border2)}
+.modal-body{padding:18px 20px;overflow-y:auto}
+.modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:14px 20px;border-top:1px solid var(--border2)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.form-grid .full{grid-column:1/-1}
+@media(max-width:560px){.form-grid{grid-template-columns:1fr}}
+
+/* ===== Toast ===== */
+#toasts{position:fixed;bottom:22px;right:22px;z-index:400;display:flex;flex-direction:column;gap:9px}
+.toast{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:10px;box-shadow:var(--shadow-lg);padding:11px 15px;min-width:270px;max-width:380px;display:flex;gap:10px;align-items:flex-start;font-size:.87rem;animation:slideIn .3s cubic-bezier(.34,1.3,.64,1)}
+.toast.success{border-left-color:var(--green)}.toast.error{border-left-color:var(--red)}.toast.warn{border-left-color:var(--amber)}
+.toast svg{width:17px;height:17px;flex-shrink:0;margin-top:1px}
+@keyframes slideIn{from{opacity:0;transform:translateX(30px)}}
+.toast.out{animation:slideOut .25s forwards}
+@keyframes slideOut{to{opacity:0;transform:translateX(30px)}}
+
+
+/* ===== Menu lateral recolhível ===== */
+#app.nav-collapsed{grid-template-columns:0 1fr}
+#app.nav-collapsed #sidebar{display:none}
+/* ===== Estabilidade de layout =====
+   Itens de grid têm min-width:auto por padrão; com canvas (Chart.js) isso pode
+   causar crescimento sem limite ao recolher/expandir o menu e travar a página. */
+main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-grid{min-width:0}
+.card,.table-wrap{max-width:100%}
+.chart-box{width:100%;overflow:hidden}
+.chart-box canvas{max-width:100%!important}
+/* ===== Logo sem borda e sem fundo ===== */
+.logo-clean{border:none!important;background:transparent!important}
+/* ===== Impressão / PDF: oculta menus e expande conteúdo ===== */
+@media print{
+  #sidebar,#topbar,#rightbar,.toolbar,.filters-bar,#toasts,.drop-zone,#modal-overlay,.loading-overlay,.section-title button{display:none!important}
+  html,body{overflow:visible!important;background:#fff!important}
+  #app{display:block;height:auto}
+  main,#content-wrap{display:block!important;overflow:visible!important;height:auto}
+  #content{overflow:visible!important;padding:0!important}
+  .table-scroll{max-height:none!important;overflow:visible!important}
+  thead th{position:static}
+  .card,.kpi,.table-wrap{box-shadow:none!important;break-inside:avoid}
+  .two-col{display:block}
+  .two-col .card{margin-bottom:14px}
+  .chart-box,.chart-box.sm{height:250px}
+}

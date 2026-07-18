@@ -1,0 +1,24 @@
+/**
+ * Tabelas (tables.css)
+ *
+ * Responsabilidades:
+ * - tabelas de dados, cabeçalhos fixos, colunas numéricas
+ *
+ * Dependências:
+ * - css/variables.css
+ *
+ * Não modificar:
+ * - classes .num/.table-scroll usadas pelas exportações
+ */
+/* ===== Tables ===== */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.table-scroll{overflow-x:auto;max-height:64vh;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.87rem}
+thead th{position:sticky;top:0;background:var(--surface2);text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;z-index:2;cursor:pointer;user-select:none}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--border2);vertical-align:middle}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--surface2)}
+tbody tr.clickable{cursor:pointer}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.num{text-align:right}
+

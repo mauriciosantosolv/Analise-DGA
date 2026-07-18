@@ -1,0 +1,49 @@
+/**
+ * Design System (variables.css)
+ *
+ * Responsabilidades:
+ * - variáveis CSS (cores, sombras, dimensões) dos temas claro e escuro
+ * - reset global e estilos base de elementos (body, inputs, headings)
+ *
+ * Dependências:
+ * - css/fonts.css (fonte Inter)
+ *
+ * Não modificar:
+ * - valores das variáveis sem revisar impacto em todos os componentes
+ */
+/* ================= [1] DESIGN SYSTEM ================= */
+:root{
+  --blue:#2563EB; --blue-soft:#EFF4FE; --green:#16A34A; --green-soft:#EAF7EF;
+  --red:#DC2626; --red-soft:#FDEEEE; --amber:#D97706; --amber-soft:#FDF4E7;
+  --bg:#F5F7FA; --surface:#FFFFFF; --surface2:#FAFBFC;
+  --text:#1F2937; --text2:#6B7280; --text3:#9CA3AF;
+  --border:#E5E9F0; --border2:#EDF0F5;
+  --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  --shadow-lg:0 12px 32px -8px rgba(16,24,40,.14);
+  --glass:rgba(255,255,255,.72); --r:12px;
+  --sidebar-w:236px; --rightbar-w:264px;
+}
+[data-theme="dark"]{
+  --blue:#3B82F6; --blue-soft:#1c2a44; --green:#22C55E; --green-soft:#132b1d;
+  --red:#EF4444; --red-soft:#331717; --amber:#F59E0B; --amber-soft:#33260f;
+  --bg:#111827; --surface:#1F2937; --surface2:#1a2332;
+  --text:#F3F4F6; --text2:#9CA3AF; --text3:#6B7280;
+  --border:#2b3648; --border2:#242e3f;
+  --shadow:0 1px 3px rgba(0,0,0,.4); --shadow-lg:0 12px 32px -8px rgba(0,0,0,.55);
+  --glass:rgba(31,41,55,.72);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:14px}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;transition:background .3s,color .3s}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+::-webkit-scrollbar-track{background:transparent}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:.93rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 11px;outline:none;transition:border .15s,box-shadow .15s;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 14%,transparent)}
+label{font-size:.8rem;font-weight:600;color:var(--text2);display:block;margin-bottom:5px}
+h1{font-size:1.35rem;font-weight:700}
+h2{font-size:1.05rem;font-weight:700}
+h3{font-size:.95rem;font-weight:600}
+

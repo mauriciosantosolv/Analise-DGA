@@ -1,0 +1,14 @@
+/**
+ * Fontes (fonts.css)
+ *
+ * Responsabilidades:
+ * - fonte Inter embutida em Base64 (funcionamento 100% offline)
+ *
+ * Dependências:
+ * - nenhuma
+ *
+ * Não modificar:
+ * - regras de layout ou componentes (usar os demais arquivos css/)
+ */
+/* Fonte Inter embutida (offline) — variable, cobre pesos 100-900 */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(../assets/fonts/inter-variable.woff2) format('woff2') format('woff2');}
