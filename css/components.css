@@ -79,7 +79,10 @@
 main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-grid{min-width:0}
 .card,.table-wrap{max-width:100%}
 .chart-box{width:100%;overflow:hidden}
-.chart-box canvas{max-width:100%!important}
+/* Canvas fora do fluxo de layout: ele preenche a caixa (altura fixa) sem poder
+   influenciar o tamanho dela — elimina o loop de redimensionamento que
+   travava a aba (tela branca) ao recolher/expandir o menu com gráficos. */
+.chart-box canvas{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important}
 /* ===== Logo sem borda e sem fundo ===== */
 .logo-clean{border:none!important;background:transparent!important}
 /* ===== Impressão / PDF: oculta menus e expande conteúdo ===== */
