@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Centro de Controle Financeiro — Gestão de Obras</title>
+<!-- ============================================================
+     CENTRO DE CONTROLE FINANCEIRO DE OBRAS
+     Software de gestão financeira de projetos de engenharia elétrica
+
+     Arquitetura modular (scripts clássicos, compatível com file://):
+       css/        design system (fonts, variables, layout,
+                   dashboard, tables, components)
+       database/   indexeddb.js — ÚNICO ponto de acesso ao banco
+       utils/      format.js · helpers.js · export.js
+       js/         importer.js · router.js · app.js
+       modules/    dashboard, custos (regras financeiras),
+                   compras, orcamentos, relatorios, configuracoes,
+                   projetos, clientes, planejamento, medicoes
+       assets/     vendor/ (xlsx, chart.js, lucide) · fonts/
+
+     ATENÇÃO: a ordem dos <script> no fim do <body> é obrigatória
+     (database → utils → custos → importer → router → módulos → app).
+     ============================================================ -->
+<link rel="stylesheet" href="css/fonts.css">
+<script src="assets/vendor/xlsx.min.js"></script>
+<script src="assets/vendor/chart.min.js"></script>
+<script src="assets/vendor/lucide.min.js"></script>
+<link rel="stylesheet" href="css/variables.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/tables.css">
+<link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<!-- ================= [2] INTERFACE ================= -->
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-logo" id="company-logo-box"><i data-lucide="zap"></i></div>
+      <div><b id="company-name">Controle Financeiro</b><small>Gestão de Obras</small></div>
+    </div>
+    <nav id="nav">
+      <div class="nav-sep">Visão Geral</div>
+      <button class="nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+      <button class="nav-item" data-view="projetos"><i data-lucide="hard-hat"></i>Projetos</button>
+      <div class="nav-sep">Gestão</div>
+      <button class="nav-item" data-view="orcamentos"><i data-lucide="calculator"></i>Orçamentos</button>
+      <button class="nav-item" data-view="financeiro"><i data-lucide="wallet"></i>Financeiro</button>
+      <button class="nav-item" data-view="planejamento"><i data-lucide="calendar-days"></i>Planejamento</button>
+      <button class="nav-item" data-view="medicoes"><i data-lucide="ruler"></i>Medições</button>
+      <button class="nav-item" data-view="clientes"><i data-lucide="users"></i>Clientes</button>
+      <button class="nav-item" data-view="categorias"><i data-lucide="tags"></i>Categorias</button>
+      <div class="nav-sep">Análise</div>
+      <button class="nav-item" data-view="basecalculo"><i data-lucide="percent"></i>Base de Cálculo</button>
+      <button class="nav-item" data-view="relatorios"><i data-lucide="file-bar-chart"></i>Relatórios</button>
+      <div class="nav-sep">Sistema</div>
+      <button class="nav-item" data-view="configuracoes"><i data-lucide="settings"></i>Configurações</button>
+      <button class="nav-item" data-view="backup"><i data-lucide="database-backup"></i>Backup</button>
+    </nav>
+    <div id="sidebar-footer">v1.0 · dados locais (IndexedDB)<br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
+  </aside>
+
+  <main>
+    <header id="topbar">
+      <button class="icon-btn" id="menu-toggle" title="Menu"><i data-lucide="menu"></i></button>
+      <h1 id="page-title">Dashboard</h1>
+      <div id="global-search-wrap">
+        <i data-lucide="search"></i>
+        <input id="global-search" placeholder="Pesquisar projeto, cliente, fornecedor, categoria… (Ctrl+K)" autocomplete="off">
+        <div id="search-results"></div>
+      </div>
+      <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
+    </header>
+    <div id="content-wrap">
+      <div id="content"></div>
+      <aside id="rightbar">
+        <div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div>
+        <div id="rightbar-content"></div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+<div class="loading-overlay" id="loading"><div class="spinner"></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
+<input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
+<input type="file" id="json-input" accept=".json" style="display:none">
+<input type="file" id="img-input" accept="image/png,image/jpeg,image/svg+xml" style="display:none">
+<script src="database/indexeddb.js"></script>
+<script src="utils/format.js"></script>
+<script src="utils/helpers.js"></script>
+<script src="modules/custos/custos.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/router.js"></script>
+<script src="modules/projetos/projetos.js"></script>
+<script src="modules/orcamentos/orcamentos.js"></script>
+<script src="modules/planejamento/planejamento.js"></script>
+<script src="modules/medicoes/medicoes.js"></script>
+<script src="modules/clientes/clientes.js"></script>
+<script src="modules/configuracoes/categorias.js"></script>
+<script src="modules/custos/basecalculo.js"></script>
+<script src="modules/dashboard/charts.js"></script>
+<script src="modules/compras/compras.js"></script>
+<script src="modules/dashboard/dashboard.js"></script>
+<script src="utils/export.js"></script>
+<script src="modules/relatorios/relatorios.js"></script>
+<script src="modules/configuracoes/configuracoes.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
