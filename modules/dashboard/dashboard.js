@@ -18,8 +18,28 @@
 /* ---------- DASHBOARD ---------- */
 Views.dashboard = {
   title:'Dashboard',
+  // Gráficos disponíveis — o usuário escolhe quais exibir (persistido em settings)
+  chartDefs:[
+    {id:'main',    title:'Orçado × Realizado × Projeção × Saldo', short:'Orçado × Realizado'},
+    {id:'monthly', title:'Evolução Mensal',                        short:'Evolução Mensal'},
+    {id:'cat',     title:'Distribuição por Categoria',             short:'Categorias', hint:' <small style="color:var(--text3)">(clique para detalhar)</small>'},
+    {id:'cash',    title:'Fluxo de Caixa Futuro (planejado)',      short:'Fluxo de Caixa', sm:true},
+    {id:'margin',  title:'Margem por Projeto',                     short:'Margem', sm:true},
+    {id:'top',     title:'Top Gastos (fornecedores)',              short:'Top Gastos', sm:true}
+  ],
+  chartVisibility(){
+    return Object.assign({main:true,monthly:true,cat:true,cash:true,margin:true,top:true},
+                         State.settings.dashCharts || {});
+  },
+  toggleChart(id){
+    const v = this.chartVisibility(); v[id] = !v[id];
+    State.settings.dashCharts = v;                    // efeito imediato na tela
+    State.setSetting('dashCharts', v).catch(()=>{});  // persiste em segundo plano
+    this.render();
+  },
   render(){
     Dash.destroyCharts(); Dash.chartDefaults();
+    const vis = this.chartVisibility();
     const projects = Biz.filteredProjects();
     const purchases = Biz.filteredPurchases();
     const active = projects.filter(p=>p.status==='Em andamento');
@@ -71,13 +91,13 @@ Views.dashboard = {
         ${kpi('Próximo Vencimento', nextDeadline?U.date(nextDeadline):'—', 'hourglass', '', nextDeadline?U.daysBetween(U.isoDate(new Date()), nextDeadline)+' dias restantes':'')}
       </div>
 
+      <div class="toolbar" style="margin-bottom:10px">
+        <small style="color:var(--text3);font-weight:700;letter-spacing:.05em">GRÁFICOS:</small>
+        ${this.chartDefs.map(d=>`<button class="tab ${vis[d.id]?'active':''}" style="border:1px solid var(--border2)" onclick="Views.dashboard.toggleChart('${d.id}')" title="Mostrar/ocultar ${d.title}">${d.short}</button>`).join('')}
+      </div>
       <div class="two-col">
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Orçado × Realizado × Projeção × Saldo</h3><div class="chart-box"><canvas id="ch-main"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Evolução Mensal</h3><div class="chart-box"><canvas id="ch-monthly"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Distribuição por Categoria <small style="color:var(--text3)">(clique para detalhar)</small></h3><div class="chart-box"><canvas id="ch-cat"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Fluxo de Caixa Futuro (planejado)</h3><div class="chart-box sm"><canvas id="ch-cash"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Margem por Projeto</h3><div class="chart-box sm"><canvas id="ch-margin"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Top Gastos (fornecedores)</h3><div class="chart-box sm"><canvas id="ch-top"></canvas></div></div>
+        ${this.chartDefs.filter(d=>vis[d.id]).map(d=>`<div class="card chart-card"><h3 style="margin-bottom:10px">${d.title}${d.hint||''}</h3><div class="chart-box ${d.sm?'sm':''}"><canvas id="ch-${d.id}"></canvas></div></div>`).join('')
+          || '<div class="empty card">Todos os gráficos estão ocultos — use os botões acima para exibi-los.</div>'}
       </div>
 
       <div class="section-title"><h2>Semáforo Financeiro das Obras</h2>
@@ -124,7 +144,7 @@ Views.dashboard = {
 
     // Orçado x Realizado x Projeção x Saldo por projeto
     const top = stats.filter(x=>x.s.budgetTotal>0 || x.s.spent>0).sort((a,b)=>b.s.spent-a.s.spent).slice(0,12);
-    Dash.charts.main = new Chart(document.getElementById('ch-main'), {
+    if(document.getElementById('ch-main')) Dash.charts.main = new Chart(document.getElementById('ch-main'), {
       type:'bar',
       data:{ labels: top.map(x=>x.p.proposal),
         datasets:[
@@ -141,7 +161,7 @@ Views.dashboard = {
     const series = Biz.monthlySeries(purchases);
 
     // Evolução mensal (com drill por mês)
-    Dash.charts.monthly = new Chart(document.getElementById('ch-monthly'), {
+    if(document.getElementById('ch-monthly')) Dash.charts.monthly = new Chart(document.getElementById('ch-monthly'), {
       type:'bar',
       data:{ labels:series.labels, datasets:[{label:'Gastos no mês', data:series.values, backgroundColor:'#2563EB', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
@@ -151,7 +171,7 @@ Views.dashboard = {
 
     // Distribuição por categoria (doughnut, drill)
     const catTop = cats.filter(c=>c.spent>0).slice(0,10);
-    Dash.charts.cat = new Chart(document.getElementById('ch-cat'), {
+    if(document.getElementById('ch-cat')) Dash.charts.cat = new Chart(document.getElementById('ch-cat'), {
       type:'doughnut',
       data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.spent), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0}]},
       options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
@@ -165,7 +185,7 @@ Views.dashboard = {
     const futMap = {};
     futAll.forEach(x=>{ futMap[x.date] = (futMap[x.date]||0)+x.value; });
     const futKeys = Object.keys(futMap).sort();
-    Dash.charts.cash = new Chart(document.getElementById('ch-cash'), {
+    if(document.getElementById('ch-cash')) Dash.charts.cash = new Chart(document.getElementById('ch-cash'), {
       type:'bar',
       data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:'#7C3AED', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
@@ -174,7 +194,7 @@ Views.dashboard = {
 
     // Margem por projeto
     const withMargin = stats.filter(x=>x.s.marginCurrent!=null).sort((a,b)=>a.s.marginCurrent-b.s.marginCurrent).slice(0,12);
-    Dash.charts.margin = new Chart(document.getElementById('ch-margin'), {
+    if(document.getElementById('ch-margin')) Dash.charts.margin = new Chart(document.getElementById('ch-margin'), {
       type:'bar',
       data:{ labels:withMargin.map(x=>x.p.proposal),
         datasets:[{label:'Margem %', data:withMargin.map(x=>x.s.marginCurrent), backgroundColor:withMargin.map(x=>x.s.marginCurrent<0?'#DC2626':x.s.marginCurrent<10?'#D97706':'#16A34A'), borderRadius:6}]},
@@ -187,7 +207,7 @@ Views.dashboard = {
     const supMap = {};
     purchases.forEach(x=>{ const k = x.supplier||'(sem fornecedor)'; supMap[k]=(supMap[k]||0)+x.value; });
     const sups = Object.entries(supMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    Dash.charts.top = new Chart(document.getElementById('ch-top'), {
+    if(document.getElementById('ch-top')) Dash.charts.top = new Chart(document.getElementById('ch-top'), {
       type:'bar',
       data:{ labels:sups.map(s=>s[0].length>26?s[0].slice(0,25)+'…':s[0]), datasets:[{label:'Total', data:sups.map(s=>s[1]), backgroundColor:'#0891B2', borderRadius:6}]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${U.money2(ctx.parsed.x)}`}}},

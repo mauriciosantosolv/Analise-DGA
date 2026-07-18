@@ -197,8 +197,10 @@ const Biz = {
       }
       const plannedFuture = Math.max(0, (plannedByCat[U.norm(c.name)] || 0) - (c.purchSpent || 0));
       const projected = c.spent + plannedFuture; // realizado + planejamento ainda não realizado
+      // Saldo da categoria também desconta o planejado não realizado — se o
+      // planejamento excede o orçado, o saldo fica negativo e alerta o gestor
       return {...c, consumed, weight: budgetTotal>0 ? c.budget/budgetTotal*100 : 0,
-              balance: c.budget - c.spent, projected, plannedFuture, trend,
+              balance: c.budget - c.spent - plannedFuture, projected, plannedFuture, trend,
               status: consumed>100 ? 'red' : consumed>85 ? 'amber' : 'green'};
     }).sort((a,b)=>b.spent-a.spent);
   },
