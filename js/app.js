@@ -205,19 +205,18 @@ const App = {
     if(missing.length) setTimeout(() => UI.toast('Bibliotecas não carregadas: ' + missing.join(', ') + '. Verifique sua conexão com a internet e recarregue a página.', 'warn', 10000), 600);
     document.querySelectorAll('.nav-item').forEach(b => b.onclick = () => this.go(b.dataset.view));
     document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
+    // Recolher menu no desktop foi REMOVIDO por estabilidade (travava a aba
+    // com gráficos abertos). No celular (<=860px) o botão abre/fecha o menu.
     document.getElementById('menu-toggle').onclick = () => {
       try{
-        if(window.innerWidth <= 860){ document.getElementById('sidebar').classList.toggle('open'); return; }
-        const collapsed = document.getElementById('app').classList.toggle('nav-collapsed');
-        State.setSetting('navCollapsed', collapsed).catch(()=>{}); // lembra a preferência
-        // Recria os gráficos na nova largura de forma controlada e segura
-        if(State.view === 'dashboard') this.render();
+        if(window.innerWidth <= 860) document.getElementById('sidebar').classList.toggle('open');
       }catch(err){ UI.toast('Erro ao alternar o menu: ' + U.esc(err.message||err), 'error', 6000); }
     };
     this.initSearch();
     this.applyTheme(State.settings.theme || 'light');
     this.applyBranding();
-    if(State.settings.navCollapsed) document.getElementById('app').classList.add('nav-collapsed');
+    // A preferência navCollapsed salva em versões anteriores é ignorada de
+    // propósito: o menu no desktop agora é sempre visível (estabilidade).
     this.go('dashboard');
     if(!State.projects.length)
       UI.toast('Bem-vindo! Importe suas planilhas em <b>Orçamentos</b> e <b>Financeiro</b> para começar.', 'info', 7000);
