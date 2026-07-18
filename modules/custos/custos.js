@@ -65,8 +65,16 @@ const Biz = {
     const purchases = State.purchases.filter(x => x.projectId === p.id);
     const budgetTotal = budgets.reduce((s,b) => s+b.value, 0);
     const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // só compras (base do burn rate)
+    // Planejamento LÍQUIDO (regra 07/2026): o gasto previsto de cada categoria
+    // é abatido pelos registros financeiros da mesma categoria — se havia
+    // R$ 30 mil previstos e R$ 15 mil registrados, restam R$ 15 mil planejados.
+    // O que resta compromete o saldo do projeto mesmo sem registro financeiro.
     const planned = State.planning.filter(x => x.projectId === p.id);
-    const plannedFuture = planned.filter(x => x.date >= U.isoDate(new Date())).reduce((s,x)=>s+x.value,0);
+    const _planCat = {}, _spentCat = {};
+    planned.forEach(x => { const k = U.norm(x.category||''); _planCat[k] = (_planCat[k]||0) + x.value; });
+    purchases.forEach(x => { const k = U.norm(x.category||''); _spentCat[k] = (_spentCat[k]||0) + x.value; });
+    const plannedFuture = Object.entries(_planCat)
+      .reduce((s,[k,v]) => s + Math.max(0, v - (_spentCat[k]||0)), 0); // planejado ainda não realizado
     // Medições: quanto da receita contratada já foi medido/faturado
     const measured = State.measurements.filter(m => m.projectId === p.id).reduce((s,m)=>s+m.value,0);
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
@@ -89,7 +97,8 @@ const Biz = {
       projectedPurchases = spentPurchases + dailyBurn * daysLeft;
     projectedPurchases = Math.max(projectedPurchases, spentPurchases + plannedFuture);
     const projected = projectedPurchases + overhead;  // projeção também inclui imposto/adm
-    const balance = budgetTotal - spent;
+    // Saldo desconta também o planejamento ainda não realizado (compromissos)
+    const balance = budgetTotal - spent - plannedFuture;
     const consumed = budgetTotal > 0 ? spent / budgetTotal * 100 : (spent > 0 ? 999 : 0);
     const marginPlanned = p.saleValue > 0 ? (p.saleValue - budgetTotal - overhead) / p.saleValue * 100 : null;
     const marginCurrent = p.saleValue > 0 ? (p.saleValue - projected) / p.saleValue * 100 : null; // projected já contém overhead
@@ -144,6 +153,7 @@ const Biz = {
       const k = U.norm(x.category);
       map[k] = map[k] || {name:x.category, budget:0, spent:0, monthly:{}};
       map[k].spent += x.value;
+      map[k].purchSpent = (map[k].purchSpent||0) + x.value; // só compras (p/ abater o planejado)
       if(x.date){ const mk = x.date.slice(0,7); map[k].monthly[mk] = (map[k].monthly[mk]||0) + x.value; }
     });
     // Encargos da base de cálculo → realizado da categoria correspondente
@@ -165,10 +175,11 @@ const Biz = {
       cat.spent += val;
       cat.overheadSpent = (cat.overheadSpent||0) + val; // parcela vinda da base de cálculo
     }
-    // Planejamento de gastos futuro por categoria (entra no projetado)
-    const today = U.isoDate(new Date());
+    // Planejamento por categoria (entra no projetado): o previsto é ABATIDO
+    // pelos registros financeiros da mesma categoria — planejou 30 mil e
+    // registrou 15 mil, restam 15 mil no projetado (nunca negativo).
     const plannedByCat = {};
-    State.planning.filter(x => ids.has(x.projectId) && x.date >= today).forEach(x => {
+    State.planning.filter(x => ids.has(x.projectId)).forEach(x => {
       const k = U.norm(x.category||'');
       plannedByCat[k] = (plannedByCat[k]||0) + x.value;
     });
@@ -184,8 +195,8 @@ const Biz = {
         const recent = (c.monthly[months[months.length-1]] + (c.monthly[months[months.length-2]]||0)) / 2;
         if(recent > avg*1.25) trend = 'up'; else if(recent < avg*0.75) trend = 'down';
       }
-      const plannedFuture = plannedByCat[U.norm(c.name)] || 0;
-      const projected = c.spent + plannedFuture; // realizado + planejamento futuro
+      const plannedFuture = Math.max(0, (plannedByCat[U.norm(c.name)] || 0) - (c.purchSpent || 0));
+      const projected = c.spent + plannedFuture; // realizado + planejamento ainda não realizado
       return {...c, consumed, weight: budgetTotal>0 ? c.budget/budgetTotal*100 : 0,
               balance: c.budget - c.spent, projected, plannedFuture, trend,
               status: consumed>100 ? 'red' : consumed>85 ? 'amber' : 'green'};

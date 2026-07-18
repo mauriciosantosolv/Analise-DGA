@@ -24,6 +24,7 @@ Views.financeiro = {
     $c().innerHTML = `
       <div class="toolbar">
         <button class="btn btn-primary" onclick="Importer.pick('purchase')"><i data-lucide="upload"></i>Importar Modelo Compras</button>
+        <button class="btn btn-ghost" onclick="Dash.purchaseForm()"><i data-lucide="plus"></i>Novo Lançamento</button>
         <div class="tabs">
           <button class="tab ${this.mode==='table'?'active':''}" onclick="Views.financeiro.mode='table';Views.financeiro.render()">Lançamentos</button>
           <button class="tab ${this.mode==='blocks'?'active':''}" onclick="Views.financeiro.mode='blocks';Views.financeiro.render()">Importações</button>
@@ -143,9 +144,15 @@ Dash.showPurchase = function(id){
 };
 
 /* Formulário de edição de lançamento financeiro */
+// Sem id → cria um novo lançamento manual; com id → edita o existente
 Dash.purchaseForm = function(id){
-  const x = State.purchases.find(i=>i.id===id); if(!x) return;
-  UI.modal({ title:'Editar Lançamento', wide:true, body:`
+  const isNew = !id;
+  const x = isNew
+    ? { projectId:(State.projects[0]||{}).id||'', category:'', supplier:'', order:'',
+        value:0, date:U.isoDate(new Date()), desc:'', notes:'' }
+    : State.purchases.find(i=>i.id===id);
+  if(!x) return;
+  UI.modal({ title:isNew?'Novo Lançamento Manual':'Editar Lançamento', wide:true, body:`
     <div class="form-grid">
       <div><label>Projeto</label><select id="pf-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Categoria</label><input id="pf-cat" list="cat-list-p" value="${U.esc(x.category)}"><datalist id="cat-list-p">${State.categories.map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
@@ -156,17 +163,25 @@ Dash.purchaseForm = function(id){
       <div class="full"><label>Descrição</label><input id="pf-desc" value="${U.esc(x.desc)}"></div>
       <div class="full"><label>Observações</label><textarea id="pf-notes" rows="2">${U.esc(x.notes)}</textarea></div>
     </div>`,
-    footer:`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase('${x.id}')"><i data-lucide="trash-2"></i>Excluir</button>
+    footer:`${isNew?'':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase('${x.id}')"><i data-lucide="trash-2"></i>Excluir</button>`}
             <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
-            <button class="btn btn-primary" id="pf-save"><i data-lucide="check"></i>Salvar</button>` });
+            <button class="btn btn-primary" id="pf-save"><i data-lucide="check"></i>${isNew?'Adicionar':'Salvar'}</button>` });
   document.getElementById('pf-save').onclick = async () => {
-    Object.assign(x, {
+    const vals = {
       projectId:document.getElementById('pf-proj').value, category:document.getElementById('pf-cat').value.trim(),
       supplier:document.getElementById('pf-sup').value.trim(), order:document.getElementById('pf-order').value.trim(),
       value:U.num(document.getElementById('pf-value').value), date:document.getElementById('pf-date').value,
-      desc:document.getElementById('pf-desc').value.trim(), notes:document.getElementById('pf-notes').value });
-    await DB.put('purchases', x); await State.reload();
-    UI.close(); UI.toast('Lançamento atualizado', 'success'); App.render();
+      desc:document.getElementById('pf-desc').value.trim(), notes:document.getElementById('pf-notes').value };
+    if(!vals.projectId || !vals.category) return UI.toast('Preencha projeto e categoria', 'warn');
+    if(isNew){
+      await DB.put('purchases', { id:U.id(), ...vals, costCenter:vals.category,
+        importedAt:Date.now(), file:'(manual)' });
+    } else {
+      Object.assign(x, vals);
+      await DB.put('purchases', x);
+    }
+    await State.reload();
+    UI.close(); UI.toast(isNew?'Lançamento adicionado':'Lançamento atualizado', 'success'); App.render();
   };
 };
 

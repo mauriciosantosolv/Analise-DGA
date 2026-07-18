@@ -33,7 +33,8 @@ Views.dashboard = {
     // Projetado do dashboard: planilha por categoria (máx. entre gasto e orçado
     // por categoria) + overhead — regra centralizada em Biz.projectedByCategory
     const projected = Biz.projectedByCategory(projects);
-    const balance = budgetTotal - spent;
+    // Saldo por projeto já desconta o planejamento ainda não realizado
+    const balance = sum('balance');
     const marginPlanned = revenue>0 ? (revenue-budgetTotal-overhead)/revenue*100 : null;
     const marginCurrent = revenue>0 ? (revenue-projected)/revenue*100 : null; // projected já contém overhead
     const profit = revenue - projected;
@@ -72,13 +73,11 @@ Views.dashboard = {
 
       <div class="two-col">
         <div class="card chart-card"><h3 style="margin-bottom:10px">Orçado × Realizado × Projeção × Saldo</h3><div class="chart-box"><canvas id="ch-main"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Curva S — Acumulado</h3><div class="chart-box"><canvas id="ch-curve"></canvas></div></div>
         <div class="card chart-card"><h3 style="margin-bottom:10px">Evolução Mensal</h3><div class="chart-box"><canvas id="ch-monthly"></canvas></div></div>
         <div class="card chart-card"><h3 style="margin-bottom:10px">Distribuição por Categoria <small style="color:var(--text3)">(clique para detalhar)</small></h3><div class="chart-box"><canvas id="ch-cat"></canvas></div></div>
         <div class="card chart-card"><h3 style="margin-bottom:10px">Fluxo de Caixa Futuro (planejado)</h3><div class="chart-box sm"><canvas id="ch-cash"></canvas></div></div>
         <div class="card chart-card"><h3 style="margin-bottom:10px">Margem por Projeto</h3><div class="chart-box sm"><canvas id="ch-margin"></canvas></div></div>
         <div class="card chart-card"><h3 style="margin-bottom:10px">Top Gastos (fornecedores)</h3><div class="chart-box sm"><canvas id="ch-top"></canvas></div></div>
-        <div class="card chart-card"><h3 style="margin-bottom:10px">Ranking de Clientes (receita)</h3><div class="chart-box sm"><canvas id="ch-clients"></canvas></div></div>
       </div>
 
       <div class="section-title"><h2>Semáforo Financeiro das Obras</h2>
@@ -138,17 +137,8 @@ Views.dashboard = {
         scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
     });
 
-    // Curva S
+    // Série mensal (Curva S foi removida a pedido do usuário em 07/2026)
     const series = Biz.monthlySeries(purchases);
-    const budgetTotal = stats.reduce((s,x)=>s+x.s.budgetTotal,0);
-    Dash.charts.curve = new Chart(document.getElementById('ch-curve'), {
-      type:'line',
-      data:{ labels:series.labels, datasets:[
-        {label:'Realizado acumulado', data:series.cumulative, borderColor:'#2563EB', backgroundColor:'#2563EB22', fill:true, tension:.35},
-        {label:'Orçamento total', data:series.labels.map(()=>budgetTotal), borderColor:'#DC2626', borderDash:[6,4], pointRadius:0}]},
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{position:'bottom'}},
-        scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
-    });
 
     // Evolução mensal (com drill por mês)
     Dash.charts.monthly = new Chart(document.getElementById('ch-monthly'), {
@@ -205,15 +195,6 @@ Views.dashboard = {
         scales:{ x:{ ticks:{ callback:v=>U.money(v) } } } }
     });
 
-    // Ranking clientes
-    const cliMap = {};
-    projects.forEach(p=>{ if(p.client) cliMap[p.client]=(cliMap[p.client]||0)+(p.saleValue||0); });
-    const clis = Object.entries(cliMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    Dash.charts.clients = new Chart(document.getElementById('ch-clients'), {
-      type:'bar',
-      data:{ labels:clis.map(c=>c[0]), datasets:[{label:'Receita', data:clis.map(c=>c[1]), backgroundColor:'#4F46E5', borderRadius:6}]},
-      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${U.money2(ctx.parsed.x)}`}}},
-        scales:{ x:{ ticks:{ callback:v=>U.money(v) } } } }
-    });
+    // (Ranking de Clientes foi removido a pedido do usuário em 07/2026)
   }
 };
