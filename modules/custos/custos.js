@@ -116,17 +116,22 @@ const Biz = {
   },
 
   // Custo projetado com base na planilha de categorias (usado no dashboard):
-  // para cada categoria, projeta-se o MAIOR entre o gasto real e o orçado —
-  // o que já estourou carrega o excesso; o que não gastou ainda vai gastar o
-  // orçado. Soma-se o overhead (imposto/adm sobre a venda) dos projetos.
+  // para cada categoria, o MAIOR entre o projetado (realizado + planejamento
+  // futuro) e o orçado — quem estourou carrega o excesso; quem ainda não
+  // gastou vai gastar ao menos o orçado. Os encargos da base de cálculo já
+  // estão dentro das categorias correspondentes (sem dupla contagem).
   projectedByCategory(projects){
-    const cats = this.categoryStats(projects);
-    const base = cats.reduce((s,c) => s + Math.max(c.spent, c.budget), 0);
-    const overhead = projects.reduce((s,p) => s + (p.saleValue||0), 0) * this.baseRates().total / 100;
-    return base + overhead;
+    return this.categoryStats(projects).reduce((s,c) => s + Math.max(c.projected, c.budget), 0);
   },
 
   // Estatísticas por categoria dentro de um conjunto de projetos
+  // REGRA (07/2026):
+  // • REALIZADO por categoria inclui os encargos da base de cálculo aplicados
+  //   sobre a receita (valor de venda) dos projetos, alocados na categoria de
+  //   nome correspondente (Imposto, Custo Administrativo, Taxas/Comissão,
+  //   Outros). Se a categoria não existir, uma linha é criada.
+  // • PROJETADO por categoria = realizado + planejamento de gastos futuro da
+  //   categoria — mostra o que ainda está planejado acontecer.
   categoryStats(projects){
     const ids = new Set(projects.map(p=>p.id));
     const map = {};
@@ -141,20 +146,48 @@ const Biz = {
       map[k].spent += x.value;
       if(x.date){ const mk = x.date.slice(0,7); map[k].monthly[mk] = (map[k].monthly[mk]||0) + x.value; }
     });
+    // Encargos da base de cálculo → realizado da categoria correspondente
+    const rates = this.baseRates();
+    const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
+    const OVERHEAD_MATCH = {
+      tax:   {label:'Imposto',             names:['imposto','impostos']},
+      admin: {label:'Custo Administrativo', names:['custo administrativo','administrativo','administracao','adm']},
+      fees:  {label:'Taxas',               names:['taxa','taxas','comissao','comissoes']},
+      other: {label:'Outros (encargos)',   names:['outros','outros encargos','outras despesas']}
+    };
+    for(const [k, cfg] of Object.entries(OVERHEAD_MATCH)){
+      const val = revenue * rates[k] / 100;
+      if(val <= 0) continue;
+      // procura por nome exato primeiro, depois por conteúdo
+      let cat = Object.values(map).find(c => cfg.names.includes(U.norm(c.name)))
+             || Object.values(map).find(c => cfg.names.some(n => U.norm(c.name).includes(n)));
+      if(!cat){ const key='__ov_'+k; map[key] = cat = {name:cfg.label, budget:0, spent:0, monthly:{}}; }
+      cat.spent += val;
+      cat.overheadSpent = (cat.overheadSpent||0) + val; // parcela vinda da base de cálculo
+    }
+    // Planejamento de gastos futuro por categoria (entra no projetado)
+    const today = U.isoDate(new Date());
+    const plannedByCat = {};
+    State.planning.filter(x => ids.has(x.projectId) && x.date >= today).forEach(x => {
+      const k = U.norm(x.category||'');
+      plannedByCat[k] = (plannedByCat[k]||0) + x.value;
+    });
     const budgetTotal = Object.values(map).reduce((s,c)=>s+c.budget,0);
     return Object.values(map).map(c => {
       const consumed = c.budget>0 ? c.spent/c.budget*100 : (c.spent>0?999:0);
-      // tendência: compara média dos 2 últimos meses com a média histórica
+      // tendência: compara média dos 2 últimos meses com a média histórica (só compras)
       const months = Object.keys(c.monthly).sort();
       let trend = 'flat';
       if(months.length >= 3){
-        const avg = c.spent / months.length;
+        const purchSpent = Object.values(c.monthly).reduce((s,v)=>s+v,0);
+        const avg = purchSpent / months.length;
         const recent = (c.monthly[months[months.length-1]] + (c.monthly[months[months.length-2]]||0)) / 2;
         if(recent > avg*1.25) trend = 'up'; else if(recent < avg*0.75) trend = 'down';
       }
-      const projected = c.budget>0 && consumed<100 && trend==='up' ? c.spent*1.15 : c.spent;
+      const plannedFuture = plannedByCat[U.norm(c.name)] || 0;
+      const projected = c.spent + plannedFuture; // realizado + planejamento futuro
       return {...c, consumed, weight: budgetTotal>0 ? c.budget/budgetTotal*100 : 0,
-              balance: c.budget - c.spent, projected, trend,
+              balance: c.budget - c.spent, projected, plannedFuture, trend,
               status: consumed>100 ? 'red' : consumed>85 ? 'amber' : 'green'};
     }).sort((a,b)=>b.spent-a.spent);
   },
