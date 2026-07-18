@@ -131,7 +131,7 @@ Dash.simulator = function(projectId){
   UI.modal({ title:`Simulador Financeiro — ${U.esc(U.projLabel(p))}`, wide:true, body:`
     <div class="form-grid">
       <div><label>Valor de Venda</label><input id="sim-sale" type="number" value="${p.saleValue}"></div>
-      <div><label>Custos Previstos (projeção)</label><input id="sim-cost" type="number" value="${Math.round(s.projected)}"></div>
+      <div><label>Custos Previstos (projeção, sem imposto/adm)</label><input id="sim-cost" type="number" value="${Math.round(s.projectedPurchases)}"></div>
       <div><label>Impostos (%)</label><input id="sim-tax" type="number" step="0.1" value="${b.tax}"></div>
       <div><label>Custo Administrativo (%)</label><input id="sim-admin" type="number" step="0.1" value="${b.admin}"></div>
       <div><label>Taxas (%)</label><input id="sim-fees" type="number" step="0.1" value="${b.fees}"></div>

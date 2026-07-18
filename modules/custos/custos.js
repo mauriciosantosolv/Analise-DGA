@@ -54,11 +54,17 @@ const Biz = {
   },
 
   // Estatísticas completas de um projeto
+  // REGRA (definida pelo usuário em 07/2026): o REALIZADO inclui, além das
+  // compras importadas do financeiro, os custos da base de cálculo
+  // (impostos + adm + taxas + outros) aplicados sobre o VALOR DE VENDA
+  // INTEGRAL — pois são custos reais mensurados que não vêm da importação.
+  // Realizado, projetado, saldo, % consumido e desvio são consistentes entre
+  // si; margens e lucro NÃO descontam o overhead de novo (já está no custo).
   projectStats(p){
     const budgets = State.budgets.filter(b => b.projectId === p.id);
     const purchases = State.purchases.filter(x => x.projectId === p.id);
     const budgetTotal = budgets.reduce((s,b) => s+b.value, 0);
-    const spent = purchases.reduce((s,x) => s+x.value, 0);
+    const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // só compras (base do burn rate)
     const planned = State.planning.filter(x => x.projectId === p.id);
     const plannedFuture = planned.filter(x => x.date >= U.isoDate(new Date())).reduce((s,x)=>s+x.value,0);
     // Medições: quanto da receita contratada já foi medido/faturado
@@ -66,25 +72,28 @@ const Biz = {
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
     const rates = this.baseRates();
     const overhead = p.saleValue * rates.total / 100; // custos calculados sobre a venda
+    const spent = spentPurchases + overhead;          // REALIZADO = compras + imposto/adm
     // Previsão por ritmo de gastos (burn rate) — média diária desde o 1º lançamento
+    // (calculada apenas sobre as compras; o overhead é fixo e entra ao final)
     const dates = purchases.map(x => x.date).filter(Boolean).sort();
-    let dailyBurn = 0, projected = spent;
+    let dailyBurn = 0, projectedPurchases = spentPurchases;
     if(dates.length >= 2){
       const span = Math.max(1, U.daysBetween(dates[0], dates[dates.length-1]));
-      dailyBurn = spent / span;
+      dailyBurn = spentPurchases / span;
     }
     const today = new Date();
     const endRef = p.expectedEnd || p.deadline;
     let daysLeft = endRef ? U.daysBetween(today, endRef) : null;
     if(p.status === 'Concluído') daysLeft = 0;
     if(daysLeft != null && daysLeft > 0 && dailyBurn > 0 && p.status === 'Em andamento')
-      projected = spent + dailyBurn * daysLeft;
-    projected = Math.max(projected, spent + plannedFuture);
+      projectedPurchases = spentPurchases + dailyBurn * daysLeft;
+    projectedPurchases = Math.max(projectedPurchases, spentPurchases + plannedFuture);
+    const projected = projectedPurchases + overhead;  // projeção também inclui imposto/adm
     const balance = budgetTotal - spent;
     const consumed = budgetTotal > 0 ? spent / budgetTotal * 100 : (spent > 0 ? 999 : 0);
     const marginPlanned = p.saleValue > 0 ? (p.saleValue - budgetTotal - overhead) / p.saleValue * 100 : null;
-    const marginCurrent = p.saleValue > 0 ? (p.saleValue - projected - overhead) / p.saleValue * 100 : null;
-    const profit = p.saleValue - projected - overhead;
+    const marginCurrent = p.saleValue > 0 ? (p.saleValue - projected) / p.saleValue * 100 : null; // projected já contém overhead
+    const profit = p.saleValue - projected;
     const deviation = budgetTotal > 0 ? (projected - budgetTotal) / budgetTotal * 100 : null;
     // Data provável de encerramento do orçamento pelo ritmo atual
     let burnoutDate = null;
@@ -100,9 +109,21 @@ const Biz = {
     if(deviation != null && deviation > 10) health -= 10;
     health = Math.max(0, Math.min(100, Math.round(health)));
     const light = health >= 70 ? 'green' : health >= 45 ? 'amber' : 'red';
-    return { budgetTotal, spent, projected, balance, consumed, marginPlanned, marginCurrent,
-             profit, deviation, daysLeft, dailyBurn, burnoutDate, health, light, overhead,
-             plannedFuture, purchases, budgets, measured, measuredPct };
+    return { budgetTotal, spent, spentPurchases, projected, projectedPurchases, balance,
+             consumed, marginPlanned, marginCurrent, profit, deviation, daysLeft, dailyBurn,
+             burnoutDate, health, light, overhead, plannedFuture, purchases, budgets,
+             measured, measuredPct };
+  },
+
+  // Custo projetado com base na planilha de categorias (usado no dashboard):
+  // para cada categoria, projeta-se o MAIOR entre o gasto real e o orçado —
+  // o que já estourou carrega o excesso; o que não gastou ainda vai gastar o
+  // orçado. Soma-se o overhead (imposto/adm sobre a venda) dos projetos.
+  projectedByCategory(projects){
+    const cats = this.categoryStats(projects);
+    const base = cats.reduce((s,c) => s + Math.max(c.spent, c.budget), 0);
+    const overhead = projects.reduce((s,p) => s + (p.saleValue||0), 0) * this.baseRates().total / 100;
+    return base + overhead;
   },
 
   // Estatísticas por categoria dentro de um conjunto de projetos

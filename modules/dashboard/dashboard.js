@@ -27,12 +27,16 @@ Views.dashboard = {
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
     const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
     const measured = sum('measured'); // total medido/faturado
-    const budgetTotal = sum('budgetTotal'), spent = purchases.reduce((s,x)=>s+x.value,0);
-    const projected = sum('projected'), balance = budgetTotal - spent;
-    const overhead = sum('overhead');
+    const overhead = sum('overhead'); // imposto/adm/taxas sobre a venda (base de cálculo)
+    const budgetTotal = sum('budgetTotal');
+    const spent = purchases.reduce((s,x)=>s+x.value,0) + overhead; // realizado inclui overhead
+    // Projetado do dashboard: planilha por categoria (máx. entre gasto e orçado
+    // por categoria) + overhead — regra centralizada em Biz.projectedByCategory
+    const projected = Biz.projectedByCategory(projects);
+    const balance = budgetTotal - spent;
     const marginPlanned = revenue>0 ? (revenue-budgetTotal-overhead)/revenue*100 : null;
-    const marginCurrent = revenue>0 ? (revenue-projected-overhead)/revenue*100 : null;
-    const profit = revenue - projected - overhead;
+    const marginCurrent = revenue>0 ? (revenue-projected)/revenue*100 : null; // projected já contém overhead
+    const profit = revenue - projected;
     const deviation = budgetTotal>0 ? (projected-budgetTotal)/budgetTotal*100 : null;
     const critical = stats.filter(x=>x.s.light==='red' && x.p.status==='Em andamento');
     const fut = Biz.futureExpenses();
@@ -53,8 +57,8 @@ Views.dashboard = {
         ${kpi('Medido / Faturado', U.money(measured), 'ruler', 'accent-green', U.pct(revenue>0?measured/revenue*100:null)+' da receita')}
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator')}
-        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido')}
-        ${kpi('Projetado', U.money(projected), 'trending-up')}
+        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm')}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'por categoria + imposto/adm')}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Prevista', U.pct(marginPlanned), 'target')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
