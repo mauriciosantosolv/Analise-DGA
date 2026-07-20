@@ -110,24 +110,24 @@ Views.projetos = {
           <div class="kpi"><div class="k-label">Orçado</div><div class="k-value">${U.money(s.budgetTotal)}</div></div>
           <div class="kpi"><div class="k-label">Realizado</div><div class="k-value">${U.money(s.spent)}</div><div class="k-sub">${U.pct(s.consumed)} do orçamento</div></div>
           <div class="kpi ${s.balance<0?'accent-red':'accent-green'}"><div class="k-label">Saldo</div><div class="k-value">${U.money(s.balance)}</div></div>
-          <div class="kpi"><div class="k-label">Projeção Final</div><div class="k-value">${U.money(s.projected)}</div></div>
+          <div class="kpi"><div class="k-label">Projetado (Planejamento)</div><div class="k-value">${U.money(s.projected)}</div></div>
           <div class="kpi ${s.marginCurrent<0?'accent-red':'accent-blue'}"><div class="k-label">Margem Atual</div><div class="k-value">${U.pct(s.marginCurrent)}</div><div class="k-sub">Prevista: ${U.pct(s.marginPlanned)}</div></div>
         </div>
       </div>
       <div class="import-log" style="margin-bottom:14px">
-        <b>Previsão inteligente</b> — mantendo o ritmo atual (${U.money2(s.dailyBurn)}/dia):
-        valor final <b>${U.money(s.projected)}</b> · margem final <b>${U.pct(s.marginCurrent)}</b>
+        <b>Compromisso financeiro</b> — realizado + planejamento: <b>${U.money(s.committedTotal)}</b>
+        · margem estimada <b>${U.pct(s.marginCurrent)}</b>
         ${s.burnoutDate?` · orçamento esgota em <b>${U.date(s.burnoutDate)}</b>`:''}
         ${s.deviation!=null?` · ${s.deviation>0?`estouro previsto de <b style="color:var(--red)">${U.pct(s.deviation)}</b>`:`economia prevista de <b style="color:var(--green)">${U.pct(-s.deviation)}</b>`}`:''}
         ${s.daysLeft!=null?` · ${s.daysLeft} dias restantes de contrato`:''}
       </div>
       <h3 style="margin-bottom:8px">Categorias</h3>
       <div class="table-wrap"><div class="table-scroll" style="max-height:300px"><table>
-        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Saldo</th><th class="num">%</th><th class="num">Peso</th><th>Tend.</th><th></th></tr></thead>
+        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tend.</th><th></th></tr></thead>
         <tbody>${cats.map(c=>`<tr class="clickable" onclick="Dash.drill({category:'${U.esc(c.name)}',projectId:'${p.id}'})">
-          <td>${U.esc(c.name)}</td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td>
+          <td>${U.esc(c.name)}</td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td><td class="num">${U.money(c.projected)}</td>
           <td class="num" style="color:${c.balance<0?'var(--red)':'inherit'}">${U.money(c.balance)}</td>
-          <td class="num">${U.pct(c.consumed)}</td><td class="num">${U.pct(c.weight)}</td>
+          <td class="num">${U.pct(c.committedPct)}</td><td class="num">${U.pct(c.weight)}</td>
           <td>${Dash.trendIcon(c.trend)}</td><td>${lightDot(c.status)}</td></tr>`).join('')}</tbody>
       </table></div></div>`,
       footer:`<button class="btn btn-ghost" onclick="Dash.simulator('${p.id}')"><i data-lucide="sliders-horizontal"></i>Simulador</button>
@@ -155,7 +155,7 @@ Views.projetos = {
             ${row('Orçamento', sa.budgetTotal, sb.budgetTotal)}
             ${row('Custos Realizados', sa.spent, sb.spent)}
             ${row('Saldo', sa.balance, sb.balance)}
-            ${row('Projeção Final', sa.projected, sb.projected)}
+            ${row('Projetado (Planejamento)', sa.projected, sb.projected)}
             ${row('Lucro Estimado', sa.profit, sb.profit)}
             ${row('Margem Atual', sa.marginCurrent, sb.marginCurrent, U.pct)}
             ${row('Desvio', sa.deviation, sb.deviation, U.pct)}

@@ -50,15 +50,15 @@ Views.dashboard = {
     const overhead = sum('overhead'); // imposto/adm/taxas sobre a venda (base de cálculo)
     const budgetTotal = sum('budgetTotal');
     const spent = purchases.reduce((s,x)=>s+x.value,0) + overhead; // realizado inclui overhead
-    // Projetado do dashboard: planilha por categoria (máx. entre gasto e orçado
-    // por categoria) + overhead — regra centralizada em Biz.projectedByCategory
+    // Projetado do dashboard: somente os itens inseridos no Planejamento.
     const projected = Biz.projectedByCategory(projects);
-    // Saldo por projeto já desconta o planejamento ainda não realizado
-    const balance = sum('balance');
-    const marginPlanned = revenue>0 ? (revenue-budgetTotal-overhead)/revenue*100 : null;
-    const marginCurrent = revenue>0 ? (revenue-projected)/revenue*100 : null; // projected já contém overhead
-    const profit = revenue - projected;
-    const deviation = budgetTotal>0 ? (projected-budgetTotal)/budgetTotal*100 : null;
+    const committedTotal = spent + projected;
+    // Equação exibida no dashboard: Orçado - Realizado - Projetado.
+    const balance = budgetTotal - committedTotal;
+    const marginPlanned = revenue>0 ? (revenue-budgetTotal)/revenue*100 : null;
+    const marginCurrent = revenue>0 ? (revenue-committedTotal)/revenue*100 : null;
+    const profit = revenue - committedTotal;
+    const deviation = budgetTotal>0 ? (committedTotal-budgetTotal)/budgetTotal*100 : null;
     const critical = stats.filter(x=>x.s.light==='red' && x.p.status==='Em andamento');
     const fut = Biz.futureExpenses();
     const next7 = [...fut.today, ...fut.d7].reduce((s,x)=>s+x.value,0);
@@ -79,7 +79,7 @@ Views.dashboard = {
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator')}
         ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm')}
-        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'por categoria + imposto/adm')}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm')}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Prevista', U.pct(marginPlanned), 'target')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
@@ -116,13 +116,13 @@ Views.dashboard = {
 
       <div class="section-title"><h2>Dashboard das Categorias</h2></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
-        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">%</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
+        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
         <tbody>${cats.map(c=>`
           <tr class="clickable" onclick="Dash.drill({category:'${U.esc(c.name)}'})">
             <td><b>${U.esc(c.name)}</b></td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td>
             <td class="num">${U.money(c.projected)}</td>
             <td class="num" style="color:${c.balance<0?'var(--red)':'inherit'}">${U.money(c.balance)}</td>
-            <td class="num">${U.pct(c.consumed)}</td><td class="num">${U.pct(c.weight)}</td>
+            <td class="num">${U.pct(c.committedPct)}</td><td class="num">${U.pct(c.weight)}</td>
             <td>${Dash.trendIcon(c.trend)} <small style="color:var(--text3)">${{up:'Acima do esperado',down:'Economia',flat:'Estável'}[c.trend]}</small></td>
             <td>${lightDot(c.status)}</td></tr>`).join('') || '<tr><td colspan="9"><div class="empty">Sem dados de categorias</div></td></tr>'}</tbody></table></div></div>
 
@@ -169,14 +169,15 @@ Views.dashboard = {
         scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
     });
 
-    // Distribuição por categoria (doughnut, drill)
-    const catTop = cats.filter(c=>c.spent>0).slice(0,10);
+    // Distribuição por categoria: realizado + planejamento comprometido. Assim,
+    // categorias que existem apenas no Planejamento também aparecem no gráfico.
+    const catTop = cats.filter(c=>c.committed>0).slice(0,10);
     if(document.getElementById('ch-cat')) Dash.charts.cat = new Chart(document.getElementById('ch-cat'), {
       type:'doughnut',
-      data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.spent), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0}]},
+      data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.committed), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0}]},
       options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
         plugins:{ legend:{position:'right', labels:{boxWidth:12, font:{size:11}}},
-          tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${U.money2(ctx.parsed)}` } } },
+          tooltip:{ callbacks:{ label: ctx => { const c=catTop[ctx.dataIndex]; return ` ${ctx.label}: ${U.money2(ctx.parsed)} (realizado ${U.money2(c.spent)} + projetado ${U.money2(c.projected)})`; } } } },
         onClick:(e,els)=>{ if(els.length) Dash.drill({category:catTop[els[0].index].name}); } }
     });
 
