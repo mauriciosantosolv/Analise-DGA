@@ -52,7 +52,7 @@ Views.dashboard = {
     const spent = purchases.reduce((s,x)=>s+x.value,0) + overhead; // realizado inclui overhead
     // Projetado do dashboard: planilha por categoria (máx. entre gasto e orçado
     // por categoria) + overhead — regra centralizada em Biz.projectedByCategory
-    const projected = sum('projected');
+    const projected = Biz.projectedByCategory(projects);
     // Saldo por projeto já desconta o planejamento ainda não realizado
     const balance = sum('balance');
     const marginPlanned = revenue>0 ? (revenue-budgetTotal-overhead)/revenue*100 : null;
@@ -79,13 +79,7 @@ Views.dashboard = {
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator')}
         ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm')}
-        ${kpi(
-    'Projetado',
-    U.money(projected),
-    'trending-up',
-    '',
-    'realizado + planejamento futuro'
-)}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'por categoria + imposto/adm')}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Prevista', U.pct(marginPlanned), 'target')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}

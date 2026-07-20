@@ -130,10 +130,8 @@ const Biz = {
   // gastou vai gastar ao menos o orçado. Os encargos da base de cálculo já
   // estão dentro das categorias correspondentes (sem dupla contagem).
   projectedByCategory(projects){
-    return projects.reduce((total, project) => {
-      return total + this.projectstats(project).projected;
-  }, 0);
-  }
+    return this.categoryStats(projects).reduce((s,c) => s + Math.max(c.projected, c.budget), 0);
+  },
 
   // Estatísticas por categoria dentro de um conjunto de projetos
   // REGRA (07/2026):
@@ -174,8 +172,8 @@ const Biz = {
       let cat = Object.values(map).find(c => cfg.names.includes(U.norm(c.name)))
              || Object.values(map).find(c => cfg.names.some(n => U.norm(c.name).includes(n)));
       if(!cat){ const key='__ov_'+k; map[key] = cat = {name:cfg.label, budget:0, spent:0, monthly:{}}; }
-cat.overhead = (cat.overhead || 0) + val;
-cat.overheadSpent = (cat.overheadSpent || 0) + val;; // parcela vinda da base de cálculo
+      cat.spent += val;
+      cat.overheadSpent = (cat.overheadSpent||0) + val; // parcela vinda da base de cálculo
     }
     // Planejamento por categoria (entra no projetado): o previsto é ABATIDO
     // pelos registros financeiros da mesma categoria — planejou 30 mil e
@@ -187,7 +185,7 @@ cat.overheadSpent = (cat.overheadSpent || 0) + val;; // parcela vinda da base de
     });
     const budgetTotal = Object.values(map).reduce((s,c)=>s+c.budget,0);
     return Object.values(map).map(c => {
-      const consumed = c.budget>0 ? realized /c.budget*100 : (c.spent>0?999:0);
+      const consumed = c.budget>0 ? c.spent/c.budget*100 : (c.spent>0?999:0);
       // tendência: compara média dos 2 últimos meses com a média histórica (só compras)
       const months = Object.keys(c.monthly).sort();
       let trend = 'flat';
@@ -198,12 +196,11 @@ cat.overheadSpent = (cat.overheadSpent || 0) + val;; // parcela vinda da base de
         if(recent > avg*1.25) trend = 'up'; else if(recent < avg*0.75) trend = 'down';
       }
       const plannedFuture = Math.max(0, (plannedByCat[U.norm(c.name)] || 0) - (c.purchSpent || 0));
-      const projected = c.spent + (c.overhead || 0) 
-       const projected = realized + plannedFuture; // realizado + planejamento ainda não realizado
+      const projected = c.spent + plannedFuture; // realizado + planejamento ainda não realizado
       // Saldo da categoria também desconta o planejado não realizado — se o
       // planejamento excede o orçado, o saldo fica negativo e alerta o gestor
       return {...c, consumed, weight: budgetTotal>0 ? c.budget/budgetTotal*100 : 0,
-              balance: c.budget - realized - plannedFuture, projected, plannedFuture, trend,
+              balance: c.budget - c.spent - plannedFuture, projected, plannedFuture, trend,
               status: consumed>100 ? 'red' : consumed>85 ? 'amber' : 'green'};
     }).sort((a,b)=>b.spent-a.spent);
   },
