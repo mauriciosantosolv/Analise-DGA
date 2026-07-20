@@ -130,7 +130,7 @@ const Biz = {
   // gastou vai gastar ao menos o orçado. Os encargos da base de cálculo já
   // estão dentro das categorias correspondentes (sem dupla contagem).
   projectedByCategory(projects){
-    return this.categoryStats(projects).reduce((s,c) => s + Math.max(c.projected, c.budget), 0);
+    return this.categoryStats(projects).reduce((s,c) => s + c.projec, 0);
   },
 
   // Estatísticas por categoria dentro de um conjunto de projetos
