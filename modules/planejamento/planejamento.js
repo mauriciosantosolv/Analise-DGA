@@ -18,7 +18,7 @@
 /* ---------- PLANEJAMENTO ---------- */
 Views.planejamento = {
   title:'Planejamento',
-  mode:'month', refDate:new Date(),
+  mode:'month', refDate:new Date(), projectFilter:'', focusUpcoming:false,
   render(){
     $c().innerHTML = `
       <div class="toolbar">
@@ -43,12 +43,22 @@ Views.planejamento = {
     else r.setDate(r.getDate()+d);
     this.draw();
   },
-  items(){ return State.planning.slice().sort((a,b)=>a.date.localeCompare(b.date)); },
+  items(){
+    let rows = State.planning.slice();
+    const pid = this.projectFilter || State.filters.project || '';
+    if(pid) rows = rows.filter(x=>x.projectId===pid);
+    if(this.focusUpcoming){
+      const start = U.isoDate(new Date()), endDate = new Date(); endDate.setDate(endDate.getDate()+7);
+      const end = U.isoDate(endDate); rows = rows.filter(x=>x.date>=start && x.date<=end);
+    }
+    return rows.sort((a,b)=>a.date.localeCompare(b.date));
+  },
+  eventStyle(projectId){ const c=App.projectColor(projectId); return `background:${c}1F;color:${c};border-left:3px solid ${c}`; },
   draw(){
     const body = document.getElementById('plan-body'), per = document.getElementById('plan-period');
     const r = this.refDate;
     if(this.mode==='list' || this.mode==='timeline'){
-      per.textContent = 'Todos os itens';
+      per.textContent = this.focusUpcoming ? 'Próximos 7 dias' : 'Todos os itens';
       const items = this.items();
       if(this.mode==='list'){
         body.innerHTML = `<div class="table-wrap"><div class="table-scroll"><table>
@@ -60,7 +70,7 @@ Views.planejamento = {
             || `<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
       } else {
         body.innerHTML = items.length ? `<div class="card"><div class="timeline">${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
-          <div class="tl-item"><b>${U.date(x.date)}</b> · <span class="tag tag-blue">${U.esc(p?p.proposal:'?')}</span> ${U.esc(x.category)}<br>
+          <div class="tl-item"><b>${U.date(x.date)}</b> · <span class="tag" style="background:${App.projectColor(x.projectId)}1F;color:${App.projectColor(x.projectId)}">${U.esc(p?p.proposal:'?')}</span> ${U.esc(x.category)}<br>
           <span style="color:var(--text2)">${U.esc(x.desc||'')}</span> — <b>${U.money2(x.value)}</b></div>`;}).join('')}</div></div>`
           : `<div class="empty card"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div>`;
       }
@@ -76,7 +86,7 @@ Views.planejamento = {
         const evs = this.items().filter(x=>x.date===iso);
         html += `<div class="cal-day ${d.getMonth()!==r.getMonth()?'other':''} ${iso===today?'today':''}">
           <div class="d">${d.getDate()}</div>
-          ${evs.slice(0,3).map(x=>`<div class="cal-ev" onclick="Views.planejamento.form('${x.id}')" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
+          ${evs.slice(0,3).map(x=>`<div class="cal-ev" style="${this.eventStyle(x.projectId)}" onclick="Views.planejamento.form('${x.id}')" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
           ${evs.length>3?`<small>+${evs.length-3}</small>`:''}</div>`;
       }
       body.innerHTML = html + '</div></div>';
@@ -92,7 +102,7 @@ Views.planejamento = {
         const evs = this.items().filter(x=>x.date===iso);
         html += `<div class="card" style="margin-bottom:10px"><h3>${d.toLocaleDateString('pt-BR',{weekday:'long', day:'numeric', month:'short'})}</h3>
           ${evs.length ? evs.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
-            <div class="rb-item" style="margin-top:8px"><div><b>${U.esc(x.category)}</b> · ${U.esc(p?p.proposal:'?')}<small>${U.esc(x.desc||'')}</small></div><b>${U.money2(x.value)}</b></div>`;}).join('')
+            <div class="rb-item" style="margin-top:8px;border-left:4px solid ${App.projectColor(x.projectId)}"><div><b>${U.esc(x.category)}</b> · ${U.esc(p?p.proposal:'?')}<small>${U.esc(x.desc||'')}</small></div><b>${U.money2(x.value)}</b></div>`;}).join('')
           : '<small style="color:var(--text3)">Sem itens planejados</small>'}</div>`;
       }
       body.innerHTML = html;

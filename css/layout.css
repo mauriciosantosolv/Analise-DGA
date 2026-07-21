@@ -47,3 +47,15 @@ main{display:flex;flex-direction:column;overflow:hidden}
 .icon-btn:hover{color:var(--blue);border-color:var(--blue)}
 .icon-btn svg{width:17px;height:17px}
 
+
+/* Ticker financeiro */
+#finance-ticker{height:34px;overflow:hidden;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center}
+.ticker-track{display:flex;width:max-content;animation:ticker-scroll 42s linear infinite}
+#finance-ticker:hover .ticker-track{animation-play-state:paused}
+.ticker-group{display:flex;align-items:center;flex-shrink:0}
+.ticker-item{height:34px;display:flex;align-items:center;gap:7px;padding:0 18px;border:0;border-right:1px solid var(--border2);background:transparent;font-size:.76rem;white-space:nowrap;color:var(--text2);cursor:pointer}
+.ticker-item:hover{background:var(--surface2)}.ticker-item b{color:var(--text)}
+.ticker-item.positive span{color:var(--green);font-weight:800}.ticker-item.negative span{color:var(--red);font-weight:800}
+.ticker-empty{padding:0 18px;font-size:.76rem;color:var(--text3)}
+@keyframes ticker-scroll{to{transform:translateX(-50%)}}
+@media(max-width:860px){#finance-ticker{height:30px}.ticker-item{height:30px;padding:0 12px}}

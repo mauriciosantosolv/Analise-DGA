@@ -20,7 +20,7 @@ Views.orcamentos = {
   title:'Orçamentos',
   render(){
     const byProj = {};
-    State.budgets.forEach(b => { (byProj[b.projectId] = byProj[b.projectId]||[]).push(b); });
+    State.budgets.filter(b=>!State.filters.project || b.projectId===State.filters.project).forEach(b => { (byProj[b.projectId] = byProj[b.projectId]||[]).push(b); });
     $c().innerHTML = `
       <div class="toolbar">
         <button class="btn btn-primary" onclick="Importer.pick('budget')"><i data-lucide="upload"></i>Importar Modelo de Orçamentos</button>

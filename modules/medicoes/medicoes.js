@@ -22,10 +22,10 @@ Views.medicoes = {
   title:'Medições',
   render(){
     const byProj = {};
-    State.measurements.forEach(m => { (byProj[m.projectId] = byProj[m.projectId]||[]).push(m); });
+    State.measurements.filter(m=>!State.filters.project || m.projectId===State.filters.project).forEach(m => { (byProj[m.projectId] = byProj[m.projectId]||[]).push(m); });
     const totalInvoiced = State.measurements.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((s,m)=>s+m.value,0);
     const totalAwaiting = State.measurements.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
-    const totalRevenue = State.projects.reduce((s,p)=>s+(p.saleValue||0),0);
+    const totalRevenue = State.projects.filter(p=>!State.filters.project || p.id===State.filters.project).reduce((s,p)=>s+(p.saleValue||0),0);
     $c().innerHTML = `
       <div class="toolbar">
         <button class="btn btn-primary" onclick="Views.medicoes.form()"><i data-lucide="plus"></i>Nova Medição</button>

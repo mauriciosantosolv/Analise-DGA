@@ -15,6 +15,30 @@
 
 /* ================= [9] APLICAÇÃO — roteador, pesquisa global, init ================= */
 const App = {
+  goFiltered(view, projectId='', options={}){
+    State.filters.project = projectId || '';
+    if(view === 'planejamento'){
+      Views.planejamento.projectFilter = projectId || '';
+      Views.planejamento.focusUpcoming = !!options.upcoming7;
+      if(options.upcoming7) Views.planejamento.mode = 'list';
+    }
+    this.go(view);
+  },
+  projectColor(projectId){
+    const palette = ['#2563EB','#16A34A','#EAB308','#7C3AED','#0891B2','#EA580C','#DB2777','#4F46E5','#65A30D','#DC2626'];
+    const idx = Math.max(0, State.projects.findIndex(p=>p.id===projectId));
+    return palette[idx % palette.length];
+  },
+  renderTicker(){
+    const el = document.getElementById('finance-ticker'); if(!el) return;
+    const projects = State.projects.filter(p=>p.status !== 'Cancelado');
+    if(!projects.length){ el.innerHTML = '<div class="ticker-empty">Desempenho financeiro: nenhum projeto cadastrado</div>'; return; }
+    const items = projects.map(p=>{
+      const st = Biz.projectStats(p), positive = st.balance >= 0;
+      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail('${p.id}')" title="Abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(st.balance)}</span></button>`;
+    }).join('');
+    el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div><div class="ticker-group" aria-hidden="true">${items}</div></div>`;
+  },
   go(view){
     State.view = view;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
@@ -26,6 +50,7 @@ const App = {
     document.getElementById('page-title').textContent = v.title;
     Dash.destroyCharts();
     v.render();
+    this.renderTicker();
     this.renderRightbar();
     document.getElementById('content').scrollTop = 0;
   },
