@@ -14,9 +14,9 @@
  */
 
 const U = {
-  money(v){ const cur = State.settings.currency || 'BRL'; return new Intl.NumberFormat('pt-BR',{style:'currency',currency:cur,maximumFractionDigits:0}).format(v||0); },
+  money(v){ const cur = State.settings.currency || 'BRL'; return new Intl.NumberFormat('pt-BR',{style:'currency',currency:cur,minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0); },
 
-  money2(v){ const cur = State.settings.currency || 'BRL'; return new Intl.NumberFormat('pt-BR',{style:'currency',currency:cur}).format(v||0); },
+  money2(v){ return this.money(v); },
 
   pct(v,d=1){ return (v==null||!isFinite(v)) ? '—' : v.toFixed(d).replace('.',',')+'%'; },
 

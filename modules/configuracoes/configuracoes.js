@@ -73,6 +73,13 @@ Views.configuracoes = {
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button class="btn btn-primary" id="cfg-save"><i data-lucide="check"></i>Salvar</button></div>
       </div>
+      <div class="card" style="max-width:900px;margin-top:14px">
+        <h2 style="margin-bottom:6px">Modelos das bases financeiras</h2>
+        <p style="font-size:.84rem;color:var(--text2);margin-bottom:14px">Cada base mantém seu próprio modelo. A substituição salva apenas os cabeçalhos e o mapeamento; nenhum lançamento já importado é alterado ou apagado.</p>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
+          ${Object.entries(Importer.KIND_LABELS).map(([kind,label])=>{const m=(State.settings.importMappings||{})[kind];return `<div class="card" style="padding:13px;background:var(--surface2)"><b>${label}</b><small style="display:block;color:var(--text3);margin:5px 0 10px">${m?`Modelo: ${U.esc(m.fileName)}<br>Salvo em ${U.date(m.savedAt)}`:'Reconhecimento padrão por cabeçalho'}</small><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="Importer.pickModel('${kind}')"><i data-lucide="upload"></i>${m?'Substituir':'Cadastrar'} modelo</button>${m?`<button class="btn btn-ghost btn-sm" onclick="Importer.clearModel('${kind}')">Remover</button>`:''}</div></div>`;}).join('')}
+        </div>
+      </div>
       <div class="card" style="max-width:560px;margin-top:14px">
         <h3 style="margin-bottom:8px">Atalhos rápidos</h3>
         <div style="display:flex;gap:9px;flex-wrap:wrap">

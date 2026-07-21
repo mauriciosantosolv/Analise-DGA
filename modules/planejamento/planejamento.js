@@ -66,7 +66,7 @@ Views.planejamento = {
           <tbody>${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
             <tr><td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.category)}</td>
             <td>${U.esc(x.desc)}</td><td class="num">${U.money2(x.value)}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="Views.planejamento.form('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+            <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.form('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
             || `<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
       } else {
         body.innerHTML = items.length ? `<div class="card"><div class="timeline">${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
@@ -84,9 +84,9 @@ Views.planejamento = {
         const d = new Date(start); d.setDate(start.getDate()+i);
         const iso = U.isoDate(d);
         const evs = this.items().filter(x=>x.date===iso);
-        html += `<div class="cal-day ${d.getMonth()!==r.getMonth()?'other':''} ${iso===today?'today':''}">
+        html += `<div class="cal-day ${d.getMonth()!==r.getMonth()?'other':''} ${iso===today?'today':''}" onclick="Views.planejamento.form('', '${iso}')" title="Clique para inserir um planejamento nesta data">
           <div class="d">${d.getDate()}</div>
-          ${evs.slice(0,3).map(x=>`<div class="cal-ev" style="${this.eventStyle(x.projectId)}" onclick="Views.planejamento.form('${x.id}')" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
+          ${evs.slice(0,3).map(x=>`<div class="cal-ev" style="${this.eventStyle(x.projectId)}" onclick="event.stopPropagation();Views.planejamento.form('${x.id}')" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
           ${evs.length>3?`<small>+${evs.length-3}</small>`:''}</div>`;
       }
       body.innerHTML = html + '</div></div>';
@@ -109,12 +109,12 @@ Views.planejamento = {
     }
     U.icons();
   },
-  form(id){
-    const x = id ? State.planning.find(i=>i.id===id) : {projectId:'',category:'',desc:'',value:0,date:U.isoDate(new Date()),notes:''};
+  form(id, presetDate=''){
+    const x = id ? State.planning.find(i=>i.id===id) : {projectId:State.filters.project||(State.projects[0]||{}).id||'',category:'',desc:'',value:0,date:presetDate||U.isoDate(new Date()),notes:''};
     UI.modal({ title:id?'Editar Item de Planejamento':'Novo Item de Planejamento', body:`
       <div class="form-grid">
         <div><label>Projeto *</label><select id="pl-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
-        <div><label>Categoria *</label><input id="pl-cat" list="cat-list" value="${U.esc(x.category)}"><datalist id="cat-list">${State.categories.map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
+        <div><label>Categoria *</label><select id="pl-cat"><option value="">Selecione...</option>${State.categories.map(c=>`<option value="${U.esc(c.name)}" ${U.norm(c.name)===U.norm(x.category)?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></div>
         <div><label>Valor Previsto *</label><input id="pl-value" type="number" step="0.01" value="${x.value||''}"></div>
         <div><label>Data Prevista *</label><input id="pl-date" type="date" value="${x.date}"></div>
         <div class="full"><label>Descrição</label><input id="pl-desc" value="${U.esc(x.desc)}"></div>
@@ -127,7 +127,7 @@ Views.planejamento = {
     document.getElementById('pl-save').onclick = async () => {
       const obj = { ...(id?x:{id:U.id()}),
         projectId:document.getElementById('pl-proj').value, category:document.getElementById('pl-cat').value.trim(),
-        value:U.num(document.getElementById('pl-value').value), date:document.getElementById('pl-date').value,
+        value:Math.round(U.num(document.getElementById('pl-value').value)*100)/100, date:document.getElementById('pl-date').value,
         desc:document.getElementById('pl-desc').value.trim(), notes:document.getElementById('pl-notes').value };
       if(!obj.projectId || !obj.category || !obj.date) return UI.toast('Preencha projeto, categoria e data', 'warn');
       await DB.put('planning', obj); await State.reload();

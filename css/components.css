@@ -103,3 +103,8 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   .two-col .card{margin-bottom:14px}
   .chart-box,.chart-box.sm{height:250px}
 }
+
+/* Planejamento: datas clicáveis para inclusão rápida */
+.cal-day{cursor:pointer;transition:background .15s,border-color .15s}
+.cal-day:hover{background:var(--surface2);border-color:var(--blue)}
+.cal-day .cal-ev{cursor:pointer}

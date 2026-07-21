@@ -37,7 +37,17 @@ const App = {
       const st = Biz.projectStats(p), positive = st.balance >= 0;
       return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail('${p.id}')" title="Abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(st.balance)}</span></button>`;
     }).join('');
-    el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div><div class="ticker-group" aria-hidden="true">${items}</div></div>`;
+    el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div></div>`;
+    requestAnimationFrame(() => {
+      const track = el.querySelector('.ticker-track'), first = track && track.querySelector('.ticker-group');
+      if(!track || !first) return;
+      const groupWidth = Math.max(1, first.scrollWidth);
+      const copies = Math.max(2, Math.ceil(el.clientWidth / groupWidth) + 2);
+      track.innerHTML = Array.from({length:copies}, (_,i)=>`<div class="ticker-group" ${i?'aria-hidden="true"':''}>${items}</div>`).join('');
+      track.style.setProperty('--ticker-shift', `-${groupWidth}px`);
+      const duration = Math.max(16, groupWidth / 45);
+      track.style.setProperty('--ticker-duration', `${duration}s`);
+    });
   },
   go(view){
     State.view = view;

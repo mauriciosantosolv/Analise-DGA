@@ -60,13 +60,24 @@ const Importer = (() => {
     }
   };
 
-  // Encontra o índice de cada coluna a partir do cabeçalho
-  function mapHeaders(headerRow, map){
+  const KIND_LABELS = {budget:'Orçamentos', purchase:'Compras', paidAccount:'Contas pagas', labor:'Mão de obra'};
+
+  function configuredMap(kind){
+    const all = State.settings.importMappings || {};
+    return all[kind] || null;
+  }
+
+  // Encontra o índice de cada coluna pelo texto do cabeçalho, nunca pela posição.
+  // Quando o administrador cadastrou um modelo, os cabeçalhos salvos têm prioridade.
+  function mapHeaders(headerRow, map, kind){
     const cols = {}, missing = [];
     const normHead = headerRow.map(h => U.norm(h));
+    const saved = configuredMap(kind);
     for(const [field, aliases] of Object.entries(map)){
       let idx = -1;
-      for(const a of aliases){
+      const learned = saved && saved.fields ? U.norm(saved.fields[field]) : '';
+      if(learned) idx = normHead.findIndex(h => h === learned);
+      for(const a of (idx === -1 ? aliases : [])){
         idx = normHead.findIndex(h => h === a);
         if(idx === -1) idx = normHead.findIndex(h => h && (h.includes(a) || a.includes(h)) && h.length > 2);
         if(idx !== -1) break;
@@ -125,7 +136,7 @@ const Importer = (() => {
   async function importBudget(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.budget);
+    const {cols, missing} = mapHeaders(rows[0], MAPS.budget, 'budget');
     if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: <b>${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0, skipped = [], saleUpdates = 0;
     const records = [];
@@ -149,7 +160,7 @@ const Importer = (() => {
   async function importPurchases(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.purchase);
+    const {cols, missing} = mapHeaders(rows[0], MAPS.purchase, 'purchase');
     const critical = missing.filter(f => ['project','value','category'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -191,7 +202,7 @@ const Importer = (() => {
   async function importPaidAccounts(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount);
+    const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount, 'paidAccount');
     const critical = missing.filter(f => ['project','category','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -229,7 +240,7 @@ const Importer = (() => {
   async function importLabor(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.labor);
+    const {cols, missing} = mapHeaders(rows[0], MAPS.labor, 'labor');
     const critical = missing.filter(f => ['project','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -258,6 +269,48 @@ const Importer = (() => {
     await DB.bulkPut('purchases', records);
     await State.reload();
     return {summary:{projects:created, added, skipped, type:'Mão de obra'}};
+  }
+
+
+
+  async function saveModel(file, kind){
+    const rows = await readWorkbook(file);
+    if(!rows.length || !rows[0].some(Boolean)) throw new Error('O modelo não possui cabeçalho válido.');
+    const map = MAPS[kind];
+    if(!map) throw new Error('Base de dados não reconhecida.');
+    const detected = mapHeaders(rows[0], map, null);
+    const criticalByKind = {budget:['project','category','value'], purchase:['project','category','value'], paidAccount:['project','category','value','date'], labor:['project','value','date']};
+    const missingCritical = (criticalByKind[kind]||[]).filter(f=>detected.cols[f] == null);
+    if(missingCritical.length) throw new Error('Não foi possível identificar no modelo: '+missingCritical.join(', ')+'.');
+    const fields = {};
+    Object.entries(detected.cols).forEach(([field, idx]) => fields[field] = String(rows[0][idx]??'').trim());
+    const mappings = {...(State.settings.importMappings||{})};
+    mappings[kind] = {fileName:file.name, savedAt:Date.now(), fields};
+    await State.setSetting('importMappings', mappings);
+    return mappings[kind];
+  }
+
+  function pickModel(kind){
+    const inp = document.getElementById('file-input');
+    inp.onchange = async () => {
+      const file = inp.files[0]; inp.value=''; if(!file) return;
+      UI.loading(true, 'Analisando cabeçalhos do modelo…');
+      try{
+        const saved = await saveModel(file, kind);
+        UI.loading(false);
+        UI.toast(`Modelo de ${KIND_LABELS[kind]} atualizado sem alterar dados existentes`, 'success', 5000);
+        if(State.view==='configuracoes') Views.configuracoes.render();
+      }catch(err){ UI.loading(false); UI.toast('Modelo não salvo: '+U.esc(err.message), 'error', 6000); }
+    };
+    inp.click();
+  }
+
+  async function clearModel(kind){
+    const mappings = {...(State.settings.importMappings||{})};
+    delete mappings[kind];
+    await State.setSetting('importMappings', mappings);
+    UI.toast('Modelo removido. O reconhecimento padrão por cabeçalhos continua ativo.', 'warn');
+    if(State.view==='configuracoes') Views.configuracoes.render();
   }
 
   function renderSummary(s){
@@ -290,5 +343,5 @@ const Importer = (() => {
     inp.click();
   }
 
-  return { pick, handle };
+  return { pick, handle, pickModel, clearModel, saveModel, KIND_LABELS };
 })();
