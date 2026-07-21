@@ -106,7 +106,7 @@ Views.projetos = {
         ${ring}
         <div class="kpi-grid" style="flex:1;margin:0">
           <div class="kpi"><div class="k-label">Venda</div><div class="k-value">${U.money(p.saleValue)}</div></div>
-          <div class="kpi accent-green"><div class="k-label">Medido / Faturado</div><div class="k-value">${U.money(s.measured)}</div><div class="k-sub">${U.pct(s.measuredPct)} da receita</div></div>
+          <div class="kpi accent-green"><div class="k-label">Medido / Faturado</div><div class="k-value">${U.money(s.invoiced)}</div><div class="k-sub">Aguardando aprovação: ${U.money(s.awaitingApproval)}</div></div>
           <div class="kpi"><div class="k-label">Orçado</div><div class="k-value">${U.money(s.budgetTotal)}</div></div>
           <div class="kpi"><div class="k-label">Realizado</div><div class="k-value">${U.money(s.spent)}</div><div class="k-sub">${U.pct(s.consumed)} do orçamento</div></div>
           <div class="kpi ${s.balance<0?'accent-red':'accent-green'}"><div class="k-label">Saldo</div><div class="k-value">${U.money(s.balance)}</div></div>
@@ -121,6 +121,11 @@ Views.projetos = {
         ${s.deviation!=null?` · ${s.deviation>0?`estouro previsto de <b style="color:var(--red)">${U.pct(s.deviation)}</b>`:`economia prevista de <b style="color:var(--green)">${U.pct(-s.deviation)}</b>`}`:''}
         ${s.daysLeft!=null?` · ${s.daysLeft} dias restantes de contrato`:''}
       </div>
+      <div class="project-dates" style="margin-bottom:14px">
+        <div><small>Data de início</small><b>${p.start?U.date(p.start):'Não informado'}</b></div>
+        <div><small>Prazo contratual</small><b>${p.deadline?U.date(p.deadline):'Não informado'}</b></div>
+        <div><small>Término previsto</small><b>${p.expectedEnd?U.date(p.expectedEnd):'Não informado'}</b></div>
+      </div>
       <h3 style="margin-bottom:8px">Categorias</h3>
       <div class="table-wrap"><div class="table-scroll" style="max-height:300px"><table>
         <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tend.</th><th></th></tr></thead>
@@ -131,6 +136,7 @@ Views.projetos = {
           <td>${Dash.trendIcon(c.trend)}</td><td>${lightDot(c.status)}</td></tr>`).join('')}</tbody>
       </table></div></div>`,
       footer:`<button class="btn btn-ghost" onclick="Dash.simulator('${p.id}')"><i data-lucide="sliders-horizontal"></i>Simulador</button>
+              <button class="btn btn-ghost" onclick="Exports.projectPDF('${p.id}')"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
               <button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
     });
   },

@@ -29,9 +29,6 @@ const Biz = {
       if(f.category && U.norm(x.category) !== U.norm(f.category)) return false;
       if(f.status && (!p || p.status !== f.status)) return false;
       if(f.type && (!p || p.type !== f.type)) return false;
-      if(f.year && (!x.date || !x.date.startsWith(f.year))) return false;
-      if(f.from && x.date && x.date < f.from) return false;
-      if(f.to && x.date && x.date > f.to) return false;
       return true;
     });
   },
@@ -67,9 +64,14 @@ const Biz = {
     const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // somente compras
     const planned = State.planning.filter(x => x.projectId === p.id);
     const projected = planned.reduce((s,x) => s+x.value, 0); // somente Planejamento
-    // Medições: quanto da receita contratada já foi medido/faturado
-    const measured = State.measurements.filter(m => m.projectId === p.id).reduce((s,m)=>s+m.value,0);
+    // Medições: faturado e aguardando aprovação são separados. Somente registros
+    // com status Faturada/Faturado alimentam o card verde de faturamento.
+    const measurements = State.measurements.filter(m => m.projectId === p.id);
+    const measured = measurements.reduce((s,m)=>s+m.value,0);
+    const invoiced = measurements.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((s,m)=>s+m.value,0);
+    const awaitingApproval = measurements.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
+    const invoicedPct = p.saleValue > 0 ? invoiced / p.saleValue * 100 : null;
     const rates = this.baseRates();
     const overhead = p.saleValue * rates.total / 100; // custos calculados sobre a venda
     const spent = spentPurchases + overhead;          // REALIZADO = compras + imposto/adm
@@ -100,21 +102,15 @@ const Biz = {
     // Data provável de encerramento do orçamento pelo ritmo atual
     let burnoutDate = null;
     if(dailyBurn > 0 && balance > 0) burnoutDate = new Date(today.getTime() + (balance/dailyBurn)*86400000);
-    // Índice de saúde financeira 0–100
-    let health = 100;
-    if(budgetTotal > 0){
-      if(consumed > 100) health -= Math.min(45, (consumed-100));
-      else if(consumed > 85) health -= (consumed-85)*1.2;
-    }
-    if(marginCurrent != null){ if(marginCurrent < 0) health -= 30; else if(marginCurrent < 10) health -= 15; }
-    if(daysLeft != null && daysLeft < 0 && p.status === 'Em andamento') health -= 20;
-    if(deviation != null && deviation > 10) health -= 10;
-    health = Math.max(0, Math.min(100, Math.round(health)));
-    const light = health >= 70 ? 'green' : health >= 45 ? 'amber' : 'red';
+    // Saúde vinculada exclusivamente ao saldo (Orçado - Realizado - Projetado).
+    // Como a regra define verde somente acima de R$ 500, a faixa intermediária
+    // de R$ 0 a R$ 500 permanece amarela; saldo negativo fica vermelho.
+    const light = balance < 0 ? 'red' : balance > 500 ? 'green' : 'amber';
+    const health = light === 'green' ? 100 : light === 'amber' ? 50 : 0;
     return { budgetTotal, spent, spentPurchases, projected, projectedPurchases, committedTotal, balance,
              consumed, marginPlanned, marginCurrent, profit, deviation, daysLeft, dailyBurn,
              burnoutDate, health, light, overhead, plannedFuture:projected, purchases, budgets,
-             measured, measuredPct };
+             measured, measuredPct, invoiced, invoicedPct, awaitingApproval };
   },
 
   // Projetado do dashboard = soma exclusiva dos itens do Planejamento.

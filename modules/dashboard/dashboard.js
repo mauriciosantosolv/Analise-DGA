@@ -46,25 +46,22 @@ Views.dashboard = {
     const stats = projects.map(p=>({p, s:Biz.projectStats(p)}));
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
     const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
-    const measured = sum('measured'); // total medido/faturado
-    const overhead = sum('overhead'); // imposto/adm/taxas sobre a venda (base de cálculo)
+    const invoiced = sum('invoiced');
+    const awaitingApproval = sum('awaitingApproval');
     const budgetTotal = sum('budgetTotal');
-    const spent = purchases.reduce((s,x)=>s+x.value,0) + overhead; // realizado inclui overhead
-    // Projetado do dashboard: somente os itens inseridos no Planejamento.
-    const projected = Biz.projectedByCategory(projects);
+    // A fonte de verdade é projectStats(): assim, o Realizado do topo sempre
+    // coincide com a soma do Semáforo e inclui compras, contas pagas, mão de
+    // obra e custos da base de cálculo (imposto/adm/taxas/outros).
+    const spent = sum('spent');
+    const projected = sum('projected');
     const committedTotal = spent + projected;
     // Equação exibida no dashboard: Orçado - Realizado - Projetado.
     const balance = budgetTotal - committedTotal;
-    const marginPlanned = revenue>0 ? (revenue-budgetTotal)/revenue*100 : null;
     const marginCurrent = revenue>0 ? (revenue-committedTotal)/revenue*100 : null;
     const profit = revenue - committedTotal;
-    const deviation = budgetTotal>0 ? (committedTotal-budgetTotal)/budgetTotal*100 : null;
     const critical = stats.filter(x=>x.s.light==='red' && x.p.status==='Em andamento');
     const fut = Biz.futureExpenses();
     const next7 = [...fut.today, ...fut.d7].reduce((s,x)=>s+x.value,0);
-    const deadlines = active.map(p=>p.deadline).filter(Boolean).sort();
-    const nextDeadline = deadlines.find(d=>d>=U.isoDate(new Date()));
-    const alerts = Biz.alerts();
     const cats = Biz.categoryStats(projects);
 
     const kpi = (label, value, icon, cls='', sub='') =>
@@ -75,20 +72,17 @@ Views.dashboard = {
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Medido / Faturado', U.money(measured), 'ruler', 'accent-green', U.pct(revenue>0?measured/revenue*100:null)+' da receita')}
-        ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
+        ${kpi('Medido / Faturado', U.money(invoiced), 'ruler', 'accent-green', 'Aguardando aprovação: '+U.money(awaitingApproval))}
+        ${kpi('Saldo a Medir', U.money(revenue-invoiced), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator')}
         ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm')}
         ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm')}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
-        ${kpi('Margem Prevista', U.pct(marginPlanned), 'target')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
-        ${kpi('Desvio Financeiro', U.pct(deviation), 'activity', deviation>0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
         ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
         ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados')}
-        ${kpi('Próximo Vencimento', nextDeadline?U.date(nextDeadline):'—', 'hourglass', '', nextDeadline?U.daysBetween(U.isoDate(new Date()), nextDeadline)+' dias restantes':'')}
       </div>
 
       <div class="toolbar" style="margin-bottom:10px">
@@ -126,11 +120,7 @@ Views.dashboard = {
             <td>${Dash.trendIcon(c.trend)} <small style="color:var(--text3)">${{up:'Acima do esperado',down:'Economia',flat:'Estável'}[c.trend]}</small></td>
             <td>${lightDot(c.status)}</td></tr>`).join('') || '<tr><td colspan="9"><div class="empty">Sem dados de categorias</div></td></tr>'}</tbody></table></div></div>
 
-      <div class="section-title"><h2>Central de Alertas</h2><span class="tag ${alerts.some(a=>a.level==='red')?'tag-red':'tag-green'}">${alerts.length} alerta(s)</span></div>
-      <div class="card">${alerts.length ? alerts.slice(0,25).map(a=>`
-        <div class="alert-item clickable" style="cursor:pointer" onclick="App.go('${a.view}')">
-          <i data-lucide="${a.icon}" style="color:var(--${a.level==='blue'?'blue':a.level})"></i><div>${a.msg}</div></div>`).join('')
-        : '<div class="empty"><i data-lucide="shield-check"></i><br>Nenhum alerta. Tudo sob controle.</div>'}</div>`;
+      `;
 
     Dash.bindFilters();
     this.charts(projects, purchases, stats, cats, fut);

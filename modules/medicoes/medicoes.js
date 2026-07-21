@@ -23,7 +23,8 @@ Views.medicoes = {
   render(){
     const byProj = {};
     State.measurements.forEach(m => { (byProj[m.projectId] = byProj[m.projectId]||[]).push(m); });
-    const totalMeasured = State.measurements.reduce((s,m)=>s+m.value,0);
+    const totalInvoiced = State.measurements.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((s,m)=>s+m.value,0);
+    const totalAwaiting = State.measurements.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
     const totalRevenue = State.projects.reduce((s,p)=>s+(p.saleValue||0),0);
     $c().innerHTML = `
       <div class="toolbar">
@@ -32,17 +33,18 @@ Views.medicoes = {
       </div>
       <div class="kpi-grid">
         <div class="kpi accent-blue"><div class="k-label"><i data-lucide="banknote"></i>Receita Contratada</div><div class="k-value">${U.money(totalRevenue)}</div></div>
-        <div class="kpi accent-green"><div class="k-label"><i data-lucide="ruler"></i>Total Medido / Faturado</div><div class="k-value">${U.money(totalMeasured)}</div><div class="k-sub">${U.pct(totalRevenue>0?totalMeasured/totalRevenue*100:null)} da receita</div></div>
-        <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-totalMeasured)}</div></div>
+        <div class="kpi accent-green"><div class="k-label"><i data-lucide="ruler"></i>Total Medido / Faturado</div><div class="k-value">${U.money(totalInvoiced)}</div><div class="k-sub">Aguardando aprovação: ${U.money(totalAwaiting)}</div></div>
+        <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-totalInvoiced)}</div></div>
       </div>
       ${Object.keys(byProj).length ? Object.entries(byProj).map(([pid, items]) => {
         const p = State.projects.find(x=>x.id===pid);
-        const sum = items.reduce((s,m)=>s+m.value,0);
-        const pctM = p && p.saleValue>0 ? sum/p.saleValue*100 : null;
+        const invoiced = items.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((s,m)=>s+m.value,0);
+        const awaiting = items.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
+        const pctM = p && p.saleValue>0 ? invoiced/p.saleValue*100 : null;
         return `<div class="card" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
             <h3>${U.esc(U.projLabel(p))}</h3>
-            <div style="display:flex;gap:10px;align-items:center"><b>${U.money(sum)}</b><span class="tag ${pctM!=null&&pctM>=100?'tag-green':'tag-blue'}">${U.pct(pctM)} da receita</span></div></div>
+            <div style="display:flex;gap:10px;align-items:center"><b style="color:var(--green)">${U.money(invoiced)} faturado</b><span class="tag tag-amber">${U.money(awaiting)} aguardando aprovação</span><span class="tag ${pctM!=null&&pctM>=100?'tag-green':'tag-blue'}">${U.pct(pctM)} da receita</span></div></div>
           <div class="progress" style="margin-bottom:10px"><div style="width:${Math.min(100,pctM||0)}%;background:var(--green)"></div></div>
           <div class="table-scroll" style="max-height:240px"><table>
             <thead><tr><th>Data</th><th>Referência</th><th>Status</th><th class="num">Valor Medido</th><th style="width:50px"></th></tr></thead>

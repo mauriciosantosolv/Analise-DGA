@@ -49,15 +49,11 @@ const Dash = {
   /* ----- filtros globais ----- */
   filtersBar(){
     const f = State.filters;
-    const years = [...new Set(State.purchases.map(x=>(x.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
-    const cats = [...new Set([...State.budgets.map(b=>b.category), ...State.purchases.map(x=>x.category)])].sort();
+    const cats = [...new Set([...State.budgets.map(b=>b.category), ...State.purchases.map(x=>x.category), ...State.planning.map(x=>x.category)])].sort();
     const opt = (v, sel, label) => `<option value="${U.esc(v)}" ${v===sel?'selected':''}>${U.esc(label??v)}</option>`;
     return `<div class="filters-bar">
       <select id="flt-project" title="Projeto"><option value="">Todos os projetos</option>${State.projects.map(p=>opt(p.id, f.project, U.projLabel(p))).join('')}</select>
       <select id="flt-client" title="Cliente"><option value="">Todos os clientes</option>${[...new Set(State.projects.map(p=>p.client).filter(Boolean))].sort().map(c=>opt(c, f.client)).join('')}</select>
-      <select id="flt-year" title="Ano"><option value="">Todos os anos</option>${years.map(y=>opt(y, f.year)).join('')}</select>
-      <input id="flt-from" type="date" value="${f.from}" title="De">
-      <input id="flt-to" type="date" value="${f.to}" title="Até">
       <select id="flt-category" title="Categoria"><option value="">Todas as categorias</option>${cats.map(c=>opt(c, f.category)).join('')}</select>
       <select id="flt-status" title="Status"><option value="">Todos os status</option>${['Em andamento','Concluído','Paralisado','A executar'].map(s=>opt(s, f.status)).join('')}</select>
       <select id="flt-type" title="Tipo"><option value="">Todos os tipos</option>${['HH','Obra','Fornecimento','Painel'].map(t=>opt(t, f.type)).join('')}</select>
@@ -65,7 +61,7 @@ const Dash = {
     </div>`;
   },
   bindFilters(){
-    [['flt-project','project'],['flt-client','client'],['flt-year','year'],['flt-from','from'],['flt-to','to'],['flt-category','category'],['flt-status','status'],['flt-type','type']]
+    [['flt-project','project'],['flt-client','client'],['flt-category','category'],['flt-status','status'],['flt-type','type']]
       .forEach(([id,k]) => { const el = document.getElementById(id); if(el) el.onchange = () => { State.filters[k] = el.value; App.render(); }; });
   }
 };
@@ -86,7 +82,13 @@ Dash.projectBanner = function(){
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         ${statusTag(p.status)}<span class="tag tag-gray">${U.esc(p.type||'—')}</span>
         ${p.client?`<span class="tag tag-blue">${U.esc(p.client)}</span>`:''}
-        <span class="tag tag-green">Medido: ${U.pct(st.measuredPct)}</span></div>
+        <span class="tag tag-green">Faturado: ${U.money(st.invoiced)}</span>
+        ${st.awaitingApproval?`<span class="tag tag-amber">Aguardando aprovação: ${U.money(st.awaitingApproval)}</span>`:''}</div>
+      <div class="project-dates">
+        <div><small>Data de início</small><b>${p.start?U.date(p.start):'Não informado'}</b></div>
+        <div><small>Prazo contratual</small><b>${p.deadline?U.date(p.deadline):'Não informado'}</b></div>
+        <div><small>Término previsto</small><b>${p.expectedEnd?U.date(p.expectedEnd):'Não informado'}</b></div>
+      </div>
     </div>
     ${Dash.healthRing(st.health, st.light)}
   </div>`;
@@ -95,9 +97,11 @@ Dash.projectBanner = function(){
 /* ---------- DRILL DOWN ---------- */
 Dash.drill = function(filter){
   // filter: {category, supplier, month, projectId}
+  filter = filter || {};
   let rows = State.purchases.slice();
   const crumbs = [];
-  if(filter.projectId){ rows = rows.filter(x=>x.projectId===filter.projectId); const p = State.projects.find(x=>x.id===filter.projectId); crumbs.push('Projeto: '+U.projLabel(p)); }
+  const projectId = filter.projectId || State.filters.project;
+  if(projectId){ rows = rows.filter(x=>x.projectId===projectId); const p = State.projects.find(x=>x.id===projectId); crumbs.push('Projeto: '+U.projLabel(p)); }
   if(filter.category){ rows = rows.filter(x=>U.norm(x.category)===U.norm(filter.category)); crumbs.push('Categoria: '+filter.category); }
   if(filter.supplier){ rows = rows.filter(x=>x.supplier===filter.supplier); crumbs.push('Fornecedor: '+filter.supplier); }
   if(filter.month){ rows = rows.filter(x=>(x.date||'').startsWith(filter.month)); crumbs.push('Mês: '+filter.month); }
@@ -111,7 +115,7 @@ Dash.drill = function(filter){
       <span style="margin-left:auto"><b>${rows.length}</b> lançamentos · <b>${U.money2(total)}</b></span></div>
     ${!filter.supplier && Object.keys(bySup).length>1 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
       ${Object.entries(bySup).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([s,v])=>
-        `<button class="btn btn-ghost btn-sm" onclick='Dash.drill(${U.esc(JSON.stringify({...filter, supplier:s}))})'>${U.esc(s.length>22?s.slice(0,21)+'…':s)} · ${U.money(v)}</button>`).join('')}</div>` : ''}
+        `<button class="btn btn-ghost btn-sm" onclick='Dash.drill(${U.esc(JSON.stringify({...filter, projectId, supplier:s}))})'>${U.esc(s.length>22?s.slice(0,21)+'…':s)} · ${U.money(v)}</button>`).join('')}</div>` : ''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:420px"><table>
       <thead><tr><th>Data</th><th>Projeto</th><th>Fornecedor</th><th>Pedido/Nota</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
       <tbody>${rows.slice(0,400).map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `

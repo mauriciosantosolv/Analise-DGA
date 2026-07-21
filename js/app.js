@@ -30,7 +30,7 @@ const App = {
     document.getElementById('content').scrollTop = 0;
   },
   clearFilters(){
-    State.filters = { project:'', client:'', year:'', from:'', to:'', category:'', status:'', type:'' };
+    State.filters = { project:'', client:'', category:'', status:'', type:'' };
     this.render();
   },
 

@@ -45,7 +45,7 @@ const DB = (() => {
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
-  filters:{ project:'', client:'', year:'', from:'', to:'', category:'', status:'', type:'' },
+  filters:{ project:'', client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
     const [p,b,c,pl,cl,cat,st,me] = await Promise.all(DB.STORES.map(s=>DB.all(s)));

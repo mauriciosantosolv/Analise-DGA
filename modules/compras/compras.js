@@ -24,6 +24,8 @@ Views.financeiro = {
     $c().innerHTML = `
       <div class="toolbar">
         <button class="btn btn-primary" onclick="Importer.pick('purchase')"><i data-lucide="upload"></i>Importar Modelo Compras</button>
+        <button class="btn btn-ghost" onclick="Importer.pick('paidAccount')"><i data-lucide="receipt"></i>Importar Contas Pagas</button>
+        <button class="btn btn-ghost" onclick="Importer.pick('labor')"><i data-lucide="users"></i>Importar Mão de Obra</button>
         <button class="btn btn-ghost" onclick="Dash.purchaseForm()"><i data-lucide="plus"></i>Novo Lançamento</button>
         <div class="tabs">
           <button class="tab ${this.mode==='table'?'active':''}" onclick="Views.financeiro.mode='table';Views.financeiro.render()">Lançamentos</button>
@@ -33,7 +35,7 @@ Views.financeiro = {
         <div class="spacer"></div>
         <button class="btn btn-ghost" onclick="Exports.table('purchases')"><i data-lucide="download"></i>Exportar</button>
       </div>
-      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br><small>Novos uploads somam ao banco — duplicatas exatas são ignoradas automaticamente</small></div>
+      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br><small>Para contas pagas e mão de obra, use os botões acima. Novos uploads somam ao banco e reimportações idênticas são ignoradas.</small></div>
       <div id="fin-body"></div>`;
     if(this.mode==='table'){
       document.getElementById('fin-body').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table id="fin-table"></table></div></div>
@@ -74,15 +76,23 @@ Views.financeiro = {
     UI.modal({ title:`Importação — ${U.esc(b.file)}`, wide:true, body:`
       <p style="color:var(--text2);font-size:.85rem;margin-bottom:12px">${b.items.length} lançamento(s) · total ${U.money2(b.total)} · clique no lápis para editar qualquer lançamento deste bloco.</p>
       <div class="table-wrap"><div class="table-scroll" style="max-height:58vh"><table>
-        <thead><tr><th>Data</th><th>Projeto</th><th>Categoria</th><th>Fornecedor</th><th>Descrição</th><th class="num">Valor</th><th style="width:50px"></th></tr></thead>
+        <thead><tr><th>Data</th><th>Projeto</th><th>Origem</th><th>Categoria</th><th>Conta / Fornecedor</th><th>Descrição</th><th class="num">Valor</th><th style="width:50px"></th></tr></thead>
         <tbody>${b.items.sort((a,c)=>(c.date||'').localeCompare(a.date||'')).map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
           <tr><td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td>
-          <td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
+          <td>${Views.financeiro.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td class="num"><b>${U.money2(x.value)}</b></td>
           <td><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')}</tbody>
       </table></div></div>`,
       footer:`<button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
+  },
+  sourceTag(x){
+    const cfg = {
+      labor:['Mão de obra','tag-blue'],
+      paidAccount:['Conta paga','tag-amber'],
+      purchase:['Compra','tag-green']
+    }[x.sourceType] || ['Compra','tag-green'];
+    return `<span class="tag ${cfg[1]}">${cfg[0]}</span>`;
   },
   removeBatch(key){
     key = decodeURIComponent(key);
@@ -106,16 +116,16 @@ Views.financeiro = {
     const slice = rows.slice(this.page*PS, this.page*PS+PS);
     const total = rows.reduce((s,x)=>s+x.value,0);
     document.getElementById('fin-table').innerHTML = `
-      <thead><tr><th>Data</th><th>Projeto</th><th>Categoria</th><th>Fornecedor</th><th>Descrição</th><th>Pedido</th><th class="num">Valor</th><th style="width:50px"></th></tr></thead>
+      <thead><tr><th>Data</th><th>Projeto</th><th>Origem</th><th>Categoria</th><th>Conta / Fornecedor</th><th>Descrição</th><th>Pedido</th><th class="num">Valor</th><th style="width:50px"></th></tr></thead>
       <tbody>${slice.map(x => { const p = State.projects.find(pr=>pr.id===x.projectId); return `
         <tr class="clickable" onclick="Dash.showPurchase('${x.id}')">
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td>
-          <td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
+          <td>${this.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
           <td>${U.esc(x.supplier||'—')}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td>${U.esc(x.order||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
           <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
-        || `<tr><td colspan="8"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
-      ${rows.length?`<tr><td colspan="7" style="text-align:right"><b>Total (${rows.length} lançamentos)</b></td><td class="num"><b>${U.money2(total)}</b></td></tr>`:''}</tbody>`;
+        || `<tr><td colspan="9"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
+      ${rows.length?`<tr><td colspan="8" style="text-align:right"><b>Total (${rows.length} lançamentos)</b></td><td class="num"><b>${U.money2(total)}</b></td></tr>`:''}</tbody>`;
     document.getElementById('fin-pager').innerHTML = pages>1 ? `
       <button class="btn btn-ghost btn-sm" ${this.page===0?'disabled':''} onclick="Views.financeiro.page--;Views.financeiro.table()">‹ Anterior</button>
       <span style="font-size:.82rem;color:var(--text2);margin:0 8px">Página ${this.page+1} de ${pages}</span>
@@ -130,6 +140,7 @@ Dash.showPurchase = function(id){
   UI.modal({ title:'Detalhe do Lançamento', body:`
     <div class="import-log" style="line-height:2.1">
       <b>Projeto:</b> ${U.esc(U.projLabel(p))}<br>
+      <b>Origem:</b> ${Views.financeiro.sourceTag(x)}<br>
       <b>Categoria:</b> ${U.esc(x.category)}<br>
       <b>Fornecedor:</b> ${U.esc(x.supplier||'—')}<br>
       <b>Pedido/Nota:</b> ${U.esc(x.order||'—')}<br>
