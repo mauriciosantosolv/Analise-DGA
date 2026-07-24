@@ -6,8 +6,8 @@
  * Antes de ativar, execute supabase/schema.sql no projeto Supabase.
  */
 window.CLIQUE_OBRAS_CLOUD = {
-  enabled: false,
+  enabled: true,
   provider: 'supabase',
-  url: 'https://SEU-PROJETO.supabase.co',
-  publishableKey: 'sb_publishable_SUBSTITUA_AQUI'
+  url: https://ghxpcclqiabbknzjaapl.supabase.co,
+  publishableKey: sb_publishable_UMnjtmvKWbIAL323FS7ALg_8mvwFb3n
 };
