@@ -54,6 +54,22 @@ Views.planejamento = {
     return rows.sort((a,b)=>a.date.localeCompare(b.date));
   },
   eventStyle(projectId){ const c=App.projectColor(projectId); return `background:${c}1F;color:${c};border-left:3px solid ${c}`; },
+  showDay(date, sourceRows=State.planning){
+    const rows=sourceRows.filter(x=>x.date===date).sort((a,b)=>b.value-a.value);
+    const total=rows.reduce((s,x)=>s+x.value,0);
+    UI.modal({title:`Gastos planejados — ${U.date(date)}`,wide:true,body:`
+      <div class="drill-path"><span class="crumb">${U.date(date)}</span><span style="margin-left:auto"><b>${rows.length}</b> itens · <b>${U.money2(total)}</b></span></div>
+      <div class="table-wrap"><div class="table-scroll"><table>
+        <thead><tr><th>Projeto</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th><th></th></tr></thead>
+        <tbody>${rows.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `<tr>
+          <td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(Biz.categoryName(x.category))}</td>
+          <td>${U.esc(x.desc||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="Views.planejamento.form('${x.id}')"><i data-lucide="pencil"></i>Editar</button></td>
+        </tr>`;}).join('')||'<tr><td colspan="5"><div class="empty">Nenhum gasto planejado nesta data.</div></td></tr>'}</tbody>
+      </table></div></div>`,
+      footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="UI.closeAll();App.goFiltered('planejamento','${State.filters.project||''}')"><i data-lucide="calendar-days"></i>Abrir planejamento</button>`
+    });
+  },
   draw(){
     const body = document.getElementById('plan-body'), per = document.getElementById('plan-period');
     const r = this.refDate;
@@ -114,7 +130,7 @@ Views.planejamento = {
     UI.modal({ title:id?'Editar Item de Planejamento':'Novo Item de Planejamento', body:`
       <div class="form-grid">
         <div><label>Projeto *</label><select id="pl-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
-        <div><label>Categoria *</label><select id="pl-cat"><option value="">Selecione...</option>${State.categories.map(c=>`<option value="${U.esc(c.name)}" ${U.norm(c.name)===U.norm(x.category)?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></div>
+        <div><label>Categoria *</label><select id="pl-cat"><option value="">Selecione...</option>${Biz.uniqueCategories().map(c=>`<option value="${U.esc(c.name)}" ${Biz.sameCategory(c.name,x.category)?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></div>
         <div><label>Valor Previsto *</label><input id="pl-value" type="number" step="0.01" value="${x.value||''}"></div>
         <div><label>Data Prevista *</label><input id="pl-date" type="date" value="${x.date}"></div>
         <div class="full"><label>Descrição</label><input id="pl-desc" value="${U.esc(x.desc)}"></div>
@@ -125,8 +141,9 @@ Views.planejamento = {
         <button class="btn btn-primary" id="pl-save"><i data-lucide="check"></i>Salvar</button>`
     });
     document.getElementById('pl-save').onclick = async () => {
+      const rawCategory=document.getElementById('pl-cat').value.trim();
       const obj = { ...(id?x:{id:U.id()}),
-        projectId:document.getElementById('pl-proj').value, category:document.getElementById('pl-cat').value.trim(),
+        projectId:document.getElementById('pl-proj').value, category:rawCategory ? Biz.categoryName(rawCategory) : '',
         value:Math.round(U.num(document.getElementById('pl-value').value)*100)/100, date:document.getElementById('pl-date').value,
         desc:document.getElementById('pl-desc').value.trim(), notes:document.getElementById('pl-notes').value };
       if(!obj.projectId || !obj.category || !obj.date) return UI.toast('Preencha projeto, categoria e data', 'warn');

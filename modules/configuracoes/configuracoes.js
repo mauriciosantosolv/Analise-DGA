@@ -59,6 +59,9 @@ const Backup = {
 Views.configuracoes = {
   title:'Configurações',
   render(){
+    const tickerSetting=State.settings.tickerProjects;
+    const tickerSelected=new Set(Array.isArray(tickerSetting)?tickerSetting:State.projects.map(p=>p.id));
+    const cloudConnected=typeof Cloud!=='undefined' && Cloud.active();
     $c().innerHTML = `
       <div class="card" style="max-width:560px">
         <h2 style="margin-bottom:14px">Empresa</h2>
@@ -72,6 +75,25 @@ Views.configuracoes = {
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button class="btn btn-primary" id="cfg-save"><i data-lucide="check"></i>Salvar</button></div>
+      </div>
+      <div class="card" style="max-width:900px;margin-top:14px">
+        <h2 style="margin-bottom:6px">Projetos no ticker financeiro</h2>
+        <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha quais projetos terão saldo passando na faixa superior do sistema.</p>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" id="ticker-all">Selecionar todos</button>
+          <button class="btn btn-ghost btn-sm" id="ticker-none">Limpar seleção</button>
+        </div>
+        <div class="check-list" id="ticker-projects">
+          ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${p.id}" ${tickerSelected.has(p.id)?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
+            || '<small style="color:var(--text3)">Cadastre um projeto para configurar o ticker.</small>'}
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" id="ticker-save"><i data-lucide="check"></i>Salvar ticker</button></div>
+      </div>
+      <div class="card" style="max-width:900px;margin-top:14px">
+        <h2 style="margin-bottom:6px">Base de dados em nuvem</h2>
+        ${cloudConnected?`<p style="font-size:.84rem;color:var(--text2)">Conectado como <b>${U.esc((Cloud.user()||{}).email||'usuário autenticado')}</b>. ${Cloud.pendingCount()?`Há ${Cloud.pendingCount()} alteração(ões) aguardando sincronização.`:'Todos os registros locais estão sincronizados.'}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="cloud-upload"></i>Sincronizar agora</button><button class="btn btn-ghost btn-sm" onclick="App.logoutCloud()"><i data-lucide="log-out"></i>Sair neste aparelho</button></div>`
+          :`<p style="font-size:.84rem;color:var(--text2)">A nuvem ainda não está ativa. Siga o arquivo <b>README-INSTALACAO-NUVEM.md</b> antes de publicar a versão definitiva.</p>`}
       </div>
       <div class="card" style="max-width:900px;margin-top:14px">
         <h2 style="margin-bottom:6px">Modelos das bases financeiras</h2>
@@ -95,6 +117,13 @@ Views.configuracoes = {
         fr.onload = async e => { logo = await U.resizeImage(e.target.result); document.getElementById('cfg-logo-preview').innerHTML = `<img class="avatar logo-clean" style="width:48px;height:48px" src="${logo}">`; };
         fr.readAsDataURL(f); };
       inp.click();
+    };
+    document.getElementById('ticker-all').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=true);
+    document.getElementById('ticker-none').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=false);
+    document.getElementById('ticker-save').onclick=async()=>{
+      const ids=[...document.querySelectorAll('#ticker-projects input[type=checkbox]:checked')].map(x=>x.value);
+      await State.setSetting('tickerProjects',ids);
+      UI.toast('Projetos do ticker atualizados','success'); App.renderTicker();
     };
     document.getElementById('cfg-save').onclick = async () => {
       await State.setSetting('companyName', document.getElementById('cfg-name').value.trim());

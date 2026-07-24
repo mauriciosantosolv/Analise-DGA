@@ -64,12 +64,12 @@ Views.dashboard = {
     const projectIds = new Set(projects.map(p=>p.id));
     const filteredPlanning = State.planning.filter(x =>
       projectIds.has(x.projectId) &&
-      (!categoryFilter || U.norm(x.category)===U.norm(categoryFilter))
+      (!categoryFilter || Biz.sameCategory(x.category,categoryFilter))
     );
     const fut = Biz.futureExpenses(filteredPlanning);
     const next7 = [...fut.today, ...fut.d7].reduce((s,x)=>s+x.value,0);
     const cats = Biz.categoryStats(projects)
-      .filter(c=>!categoryFilter || U.norm(c.name)===U.norm(categoryFilter));
+      .filter(c=>!categoryFilter || Biz.sameCategory(c.name,categoryFilter));
 
     const selectedProject = State.filters.project || '';
     const kpi = (label, value, icon, cls='', sub='', action='') =>
@@ -188,6 +188,7 @@ Views.dashboard = {
       type:'bar',
       data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:'#7C3AED', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
+        onClick:(e,els)=>{ if(els.length) Views.planejamento.showDay(futKeys[els[0].index],futAll); },
         scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
     });
 

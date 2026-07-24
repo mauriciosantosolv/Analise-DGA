@@ -49,12 +49,16 @@ const Dash = {
   /* ----- filtros globais ----- */
   filtersBar(){
     const f = State.filters;
-    const cats = [...new Set([...State.budgets.map(b=>b.category), ...State.purchases.map(x=>x.category), ...State.planning.map(x=>x.category)])].sort();
+    const catMap=new Map();
+    [...State.categories.map(c=>c.name),...State.budgets.map(b=>b.category), ...State.purchases.map(x=>x.category), ...State.planning.map(x=>x.category)]
+      .filter(Boolean).forEach(name=>{ const key=Biz.categoryKey(name); if(key && !catMap.has(key)) catMap.set(key,Biz.categoryName(name)); });
+    Biz.categoryStats(State.projects).forEach(c=>{ if(!catMap.has(c.categoryKey)) catMap.set(c.categoryKey,c.name); });
+    const cats=[...catMap.values()].sort((a,b)=>a.localeCompare(b));
     const opt = (v, sel, label) => `<option value="${U.esc(v)}" ${v===sel?'selected':''}>${U.esc(label??v)}</option>`;
     return `<div class="filters-bar">
       <select id="flt-project" title="Projeto"><option value="">Todos os projetos</option>${State.projects.map(p=>opt(p.id, f.project, U.projLabel(p))).join('')}</select>
       <select id="flt-client" title="Cliente"><option value="">Todos os clientes</option>${[...new Set(State.projects.map(p=>p.client).filter(Boolean))].sort().map(c=>opt(c, f.client)).join('')}</select>
-      <select id="flt-category" title="Categoria"><option value="">Todas as categorias</option>${cats.map(c=>opt(c, f.category)).join('')}</select>
+      <select id="flt-category" title="Categoria"><option value="">Todas as categorias</option>${cats.map(c=>`<option value="${U.esc(c)}" ${Biz.sameCategory(c,f.category)?'selected':''}>${U.esc(c)}</option>`).join('')}</select>
       <select id="flt-status" title="Status"><option value="">Todos os status</option>${['Em andamento','Concluído','Paralisado','A executar'].map(s=>opt(s, f.status)).join('')}</select>
       <select id="flt-type" title="Tipo"><option value="">Todos os tipos</option>${['HH','Obra','Fornecimento','Painel'].map(t=>opt(t, f.type)).join('')}</select>
       ${Object.values(f).some(v=>v)?`<button class="btn btn-ghost btn-sm" onclick="App.clearFilters()"><i data-lucide="x"></i>Limpar</button>`:''}
@@ -102,7 +106,7 @@ Dash.drill = function(filter){
   const crumbs = [];
   const projectId = filter.projectId || State.filters.project;
   if(projectId){ rows = rows.filter(x=>x.projectId===projectId); const p = State.projects.find(x=>x.id===projectId); crumbs.push('Projeto: '+U.projLabel(p)); }
-  if(filter.category){ rows = rows.filter(x=>U.norm(x.category)===U.norm(filter.category)); crumbs.push('Categoria: '+filter.category); }
+  if(filter.category){ rows = rows.filter(x=>Biz.sameCategory(x.category,filter.category)); crumbs.push('Categoria: '+Biz.categoryName(filter.category)); }
   if(filter.supplier){ rows = rows.filter(x=>x.supplier===filter.supplier); crumbs.push('Fornecedor: '+filter.supplier); }
   if(filter.month){ rows = rows.filter(x=>(x.date||'').startsWith(filter.month)); crumbs.push('Mês: '+filter.month); }
   rows.sort((a,b)=>b.value-a.value);

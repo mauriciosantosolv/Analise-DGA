@@ -122,13 +122,16 @@ const Importer = (() => {
   }
 
   async function ensureCategory(name){
-    const n = U.norm(name);
-    if(!n) return;
-    if(!State.categories.find(c => U.norm(c.name) === n)){
+    const n = Biz.categoryKey(name);
+    if(!n) return '';
+    let existing=State.categories.find(c => Biz.categoryKey(c.name) === n);
+    if(!existing){
       const palette = ['#2563EB','#16A34A','#D97706','#DC2626','#7C3AED','#0891B2','#DB2777','#65A30D','#EA580C','#4F46E5'];
-      const c = {id:U.id(), name:String(name).trim(), color:palette[State.categories.length % palette.length], icon:'tag'};
+      const c = {id:U.id(), name:Biz.categoryName(name), color:palette[State.categories.length % palette.length], icon:'tag'};
       await DB.put('categories', c); State.categories.push(c);
+      existing=c;
     }
+    return existing.name;
   }
 
   const SPECIAL_BUDGET = ['total','valor de venda']; // linhas especiais do modelo de orçamentos
@@ -148,8 +151,8 @@ const Importer = (() => {
       const p = await ensureProject(rawProj, created);
       if(catNorm === 'valor de venda'){ if(val>0){ p.saleValue = val; await DB.put('projects', p); saleUpdates++; } continue; }
       if(SPECIAL_BUDGET.includes(catNorm)) continue; // TOTAL é derivado, não armazenado
-      await ensureCategory(cat);
-      records.push({id:U.id(), projectId:p.id, category:String(cat).trim(), value:val, importedAt:Date.now(), file:file.name});
+      const category=await ensureCategory(cat);
+      records.push({id:U.id(), projectId:p.id, category, value:val, importedAt:Date.now(), file:file.name});
       added++;
     }
     await DB.bulkPut('budgets', records);
@@ -177,19 +180,19 @@ const Importer = (() => {
       if(rawProj==null || !cat || !(val>0 || val<0)){ skipped.push(i+1); continue; }
       const p = await ensureProject(rawProj, created);
       const date = cols.date!=null ? U.parseDate(r[cols.date]) : null;
+      const category=await ensureCategory(cat);
       const rec = {
-        id:U.id(), projectId:p.id, category:cat,
+        id:U.id(), projectId:p.id, category,
         supplier: cols.supplier!=null ? String(r[cols.supplier]??'').trim() : '',
         desc:     cols.desc!=null ? String(r[cols.desc]??'').trim() : '',
         notes:    cols.notes!=null ? String(r[cols.notes]??'').trim() : '',
         order:    cols.order!=null ? String(r[cols.order]??'').trim() : '',
-        value:val, date: date ? U.isoDate(date) : '', costCenter:cat,
+        value:val, date: date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'purchase'
       };
-      rec.dedupe = [p.proposal, rec.order, rec.supplier, rec.category, rec.desc, rec.value, rec.date].join('|');
+      rec.dedupe = [p.proposal, rec.order, rec.supplier, cat, rec.desc, rec.value, rec.date].join('|');
       seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
       if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
-      await ensureCategory(cat);
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -217,16 +220,16 @@ const Importer = (() => {
       const date = U.parseDate(r[cols.date]);
       const account = cols.account!=null ? String(r[cols.account]??'').trim() : '';
       const desc = cols.desc!=null ? String(r[cols.desc]??'').trim() : '';
+      const category=await ensureCategory(cat);
       const rec = {
-        id:U.id(), projectId:p.id, category:cat, supplier:account,
+        id:U.id(), projectId:p.id, category, supplier:account,
         desc:desc || 'Conta paga', notes:'', order:'', value:val,
-        date:date ? U.isoDate(date) : '', costCenter:cat,
+        date:date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'paidAccount'
       };
-      rec.dedupe = ['paidAccount', p.proposal, rec.category, account, desc, rec.value, rec.date].join('|');
+      rec.dedupe = ['paidAccount', p.proposal, cat, account, desc, rec.value, rec.date].join('|');
       seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
       if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
-      await ensureCategory(cat);
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -248,7 +251,7 @@ const Importer = (() => {
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
     const seenCount = {}, records = [];
     const laborCategory = 'Mão de Obra';
-    await ensureCategory(laborCategory);
+    const canonicalLaborCategory=await ensureCategory(laborCategory);
     for(let i=1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], val = U.num(r[cols.value]);
@@ -256,9 +259,9 @@ const Importer = (() => {
       const p = await ensureProject(rawProj, created);
       const date = U.parseDate(r[cols.date]);
       const rec = {
-        id:U.id(), projectId:p.id, category:laborCategory, supplier:'',
+        id:U.id(), projectId:p.id, category:canonicalLaborCategory, supplier:'',
         desc:'Custo de mão de obra', notes:'', order:'', value:val,
-        date:date ? U.isoDate(date) : '', costCenter:laborCategory,
+        date:date ? U.isoDate(date) : '', costCenter:canonicalLaborCategory,
         importedAt:Date.now(), file:file.name, sourceType:'labor'
       };
       rec.dedupe = ['labor', p.proposal, rec.value, rec.date].join('|');

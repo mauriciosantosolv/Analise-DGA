@@ -58,7 +58,7 @@
       <button class="nav-item" data-view="configuracoes"><i data-lucide="settings"></i>Configurações</button>
       <button class="nav-item" data-view="backup"><i data-lucide="database-backup"></i>Backup</button>
     </nav>
-    <div id="sidebar-footer">v1.0 · dados locais (IndexedDB)<br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
+    <div id="sidebar-footer"><span id="storage-status">v2.0 · dados locais</span><br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
   </aside>
   <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
 
@@ -91,6 +91,8 @@
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
 <input type="file" id="json-input" accept=".json" style="display:none">
 <input type="file" id="img-input" accept="image/png,image/jpeg,image/svg+xml" style="display:none">
+<script src="config/cloud-config.js"></script>
+<script src="database/cloud.js"></script>
 <script src="database/indexeddb.js"></script>
 <script src="utils/format.js"></script>
 <script src="utils/helpers.js"></script>

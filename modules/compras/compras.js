@@ -166,7 +166,7 @@ Dash.purchaseForm = function(id){
   UI.modal({ title:isNew?'Novo Lançamento Manual':'Editar Lançamento', wide:true, body:`
     <div class="form-grid">
       <div><label>Projeto</label><select id="pf-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
-      <div><label>Categoria</label><input id="pf-cat" list="cat-list-p" value="${U.esc(x.category)}"><datalist id="cat-list-p">${State.categories.map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
+      <div><label>Categoria</label><input id="pf-cat" list="cat-list-p" value="${U.esc(x.category)}"><datalist id="cat-list-p">${Biz.uniqueCategories().map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
       <div><label>Fornecedor</label><input id="pf-sup" value="${U.esc(x.supplier)}"></div>
       <div><label>Pedido/Nota</label><input id="pf-order" value="${U.esc(x.order)}"></div>
       <div><label>Valor</label><input id="pf-value" type="number" step="0.01" value="${x.value}"></div>
@@ -178,8 +178,9 @@ Dash.purchaseForm = function(id){
             <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
             <button class="btn btn-primary" id="pf-save"><i data-lucide="check"></i>${isNew?'Adicionar':'Salvar'}</button>` });
   document.getElementById('pf-save').onclick = async () => {
+    const rawCategory=document.getElementById('pf-cat').value.trim();
     const vals = {
-      projectId:document.getElementById('pf-proj').value, category:document.getElementById('pf-cat').value.trim(),
+      projectId:document.getElementById('pf-proj').value, category:rawCategory ? Biz.categoryName(rawCategory) : '',
       supplier:document.getElementById('pf-sup').value.trim(), order:document.getElementById('pf-order').value.trim(),
       value:U.num(document.getElementById('pf-value').value), date:document.getElementById('pf-date').value,
       desc:document.getElementById('pf-desc').value.trim(), notes:document.getElementById('pf-notes').value };

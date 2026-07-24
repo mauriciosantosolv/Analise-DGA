@@ -60,6 +60,19 @@
 .form-grid .full{grid-column:1/-1}
 @media(max-width:560px){.form-grid{grid-template-columns:1fr}}
 
+/* ===== Login da base em nuvem ===== */
+.cloud-login{position:fixed;inset:0;z-index:800;background:linear-gradient(145deg,var(--bg),var(--blue-soft));display:flex;align-items:center;justify-content:center;padding:20px}
+.cloud-login-card{width:min(430px,100%);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-lg);padding:26px}
+.cloud-login-brand{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.cloud-login-brand .brand-logo{width:42px;height:42px}
+.cloud-login-card p{color:var(--text2);font-size:.86rem;line-height:1.55}
+.cloud-login-card form{display:grid;gap:12px;margin-top:18px}
+.cloud-login-error{display:none;color:var(--red);background:var(--red-soft);border-radius:9px;padding:9px 11px;font-size:.82rem}
+.cloud-login-error.open{display:block}
+.check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.check-item{display:flex;gap:9px;align-items:center;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;font-size:.84rem;cursor:pointer}
+.check-item input{width:17px;height:17px;flex:0 0 auto}
+
 /* ===== Toast ===== */
 #toasts{position:fixed;bottom:22px;right:22px;z-index:400;display:flex;flex-direction:column;gap:9px}
 .toast{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:10px;box-shadow:var(--shadow-lg);padding:11px 15px;min-width:270px;max-width:380px;display:flex;gap:10px;align-items:flex-start;font-size:.87rem;animation:slideIn .3s cubic-bezier(.34,1.3,.64,1)}
