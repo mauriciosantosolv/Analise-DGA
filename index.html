@@ -60,17 +60,19 @@
     </nav>
     <div id="sidebar-footer">v1.0 · dados locais (IndexedDB)<br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
   </aside>
+  <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
 
   <main>
     <div id="finance-ticker" aria-label="Desempenho financeiro dos projetos"></div>
     <header id="topbar">
-      <button class="icon-btn" id="menu-toggle" title="Menu"><i data-lucide="menu"></i></button>
+      <button class="icon-btn" id="menu-toggle" title="Menu" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i></button>
       <h1 id="page-title">Dashboard</h1>
       <div id="global-search-wrap">
         <i data-lucide="search"></i>
         <input id="global-search" placeholder="Pesquisar projeto, cliente, fornecedor, categoria… (Ctrl+K)" autocomplete="off">
         <div id="search-results"></div>
       </div>
+      <button class="icon-btn" id="future-toggle" title="Gastos previstos" aria-label="Abrir gastos previstos"><i data-lucide="calendar-clock"></i></button>
       <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
     </header>
     <div id="content-wrap">

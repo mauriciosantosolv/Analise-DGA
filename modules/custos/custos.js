@@ -37,6 +37,10 @@ const Biz = {
     return State.projects.filter(p => {
       if(f.project && p.id !== f.project) return false;
       if(f.client && p.client !== f.client) return false;
+      if(f.category){
+        const matches = row => row.projectId === p.id && U.norm(row.category) === U.norm(f.category);
+        if(!State.budgets.some(matches) && !State.purchases.some(matches) && !State.planning.some(matches)) return false;
+      }
       if(f.status && p.status !== f.status) return false;
       if(f.type && p.type !== f.type) return false;
       return true;
@@ -50,6 +54,19 @@ const Biz = {
              total: (+b.tax||0)+(+b.admin||0)+(+b.fees||0)+(+b.other||0) };
   },
 
+  // Identifica a parcela da base de cálculo correspondente a uma categoria.
+  // Quando o Dashboard está filtrado, isso impede que todos os encargos sejam
+  // lançados dentro de uma única categoria.
+  baseRateForCategory(category){
+    const n = U.norm(category), rates = this.baseRates();
+    if(!n) return rates.total;
+    if(n==='imposto' || n==='impostos' || n.includes('imposto')) return rates.tax;
+    if(['administrativo','administracao','adm'].includes(n) || n.includes('custo administrativo')) return rates.admin;
+    if(['taxa','taxas','comissao','comissoes'].includes(n)) return rates.fees;
+    if(['outros','outros encargos','outras despesas'].includes(n)) return rates.other;
+    return 0;
+  },
+
   // Estatísticas completas de um projeto
   // REGRA (definida pelo usuário em 07/2026):
   // • REALIZADO = compras importadas + custos da base de cálculo;
@@ -57,12 +74,14 @@ const Biz = {
   // • SALDO = orçado - realizado - projetado.
   // Os encargos entram uma única vez, no realizado. Como o projetado representa
   // apenas gastos futuros, ele nunca recebe imposto/adm/taxas novamente.
-  projectStats(p){
-    const budgets = State.budgets.filter(b => b.projectId === p.id);
-    const purchases = State.purchases.filter(x => x.projectId === p.id);
+  projectStats(p, category=''){
+    const categoryNorm = U.norm(category);
+    const inCategory = row => !categoryNorm || U.norm(row.category) === categoryNorm;
+    const budgets = State.budgets.filter(b => b.projectId === p.id && inCategory(b));
+    const purchases = State.purchases.filter(x => x.projectId === p.id && inCategory(x));
     const budgetTotal = budgets.reduce((s,b) => s+b.value, 0);
     const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // somente compras
-    const planned = State.planning.filter(x => x.projectId === p.id);
+    const planned = State.planning.filter(x => x.projectId === p.id && inCategory(x));
     const projected = planned.reduce((s,x) => s+x.value, 0); // somente Planejamento
     // Medições: faturado e aguardando aprovação são separados. Somente registros
     // com status Faturada/Faturado alimentam o card verde de faturamento.
@@ -73,7 +92,8 @@ const Biz = {
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
     const invoicedPct = p.saleValue > 0 ? invoiced / p.saleValue * 100 : null;
     const rates = this.baseRates();
-    const overhead = p.saleValue * rates.total / 100; // custos calculados sobre a venda
+    const overheadRate = categoryNorm ? this.baseRateForCategory(category) : rates.total;
+    const overhead = p.saleValue * overheadRate / 100; // custos calculados sobre a venda
     const spent = spentPurchases + overhead;          // REALIZADO = compras + imposto/adm
     // Previsão por ritmo de gastos (burn rate) — média diária desde o 1º lançamento
     // (calculada apenas sobre as compras; o overhead é fixo e entra ao final)
@@ -211,10 +231,10 @@ const Biz = {
   },
 
   // Gastos futuros a partir do planejamento
-  futureExpenses(){
+  futureExpenses(rows=State.planning){
     const today = U.isoDate(new Date());
     const horizon = d => U.isoDate(new Date(Date.now()+d*86400000));
-    const fut = State.planning.filter(x => x.date >= today).sort((a,b)=>a.date.localeCompare(b.date));
+    const fut = rows.filter(x => x.date >= today).slice().sort((a,b)=>a.date.localeCompare(b.date));
     return {
       today: fut.filter(x=>x.date===today),
       d7: fut.filter(x=>x.date>today && x.date<=horizon(7)),

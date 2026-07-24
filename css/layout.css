@@ -16,7 +16,7 @@ main{display:flex;flex-direction:column;overflow:hidden}
 #content-wrap{display:grid;grid-template-columns:1fr var(--rightbar-w);flex:1;overflow:hidden}
 #content{overflow-y:auto;padding:22px 26px 60px}
 @media(max-width:1200px){#content-wrap{grid-template-columns:1fr}#rightbar{display:none}}
-@media(max-width:860px){#app{grid-template-columns:0 1fr}#sidebar{position:fixed;z-index:60;transform:translateX(-100%);transition:transform .25s}#sidebar.open{transform:none}}
+#mobile-menu-backdrop{display:none}
 
 /* ===== Sidebar ===== */
 #sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;width:var(--sidebar-w);height:100vh}
@@ -46,6 +46,8 @@ main{display:flex;flex-direction:column;overflow:hidden}
 .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:9px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--text2);transition:all .15s;flex-shrink:0}
 .icon-btn:hover{color:var(--blue);border-color:var(--blue)}
 .icon-btn svg{width:17px;height:17px}
+#future-toggle{display:none}
+@media(max-width:1200px){#future-toggle{display:flex}}
 
 
 /* Ticker financeiro */
@@ -59,3 +61,19 @@ main{display:flex;flex-direction:column;overflow:hidden}
 .ticker-empty{padding:0 18px;font-size:.76rem;color:var(--text3)}
 @keyframes ticker-scroll{to{transform:translateX(var(--ticker-shift,-50%))}}
 @media(max-width:860px){#finance-ticker{height:30px}.ticker-item{height:30px;padding:0 12px}}
+
+@media(max-width:860px){
+  html,body{width:100%;height:100%;overflow:hidden}
+  #app{display:block;width:100%;height:100vh;height:100dvh}
+  main{width:100%;height:100%;min-height:0}
+  #content-wrap{display:block;min-height:0;overflow:hidden}
+  #content{height:100%;padding:14px 12px calc(78px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #sidebar{position:fixed;inset:0 auto 0 0;z-index:60;width:min(var(--sidebar-w),86vw);height:100vh;height:100dvh;transform:translateX(-105%);visibility:hidden;transition:transform .25s ease,visibility .25s}
+  #sidebar.open{transform:none;visibility:visible}
+  #mobile-menu-backdrop{position:fixed;inset:0;z-index:50;border:0;background:rgba(15,23,42,.48);backdrop-filter:blur(2px)}
+  #app.menu-open #mobile-menu-backdrop{display:block}
+  #topbar{padding:9px 10px;gap:8px;flex-wrap:wrap}
+  #page-title{font-size:1.05rem;max-width:calc(100vw - 116px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #global-search-wrap{order:3;flex:1 0 100%;max-width:none}
+  #global-search{font-size:16px}
+}

@@ -40,10 +40,11 @@ Views.dashboard = {
   render(){
     Dash.destroyCharts(); Dash.chartDefaults();
     const vis = this.chartVisibility();
+    const categoryFilter = State.filters.category || '';
     const projects = Biz.filteredProjects();
     const purchases = Biz.filteredPurchases();
     const active = projects.filter(p=>p.status==='Em andamento');
-    const stats = projects.map(p=>({p, s:Biz.projectStats(p)}));
+    const stats = projects.map(p=>({p, s:Biz.projectStats(p, categoryFilter)}));
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
     const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
     const invoiced = sum('invoiced');
@@ -60,9 +61,15 @@ Views.dashboard = {
     const marginCurrent = revenue>0 ? (revenue-committedTotal)/revenue*100 : null;
     const profit = revenue - committedTotal;
     const critical = stats.filter(x=>x.s.light==='red' && x.p.status==='Em andamento');
-    const fut = Biz.futureExpenses();
+    const projectIds = new Set(projects.map(p=>p.id));
+    const filteredPlanning = State.planning.filter(x =>
+      projectIds.has(x.projectId) &&
+      (!categoryFilter || U.norm(x.category)===U.norm(categoryFilter))
+    );
+    const fut = Biz.futureExpenses(filteredPlanning);
     const next7 = [...fut.today, ...fut.d7].reduce((s,x)=>s+x.value,0);
-    const cats = Biz.categoryStats(projects);
+    const cats = Biz.categoryStats(projects)
+      .filter(c=>!categoryFilter || U.norm(c.name)===U.norm(categoryFilter));
 
     const selectedProject = State.filters.project || '';
     const kpi = (label, value, icon, cls='', sub='', action='') =>

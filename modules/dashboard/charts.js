@@ -72,7 +72,7 @@ Dash.projectBanner = function(){
   const p = State.projects.find(x=>x.id===f.project); if(!p) return '';
   const c = State.clients.find(x=>x.name===p.client);
   const logo = (c && c.logo) || p.clientLogo || '';
-  const st = Biz.projectStats(p);
+  const st = Biz.projectStats(p, State.filters.category || '');
   return `<div class="card" style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">
     ${logo ? `<img src="${logo}" class="logo-clean" style="width:84px;height:84px;object-fit:contain">`
            : `<span class="avatar-ph" style="width:84px;height:84px;font-size:1.6rem;border-radius:14px">${U.initials(p.client||p.name||p.proposal)}</span>`}

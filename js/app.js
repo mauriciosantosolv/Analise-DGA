@@ -29,6 +29,25 @@ const App = {
     const idx = Math.max(0, State.projects.findIndex(p=>p.id===projectId));
     return palette[idx % palette.length];
   },
+  closeMobileMenu(){
+    const sidebar = document.getElementById('sidebar');
+    const app = document.getElementById('app');
+    const toggle = document.getElementById('menu-toggle');
+    if(sidebar) sidebar.classList.remove('open');
+    if(app) app.classList.remove('menu-open');
+    if(toggle) toggle.setAttribute('aria-expanded','false');
+  },
+  toggleMobileMenu(){
+    if(window.innerWidth > 860) return;
+    const sidebar = document.getElementById('sidebar');
+    const app = document.getElementById('app');
+    const toggle = document.getElementById('menu-toggle');
+    if(!sidebar || !app) return;
+    const willOpen = !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', willOpen);
+    app.classList.toggle('menu-open', willOpen);
+    if(toggle) toggle.setAttribute('aria-expanded', String(willOpen));
+  },
   renderTicker(){
     const el = document.getElementById('finance-ticker'); if(!el) return;
     const projects = State.projects.filter(p=>p.status !== 'Cancelado');
@@ -52,7 +71,7 @@ const App = {
   go(view){
     State.view = view;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    document.getElementById('sidebar').classList.remove('open');
+    this.closeMobileMenu();
     this.render();
   },
   render(){
@@ -75,11 +94,29 @@ const App = {
     const block = (title, items) => `
       <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
       ${items.length ? items.slice(0,6).map(x => { const p = State.projects.find(pr=>pr.id===x.projectId); return `
-        <div class="rb-item"><div><b>${U.esc(x.category)}</b><small>${U.esc(p?p.proposal:'?')} · ${U.date(x.date)}</small></div>
-        <b>${U.money(x.value)}</b></div>`; }).join('') : '<small style="color:var(--text3)">Nenhum item</small>'}</div>`;
+        <button type="button" class="rb-item rb-item-action" onclick="Views.planejamento.form('${U.esc(x.id)}')" title="Editar ou excluir este gasto previsto">
+          <span class="rb-item-info"><b>${U.esc(x.category)}</b><small>${U.esc(p?p.proposal:'?')} · ${U.date(x.date)}</small></span>
+          <span class="rb-item-value">${U.money(x.value)}</span><i data-lucide="pencil"></i></button>`; }).join('') : '<small style="color:var(--text3)">Nenhum item</small>'}</div>`;
     document.getElementById('rightbar-content').innerHTML =
       block('Hoje', fut.today) + block('Próximos 7 dias', fut.d7) +
       block('8–15 dias', fut.d15) + block('16–30 dias', fut.d30);
+    U.icons();
+  },
+  showFutureExpenses(){
+    const fut = Biz.futureExpenses();
+    const sections = [['Hoje',fut.today],['Próximos 7 dias',fut.d7],['8–15 dias',fut.d15],['16–30 dias',fut.d30]];
+    UI.modal({
+      title:'Gastos Previstos',
+      body:`<div class="future-mobile-list">${sections.map(([title,items])=>`
+        <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
+          ${items.length ? items.map(x=>{ const p=State.projects.find(pr=>pr.id===x.projectId); return `
+            <button type="button" class="rb-item rb-item-action" onclick="UI.close();Views.planejamento.form('${U.esc(x.id)}')">
+              <span class="rb-item-info"><b>${U.esc(x.category)}</b><small>${U.esc(p?p.proposal:'?')} · ${U.date(x.date)}</small></span>
+              <span class="rb-item-value">${U.money(x.value)}</span><i data-lucide="pencil"></i></button>`;}).join('')
+            : '<small style="color:var(--text3)">Nenhum item</small>'}
+        </div>`).join('')}</div>`,
+      footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="UI.close();App.go('planejamento')"><i data-lucide="calendar-days"></i>Abrir planejamento</button>`
+    });
   },
 
   /* Pesquisa global */
@@ -240,13 +277,17 @@ const App = {
     if(missing.length) setTimeout(() => UI.toast('Bibliotecas não carregadas: ' + missing.join(', ') + '. Verifique sua conexão com a internet e recarregue a página.', 'warn', 10000), 600);
     document.querySelectorAll('.nav-item').forEach(b => b.onclick = () => this.go(b.dataset.view));
     document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
+    document.getElementById('future-toggle').onclick = () => this.showFutureExpenses();
     // Recolher menu no desktop foi REMOVIDO por estabilidade (travava a aba
     // com gráficos abertos). No celular (<=860px) o botão abre/fecha o menu.
     document.getElementById('menu-toggle').onclick = () => {
-      try{
-        if(window.innerWidth <= 860) document.getElementById('sidebar').classList.toggle('open');
-      }catch(err){ UI.toast('Erro ao alternar o menu: ' + U.esc(err.message||err), 'error', 6000); }
+      try{ this.toggleMobileMenu(); }
+      catch(err){ UI.toast('Erro ao alternar o menu: ' + U.esc(err.message||err), 'error', 6000); }
     };
+    const backdrop = document.getElementById('mobile-menu-backdrop');
+    if(backdrop) backdrop.onclick = () => this.closeMobileMenu();
+    window.addEventListener('resize', () => { if(window.innerWidth > 860) this.closeMobileMenu(); });
+    document.addEventListener('keydown', e => { if(e.key==='Escape') this.closeMobileMenu(); });
     this.initSearch();
     this.applyTheme(State.settings.theme || 'light');
     this.applyBranding();

@@ -91,7 +91,7 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
 .logo-clean{border:none!important;background:transparent!important}
 /* ===== Impressão / PDF: oculta menus e expande conteúdo ===== */
 @media print{
-  #sidebar,#topbar,#rightbar,.toolbar,.filters-bar,#toasts,.drop-zone,#modal-overlay,.loading-overlay,.section-title button{display:none!important}
+  #sidebar,#topbar,#rightbar,#finance-ticker,.toolbar,.filters-bar,#toasts,.drop-zone,#modal-overlay,.loading-overlay,.section-title button{display:none!important}
   html,body{overflow:visible!important;background:#fff!important}
   #app{display:block;height:auto}
   main,#content-wrap{display:block!important;overflow:visible!important;height:auto}
@@ -108,3 +108,24 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
 .cal-day{cursor:pointer;transition:background .15s,border-color .15s}
 .cal-day:hover{background:var(--surface2);border-color:var(--blue)}
 .cal-day .cal-ev{cursor:pointer}
+
+/* ===== Smartphone / toque ===== */
+@media(max-width:860px){
+  .grid{grid-template-columns:1fr!important}
+  .card{padding:13px 14px}
+  .btn{min-height:42px;justify-content:center}
+  .btn-sm{min-height:38px}
+  .icon-btn{width:42px;height:42px}
+  .nav-item{min-height:44px}
+  .table-scroll{max-height:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .table-scroll table{min-width:680px}
+  .modal{width:100%;max-width:none;max-height:94vh;max-height:94dvh;border-radius:16px 16px 0 0}
+  #modal-overlay{align-items:flex-end;padding:0}
+  .modal-head{padding:14px}.modal-body{padding:14px}
+  .modal-foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom));flex-wrap:wrap}
+  .modal-foot>.btn{flex:1 1 130px;margin-right:0!important}
+  input,select,textarea{font-size:16px}
+  #toasts{left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom))}
+  .toast{min-width:0;width:100%;max-width:none}
+  .empty{padding:32px 14px}
+}

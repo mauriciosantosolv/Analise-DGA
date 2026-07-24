@@ -31,7 +31,7 @@ Views.relatorios = {
             <button class="btn btn-primary btn-sm" onclick="Exports.table('${store}')"><i data-lucide="download"></i>Exportar</button></div>`).join('')}
 
         <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:9px">
-          <span style="width:38px;height:38px;border-radius:10px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center"><i data-lucide="triangle-alert"></i></span>
+          <span style="width:38px;height:38px;border-radius:10px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center"><i data-lucide="alert-triangle"></i></span>
           <h3>Desvios Negativos</h3></div>
           <p style="font-size:.84rem;color:var(--text2);margin-bottom:13px">Gera uma análise somente das categorias cujo saldo está negativo nos projetos selecionados.</p>
           <button class="btn btn-primary btn-sm" onclick="Views.relatorios.negativeDeviationForm()"><i data-lucide="filter"></i>Selecionar projetos</button></div>
