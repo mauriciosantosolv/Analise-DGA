@@ -516,7 +516,7 @@ alter table public.app_records enable row level security;
 
 -- Tabelas ficam disponíveis na Data API, mas cada linha continua protegida pelo RLS.
 revoke all on table public.profiles, public.organizations, public.organization_members,
-  public.organization_invitations, public.app_records from anon;
+  public.organization_invitations, public.app_records from anon, authenticated;
 grant select, update on table public.profiles to authenticated;
 grant select, update on table public.organizations to authenticated;
 grant select, insert, update, delete on table public.organization_members to authenticated;
