@@ -6,20 +6,13 @@
  * - operações CRUD (all, put, bulkPut, del, clear)
  * - cache local e sincronização opcional com a nuvem
  * - State: cache em memória do banco + filtros globais
- *
- * Dependências:
- * - nenhuma (carregar antes de todos os demais módulos)
- *
- * Não modificar:
- * - NAME, VERSION e STORES sem plano de migração de dados
- * - acesso direto ao IndexedDB fora deste arquivo é proibido
  */
 
 /* ================= [3] BANCO DE DADOS (IndexedDB) =================
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 2; // v2: + store de medições
+  const NAME = 'ccf_obras', VERSION = 2;
   const STORES = ['projects','budgets','purchases','planning','clients','categories','settings','measurements'];
   let db = null;
   function open(){
@@ -57,6 +50,13 @@ const DB = (() => {
     await localClear(store);
     if(typeof Cloud!=='undefined') await Cloud.mirror({type:'clear',store});
   }
+  async function clearLocalCache(){
+    for(const store of STORES) await localClear(store);
+    try{
+      localStorage.removeItem('ccf_snap');
+      localStorage.removeItem('ccf_snap_time');
+    }catch(e){}
+  }
   async function uploadLocalToCloud(){
     for(const store of STORES){
       const rows=await all(store);
@@ -65,32 +65,38 @@ const DB = (() => {
   }
   async function syncFromCloud(){
     if(typeof Cloud==='undefined' || !Cloud.active()) return {mode:'local',records:0};
+    const accountSwitch=Cloud.isAccountSwitch();
+    if(accountSwitch) await clearLocalCache();
     await Cloud.flushQueue();
     const remote=await Cloud.readAll();
     if(!remote.length){
-      await uploadLocalToCloud();
-      return {mode:'uploaded-local',records:0};
+      if(!accountSwitch) await uploadLocalToCloud();
+      Cloud.bindCurrentUser();
+      return {mode:accountSwitch?'new-account':'uploaded-local',records:0};
     }
-    // Antes de substituir o cache por uma base remota já existente, mantém
-    // uma cópia recuperável do conteúdo atual deste navegador.
-    try{
-      const snapshot={app:'ccf_obras',version:1,exportedAt:new Date().toISOString()};
-      let hasLocal=false;
-      for(const store of STORES){ snapshot[store]=await all(store); if(snapshot[store].length) hasLocal=true; }
-      if(hasLocal){
-        const raw=JSON.stringify(snapshot);
-        if(raw.length<4500000){
-          localStorage.setItem('ccf_snap',raw);
-          localStorage.setItem('ccf_snap_time',String(Date.now()));
+    // Salva uma cópia apenas quando o cache pertence à mesma conta. Isso evita
+    // que um usuário de computador compartilhado veja dados de outra conta.
+    if(!accountSwitch){
+      try{
+        const snapshot={app:'ccf_obras',version:1,exportedAt:new Date().toISOString()};
+        let hasLocal=false;
+        for(const store of STORES){ snapshot[store]=await all(store); if(snapshot[store].length) hasLocal=true; }
+        if(hasLocal){
+          const raw=JSON.stringify(snapshot);
+          if(raw.length<4500000){
+            localStorage.setItem('ccf_snap',raw);
+            localStorage.setItem('ccf_snap_time',String(Date.now()));
+          }
         }
-      }
-    }catch(e){}
+      }catch(e){}
+    }
     const grouped=Object.fromEntries(STORES.map(s=>[s,[]]));
     remote.forEach(r=>{ if(grouped[r.store] && r.data && r.data.id!=null) grouped[r.store].push(r.data); });
     for(const store of STORES){
       await localClear(store);
       if(grouped[store].length) await localBulkPut(store,grouped[store]);
     }
+    Cloud.bindCurrentUser();
     return {mode:'downloaded-cloud',records:remote.length};
   }
   return { open, all, put, bulkPut, del, clear, syncFromCloud, uploadLocalToCloud, STORES };
