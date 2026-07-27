@@ -40,10 +40,11 @@ Views.dashboard = {
   render(){
     Dash.destroyCharts(); Dash.chartDefaults();
     const vis = this.chartVisibility();
+    const categoryFilter = State.filters.category || '';
     const projects = Biz.filteredProjects();
     const purchases = Biz.filteredPurchases();
     const active = projects.filter(p=>p.status==='Em andamento');
-    const stats = projects.map(p=>({p, s:Biz.projectStats(p)}));
+    const stats = projects.map(p=>({p, s:Biz.projectStats(p, categoryFilter)}));
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
     const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
     const invoiced = sum('invoiced');
@@ -60,29 +61,36 @@ Views.dashboard = {
     const marginCurrent = revenue>0 ? (revenue-committedTotal)/revenue*100 : null;
     const profit = revenue - committedTotal;
     const critical = stats.filter(x=>x.s.light==='red' && x.p.status==='Em andamento');
-    const fut = Biz.futureExpenses();
+    const projectIds = new Set(projects.map(p=>p.id));
+    const filteredPlanning = State.planning.filter(x =>
+      projectIds.has(x.projectId) &&
+      (!categoryFilter || Biz.sameCategory(x.category,categoryFilter))
+    );
+    const fut = Biz.futureExpenses(filteredPlanning);
     const next7 = [...fut.today, ...fut.d7].reduce((s,x)=>s+x.value,0);
-    const cats = Biz.categoryStats(projects);
+    const cats = Biz.categoryStats(projects)
+      .filter(c=>!categoryFilter || Biz.sameCategory(c.name,categoryFilter));
 
-    const kpi = (label, value, icon, cls='', sub='') =>
-      `<div class="kpi ${cls}"><div class="k-label"><i data-lucide="${icon}"></i>${label}</div><div class="k-value">${value}</div>${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
+    const selectedProject = State.filters.project || '';
+    const kpi = (label, value, icon, cls='', sub='', action='') =>
+      `<div class="kpi ${cls} ${action?'kpi-link':''}" ${action?`role="button" tabindex="0" onclick="${action}" onkeydown="if(event.key==='Enter')this.click()"`:''}><div class="k-label"><i data-lucide="${icon}"></i>${label}</div><div class="k-value">${value}</div>${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
 
     $c().innerHTML = `
       ${Dash.filtersBar()}
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Medido / Faturado', U.money(invoiced), 'ruler', 'accent-green', 'Aguardando aprovação: '+U.money(awaitingApproval))}
+        ${kpi('Medido / Faturado', U.money(invoiced), 'ruler', 'accent-green', 'Aguardando aprovação: '+U.money(awaitingApproval), `App.goFiltered('medicoes','${selectedProject}')`)}
         ${kpi('Saldo a Medir', U.money(revenue-invoiced), 'file-clock')}
-        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator')}
-        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm')}
-        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm')}
+        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos','${selectedProject}')`)}
+        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro','${selectedProject}')`)}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento','${selectedProject}')`)}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
         ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
-        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados')}
+        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', `App.goFiltered('planejamento','${selectedProject}',{upcoming7:true})`)}
       </div>
 
       <div class="toolbar" style="margin-bottom:10px">
@@ -180,6 +188,7 @@ Views.dashboard = {
       type:'bar',
       data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:'#7C3AED', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
+        onClick:(e,els)=>{ if(els.length) Views.planejamento.showDay(futKeys[els[0].index],futAll); },
         scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
     });
 

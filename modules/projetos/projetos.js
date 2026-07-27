@@ -58,6 +58,7 @@ Views.projetos = {
   },
   form(id){
     const p = id ? State.projects.find(x=>x.id===id) : {proposal:'',name:'',client:'',saleValue:0,type:'Obra',status:'A executar',start:'',deadline:'',expectedEnd:'',realEnd:'',notes:'',clientLogo:''};
+    const measurement=id ? Biz.measurementCompletion(p) : {measured:0,target:0,remaining:0,pct:0,complete:false};
     const clientOpts = State.clients.map(c=>`<option ${c.name===p.client?'selected':''}>${U.esc(c.name)}</option>`).join('');
     UI.modal({ title: id?'Editar Projeto':'Novo Projeto', wide:true, body:`
       <div class="form-grid">
@@ -66,12 +67,14 @@ Views.projetos = {
         <div><label>Cliente</label><input id="f-client" list="client-list" value="${U.esc(p.client)}"><datalist id="client-list">${clientOpts}</datalist></div>
         <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${p.saleValue||''}"></div>
         <div><label>Tipo</label><select id="f-type">${['HH','Obra','Fornecimento','Painel'].map(t=>`<option ${t===p.type?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div><label>Status</label><select id="f-status">${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option ${t===p.status?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div><label>Status</label><select id="f-status">${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
         <div><label>Data de Início</label><input id="f-start" type="date" value="${p.start}"></div>
         <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${p.deadline}"></div>
         <div><label>Término Previsto</label><input id="f-expected" type="date" value="${p.expectedEnd}"></div>
         <div><label>Encerramento Real</label><input id="f-real" type="date" value="${p.realEnd}"></div>
         <div class="full"><label>Observações</label><textarea id="f-notes" rows="2">${U.esc(p.notes)}</textarea></div>
+        ${id?`<div class="full import-log" style="margin-top:0"><b>Medição do contrato:</b> ${U.money(measurement.measured)} de ${U.money(measurement.target)} (${U.pct(measurement.pct)}).
+          ${measurement.complete?'<span class="tag tag-green">Projeto liberado para conclusão</span>':`<span class="tag tag-amber">Falta medir ${U.money(measurement.remaining)}</span>`}</div>`:''}
       </div>`,
       footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.projetos.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
@@ -86,6 +89,11 @@ Views.projetos = {
         status:document.getElementById('f-status').value, start:document.getElementById('f-start').value,
         deadline:document.getElementById('f-deadline').value, expectedEnd:document.getElementById('f-expected').value,
         realEnd:document.getElementById('f-real').value, notes:document.getElementById('f-notes').value };
+      if(obj.status==='Concluído'){
+        const check=Biz.measurementCompletion(obj);
+        if(!check.complete)
+          return UI.toast(`Não é possível concluir: o projeto precisa estar 100% medido. Medido ${U.money(check.measured)} de ${U.money(check.target)}; falta ${U.money(check.remaining)}.`, 'warn', 9000);
+      }
       await DB.put('projects', obj); await State.reload();
       UI.close(); UI.toast('Projeto salvo', 'success'); App.render();
     };

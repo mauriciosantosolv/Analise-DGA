@@ -1,18 +1,27 @@
 /**
- * Persistência remota do Clique Obras (Supabase Auth + Data REST API).
+ * Persistência remota do cliqueobras (Supabase Auth + Data REST API).
  *
  * - usa somente a Publishable key no navegador;
- * - cada usuário acessa somente as próprias linhas por RLS;
- * - suporta login, cadastro, confirmação de e-mail e recuperação de senha;
- * - mantém cache local e uma fila offline separada para cada conta.
+ * - compartilha dados por organização, com RLS e permissões por módulo;
+ * - suporta convites, confirmação de e-mail e recuperação de senha;
+ * - mantém cache e fila offline separados por usuário + organização.
  */
 const Cloud = (() => {
   const SESSION_KEY = 'clique_obras_cloud_session';
   const LEGACY_QUEUE_KEY = 'clique_obras_cloud_queue';
-  const QUEUE_PREFIX = 'clique_obras_cloud_queue_user_';
-  const BOUND_USER_KEY = 'clique_obras_local_owner';
+  const QUEUE_PREFIX = 'clique_obras_cloud_queue_scope_';
+  const BOUND_SCOPE_KEY = 'clique_obras_local_scope';
+  const LEGACY_BOUND_USER_KEY = 'clique_obras_local_owner';
+  const ACTIVE_ORG_KEY = 'clique_obras_active_organization';
+  const ALL_STORES = ['projects','budgets','purchases','planning','clients','categories','settings','measurements'];
+  const DEFAULT_PERMISSIONS = {
+    view:ALL_STORES.slice(),
+    edit:ALL_STORES.slice(),
+    manage_users:false
+  };
   const cfg = window.CLIQUE_OBRAS_CLOUD || {};
   let session = null;
+  let orgContext = {organizations:[], active:null};
   let warnedOffline = false;
 
   function configured(){
@@ -29,7 +38,7 @@ const Cloud = (() => {
     return session;
   }
   function saveSession(data){
-    if(!data){ session=null; localStorage.removeItem(SESSION_KEY); return; }
+    if(!data){ session=null; orgContext={organizations:[],active:null}; localStorage.removeItem(SESSION_KEY); return; }
     const previousUser = session && session.user;
     const expiresAt = data.expires_at
       ? Number(data.expires_at) * (Number(data.expires_at) < 1000000000000 ? 1000 : 1)
@@ -88,11 +97,7 @@ const Cloud = (() => {
     const path=`/auth/v1/signup?redirect_to=${encodeURIComponent(redirectUrl())}`;
     const data = await request(path, {
       method:'POST', headers:{'apikey':cfg.publishableKey,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        email,
-        password,
-        data:{full_name:displayName.trim()}
-      })
+      body:JSON.stringify({email,password,data:{full_name:displayName.trim()}})
     });
     if(data && data.access_token){
       saveSession(data);
@@ -144,6 +149,68 @@ const Cloud = (() => {
       return true;
     }catch(e){ saveSession(null); return false; }
   }
+  async function ensureFresh(){
+    if(!hasToken()) throw new Error('Sessão da nuvem não está conectada.');
+    if((session.expires_at||0) - Date.now() < 120000){
+      const ok = await refresh();
+      if(!ok) throw new Error('Sua sessão expirou. Entre novamente.');
+    }
+    if(!user()) await fetchCurrentUser();
+  }
+
+  async function acceptPendingInvitations(){
+    const email=String((user()||{}).email||'').trim().toLowerCase();
+    if(!email) return 0;
+    const invites=await request(`/rest/v1/organization_invitations?select=id,organization_id,role,permissions&status=eq.pending&email=eq.${encodeURIComponent(email)}`, {
+      headers:authHeaders(false)
+    }) || [];
+    let accepted=0;
+    for(const invite of invites){
+      await request('/rest/v1/organization_members?on_conflict=organization_id%2Cuser_id', {
+        method:'POST',
+        headers:{...authHeaders(true),Prefer:'resolution=ignore-duplicates,return=minimal'},
+        body:JSON.stringify({
+          organization_id:invite.organization_id,
+          user_id:user().id,
+          role:invite.role||'viewer',
+          permissions:invite.permissions||{view:['projects'],edit:[],manage_users:false}
+        })
+      });
+      await request(`/rest/v1/organization_invitations?id=eq.${encodeURIComponent(invite.id)}`, {
+        method:'PATCH',
+        headers:{...authHeaders(true),Prefer:'return=minimal'},
+        body:JSON.stringify({status:'accepted',accepted_at:new Date().toISOString()})
+      });
+      accepted++;
+    }
+    return accepted;
+  }
+
+  async function loadOrganizationContext(){
+    await ensureFresh();
+    try{ await acceptPendingInvitations(); }catch(err){
+      if(err.status!==404) throw err;
+    }
+    const memberships=await request(`/rest/v1/organization_members?select=organization_id,role,permissions,joined_at&user_id=eq.${encodeURIComponent(user().id)}&order=joined_at.asc`, {
+      headers:authHeaders(false)
+    }) || [];
+    if(!memberships.length)
+      throw new Error('Sua conta ainda não está vinculada a uma organização do cliqueobras.');
+    const ids=memberships.map(x=>x.organization_id);
+    const organizations=await request(`/rest/v1/organizations?select=id,name,created_by,created_at&id=in.(${ids.map(encodeURIComponent).join(',')})`, {
+      headers:authHeaders(false)
+    }) || [];
+    const byId=Object.fromEntries(organizations.map(x=>[x.id,x]));
+    const choices=memberships.map(m=>({
+      ...(byId[m.organization_id]||{id:m.organization_id,name:'Organização'}),
+      membership:{role:m.role,permissions:m.permissions||{}}
+    }));
+    const saved=localStorage.getItem(ACTIVE_ORG_KEY);
+    const selected=choices.find(x=>x.id===saved) || choices[0];
+    localStorage.setItem(ACTIVE_ORG_KEY,selected.id);
+    orgContext={organizations:choices,active:selected};
+    return orgContext;
+  }
   async function ensureSession(){
     loadSession();
     if(!session) return false;
@@ -155,15 +222,12 @@ const Cloud = (() => {
       try{ await fetchCurrentUser(); }
       catch(e){ saveSession(null); return false; }
     }
-    return active();
-  }
-  async function ensureFresh(){
-    if(!hasToken()) throw new Error('Sessão da nuvem não está conectada.');
-    if((session.expires_at||0) - Date.now() < 120000){
-      const ok = await refresh();
-      if(!ok) throw new Error('Sua sessão expirou. Entre novamente.');
+    try{ await loadOrganizationContext(); }
+    catch(e){
+      if(e.status===401){ saveSession(null); return false; }
+      throw e;
     }
-    if(!user()) await fetchCurrentUser();
+    return active();
   }
   async function signOut(){
     try{
@@ -172,10 +236,58 @@ const Cloud = (() => {
     saveSession(null);
   }
 
-  function boundUserId(){ return localStorage.getItem(BOUND_USER_KEY) || ''; }
-  function isAccountSwitch(){ return !!(user() && boundUserId() && boundUserId()!==user().id); }
-  function bindCurrentUser(){ if(user()) localStorage.setItem(BOUND_USER_KEY,user().id); }
-  function queueStorageKey(){ return user() ? QUEUE_PREFIX+user().id : ''; }
+  function organization(){ return orgContext.active; }
+  function organizations(){ return orgContext.organizations.slice(); }
+  function membership(){ return (organization()||{}).membership || null; }
+  function role(){ return (membership()||{}).role || ''; }
+  function fullAccess(){ return role()==='owner' || role()==='admin'; }
+  function permissionList(kind){
+    const p=(membership()||{}).permissions || {};
+    return Array.isArray(p[kind]) ? p[kind] : [];
+  }
+  function canViewStore(store){
+    if(!configured()) return true;
+    return fullAccess() || permissionList('view').includes(store);
+  }
+  function canEditStore(store){
+    if(!configured()) return true;
+    return fullAccess() || permissionList('edit').includes(store);
+  }
+  function canManageUsers(){
+    if(!configured()) return true;
+    return fullAccess() || (membership()||{}).permissions?.manage_users===true;
+  }
+  function canEditAny(){ return fullAccess() || permissionList('edit').length>0; }
+  function assertCanEdit(store){
+    if(!canEditStore(store)){
+      const err=new Error('Seu usuário possui acesso somente para consulta neste módulo.');
+      err.status=403;
+      throw err;
+    }
+  }
+  function switchOrganization(id){
+    if(!orgContext.organizations.some(x=>x.id===id)) throw new Error('Organização não disponível para esta conta.');
+    localStorage.setItem(ACTIVE_ORG_KEY,id);
+    location.reload();
+  }
+
+  function scopeId(){ return user() && organization() ? `${user().id}:${organization().id}` : ''; }
+  function boundScopeId(){
+    return localStorage.getItem(BOUND_SCOPE_KEY) || localStorage.getItem(LEGACY_BOUND_USER_KEY) || '';
+  }
+  function isAccountSwitch(){
+    const bound=boundScopeId(), current=scopeId();
+    if(!bound || !current) return false;
+    return bound!==current && bound!==user().id;
+  }
+  function bindCurrentUser(){
+    const current=scopeId();
+    if(current){
+      localStorage.setItem(BOUND_SCOPE_KEY,current);
+      localStorage.removeItem(LEGACY_BOUND_USER_KEY);
+    }
+  }
+  function queueStorageKey(){ return scopeId() ? QUEUE_PREFIX+scopeId() : ''; }
   function queue(){
     const key=queueStorageKey();
     if(!key) return [];
@@ -183,8 +295,7 @@ const Cloud = (() => {
       let q=JSON.parse(localStorage.getItem(key)||'null');
       if(!Array.isArray(q)){
         q=[];
-        const owner=boundUserId();
-        if(!owner || owner===user().id){
+        if(!boundScopeId() || boundScopeId()===scopeId() || boundScopeId()===user().id){
           const legacy=JSON.parse(localStorage.getItem(LEGACY_QUEUE_KEY)||'[]');
           if(Array.isArray(legacy)) q=legacy;
           localStorage.removeItem(LEGACY_QUEUE_KEY);
@@ -206,14 +317,22 @@ const Cloud = (() => {
     }
   }
   function record(store, obj){
-    return {user_id:user().id, store, record_id:String(obj.id), data:obj, updated_at:new Date().toISOString()};
+    if(!organization()) throw new Error('Nenhuma organização ativa.');
+    return {
+      organization_id:organization().id,
+      user_id:user().id,
+      store,
+      record_id:String(obj.id),
+      data:obj,
+      updated_at:new Date().toISOString()
+    };
   }
   async function upsertRaw(store, objects){
-    await ensureFresh();
-    const list = (objects||[]).filter(x=>x && x.id!=null);
+    await ensureFresh(); assertCanEdit(store);
+    const list=(objects||[]).filter(x=>x && x.id!=null);
     for(let i=0;i<list.length;i+=200){
       const body=list.slice(i,i+200).map(x=>record(store,x));
-      await request('/rest/v1/app_records?on_conflict=user_id%2Cstore%2Crecord_id', {
+      await request('/rest/v1/app_records?on_conflict=organization_id%2Cstore%2Crecord_id', {
         method:'POST',
         headers:{...authHeaders(true),Prefer:'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(body)
@@ -221,23 +340,27 @@ const Cloud = (() => {
     }
   }
   async function deleteRaw(store,id){
-    await ensureFresh();
-    const q=`user_id=eq.${encodeURIComponent(user().id)}&store=eq.${encodeURIComponent(store)}&record_id=eq.${encodeURIComponent(String(id))}`;
+    await ensureFresh(); assertCanEdit(store);
+    const q=`organization_id=eq.${encodeURIComponent(organization().id)}&store=eq.${encodeURIComponent(store)}&record_id=eq.${encodeURIComponent(String(id))}`;
     await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
   }
   async function clearRaw(store){
-    await ensureFresh();
-    const q=`user_id=eq.${encodeURIComponent(user().id)}&store=eq.${encodeURIComponent(store)}`;
+    await ensureFresh(); assertCanEdit(store);
+    const q=`organization_id=eq.${encodeURIComponent(organization().id)}&store=eq.${encodeURIComponent(store)}`;
     await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
   }
   async function mirror(op){
     if(!active()) return;
+    assertCanEdit(op.store);
     try{
       if(op.type==='put') await upsertRaw(op.store,[op.object]);
       else if(op.type==='bulkPut') await upsertRaw(op.store,op.objects);
       else if(op.type==='delete') await deleteRaw(op.store,op.id);
       else if(op.type==='clear') await clearRaw(op.store);
-    }catch(e){ enqueue(op); }
+    }catch(e){
+      if(e.status===401 || e.status===403) throw e;
+      enqueue(op);
+    }
   }
   async function flushQueue(){
     if(!active()) return 0;
@@ -246,12 +369,16 @@ const Cloud = (() => {
     for(let i=0;i<pending.length;i++){
       const op=pending[i];
       try{
+        assertCanEdit(op.store);
         if(op.type==='put') await upsertRaw(op.store,[op.object]);
         else if(op.type==='bulkPut') await upsertRaw(op.store,op.objects);
         else if(op.type==='delete') await deleteRaw(op.store,op.id);
         else if(op.type==='clear') await clearRaw(op.store);
         done++;
-      }catch(e){ remaining.push(...pending.slice(i)); break; }
+      }catch(e){
+        if(e.status===401 || e.status===403){ done++; continue; }
+        remaining.push(...pending.slice(i)); break;
+      }
     }
     saveQueue(remaining);
     if(!remaining.length) warnedOffline=false;
@@ -259,9 +386,10 @@ const Cloud = (() => {
   }
   async function readAll(){
     await ensureFresh();
+    if(!organization()) throw new Error('Nenhuma organização ativa.');
     const out=[]; const size=1000;
     for(let start=0;;start+=size){
-      const q=`select=store,record_id,data,updated_at&user_id=eq.${encodeURIComponent(user().id)}&order=updated_at.asc`;
+      const q=`select=store,record_id,data,updated_at&organization_id=eq.${encodeURIComponent(organization().id)}&order=updated_at.asc`;
       const res=await fetch(baseUrl()+'/rest/v1/app_records?'+q,{
         headers:{...authHeaders(false),Range:`${start}-${start+size-1}`}
       });
@@ -272,11 +400,90 @@ const Cloud = (() => {
     return out;
   }
 
+  function normalizedPermissions(input={}){
+    const view=[...new Set((input.view||[]).filter(x=>ALL_STORES.includes(x)))];
+    const edit=[...new Set((input.edit||[]).filter(x=>view.includes(x)))];
+    return {view,edit,manage_users:input.manage_users===true};
+  }
+  async function listTeam(){
+    await ensureFresh();
+    if(!organization() || !canManageUsers()) throw new Error('Você não possui permissão para gerenciar usuários.');
+    const orgId=encodeURIComponent(organization().id);
+    const members=await request(`/rest/v1/organization_members?select=user_id,role,permissions,joined_at&organization_id=eq.${orgId}&order=joined_at.asc`, {
+      headers:authHeaders(false)
+    }) || [];
+    const userIds=members.map(x=>x.user_id);
+    let profiles=[];
+    if(userIds.length){
+      profiles=await request(`/rest/v1/profiles?select=id,email,full_name&id=in.(${userIds.map(encodeURIComponent).join(',')})`, {
+        headers:authHeaders(false)
+      }) || [];
+    }
+    const byId=Object.fromEntries(profiles.map(x=>[x.id,x]));
+    const invitations=await request(`/rest/v1/organization_invitations?select=id,email,role,permissions,status,created_at&organization_id=eq.${orgId}&status=eq.pending&order=created_at.desc`, {
+      headers:authHeaders(false)
+    }) || [];
+    return {members:members.map(x=>({...x,profile:byId[x.user_id]||{id:x.user_id,email:'',full_name:''}})),invitations};
+  }
+  async function inviteMember(email, roleName, permissions){
+    await ensureFresh();
+    if(!canManageUsers()) throw new Error('Você não possui permissão para convidar usuários.');
+    const body={
+      organization_id:organization().id,
+      email:String(email||'').trim().toLowerCase(),
+      role:['admin','editor','viewer'].includes(roleName)?roleName:'viewer',
+      permissions:normalizedPermissions(permissions),
+      invited_by:user().id
+    };
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) throw new Error('Informe um e-mail válido.');
+    await request('/rest/v1/organization_invitations', {
+      method:'POST',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify(body)
+    });
+  }
+  async function updateMember(userId, roleName, permissions){
+    await ensureFresh();
+    if(!canManageUsers()) throw new Error('Você não possui permissão para editar usuários.');
+    const body={
+      role:['admin','editor','viewer'].includes(roleName)?roleName:'viewer',
+      permissions:normalizedPermissions(permissions)
+    };
+    await request(`/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(organization().id)}&user_id=eq.${encodeURIComponent(userId)}`, {
+      method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify(body)
+    });
+  }
+  async function removeMember(userId){
+    await ensureFresh();
+    if(!canManageUsers()) throw new Error('Você não possui permissão para remover usuários.');
+    await request(`/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(organization().id)}&user_id=eq.${encodeURIComponent(userId)}`, {
+      method:'DELETE',headers:authHeaders(false)
+    });
+  }
+  async function cancelInvitation(id){
+    await ensureFresh();
+    if(!canManageUsers()) throw new Error('Você não possui permissão para cancelar convites.');
+    await request(`/rest/v1/organization_invitations?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(organization().id)}`, {
+      method:'DELETE',headers:authHeaders(false)
+    });
+  }
+  async function updateOrganizationName(name){
+    await ensureFresh();
+    const clean=String(name||'').trim();
+    if(!clean) throw new Error('Informe o nome da organização.');
+    await request(`/rest/v1/organizations?id=eq.${encodeURIComponent(organization().id)}`, {
+      method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify({name:clean})
+    });
+    organization().name=clean;
+  }
+
   loadSession();
   return {
     configured, requested:()=>cfg.enabled===true, active, ensureSession, signIn, signUp,
     signOut, resetPassword, updatePassword, consumeAuthCallback, refresh, user,
+    organization, organizations, membership, role, switchOrganization,
+    canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
-    boundUserId, isAccountSwitch, bindCurrentUser
+    boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
+    listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
+    updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };
 })();

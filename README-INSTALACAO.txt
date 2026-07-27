@@ -1,56 +1,37 @@
-CLIQUE OBRAS — LOGIN E BACKEND SUPABASE
+CLIQUEOBRAS v2.1 — INSTALAÇÃO
 
-O pacote contém somente os arquivos novos ou substituídos:
-- config/cloud-config.js
-- database/cloud.js
-- database/indexeddb.js
-- css/auth.css
-- js/auth-ui.js
-- index.html
+Este é o pacote completo do sistema. Não misture arquivos de versões anteriores.
 
-O que foi implementado
-- Correção da configuração Supabase que estava com URL e chave sem aspas.
-- Tela profissional de login.
-- Criação de conta.
-- Confirmação de e-mail.
-- Recuperação e troca de senha.
-- Botão de conta e logout no sistema.
-- Sessão persistente e renovação do token.
-- Sincronização dos dados com o Supabase.
-- Fila offline separada por usuário.
-- Proteção contra um usuário visualizar o cache local de outra conta no mesmo computador.
-- Uso da Publishable Key; nenhuma service_role ou senha do banco é exposta.
+PUBLICAÇÃO NO GITHUB / HOSTINGER
+1. Faça um backup da versão publicada.
+2. No repositório mauriciosantosolv/Analise-DGA, substitua o conteúdo da branch
+   de publicação pelo conteúdo da pasta CliqueObras deste pacote.
+3. Preserve config/cloud-config.js com a URL e a Publishable Key atuais.
+4. Faça o commit e aguarde a implantação automática da Hostinger.
+5. Depois da publicação, abra cliqueobras.com em uma janela anônima e teste:
+   login, Dashboard, Financeiro, Planejamento, Configurações e logout.
 
-COMO INSTALAR NO GITHUB
-1. Abra o repositório mauriciosantosolv/Analise-DGA.
-2. Substitua cada arquivo existente pelo correspondente deste pacote.
-3. Crie os arquivos novos css/auth.css e js/auth-ui.js.
-4. Faça commit na branch main.
-5. Aguarde a Hostinger executar a implantação automática do GitHub.
+SUPABASE
+- A estrutura v2.1 está em supabase/schema.sql.
+- Ela preserva app_records e adiciona organizações, membros, convites, perfis
+  e RLS por organização/permissão.
+- Nunca coloque service_role, Secret Key ou senha do banco no navegador.
 
-CONFIGURAÇÃO OBRIGATÓRIA NO SUPABASE
-1. Acesse Authentication > URL Configuration.
-2. Em Site URL, coloque a URL pública exata do seu site na Hostinger.
-   Exemplo: https://seudominio.com.br
-3. Em Redirect URLs, adicione:
-   https://seudominio.com.br/**
-4. Acesse Authentication > Providers > Email.
-5. Mantenha Email habilitado.
-6. Para exigir confirmação por e-mail, mantenha Confirm email ativado.
-7. Para testes iniciais, você pode desativar temporariamente Confirm email.
-8. O banco já possui a tabela public.app_records com RLS e políticas por user_id.
+PRINCIPAIS MUDANÇAS
+- Perfil abre Configurações.
+- Logout no final da rolagem do menu.
+- Filtros combináveis dentro dos lotes importados.
+- Gastos manuais e importados podem abater o planejamento.
+- A exclusão de um gasto conciliado restaura o planejamento.
+- Usuários podem compartilhar a mesma organização.
+- Proprietário/administrador edita perfil e permissões por módulo.
+- Título da página alterado para "cliqueobras".
+- Favicon incluído.
 
-TESTE RECOMENDADO
-1. Abra o site em janela anônima.
-2. Clique em Criar minha conta.
-3. Confirme o e-mail recebido.
-4. Entre com a conta.
-5. Cadastre um projeto ou importe uma planilha.
-6. Saia da conta.
-7. Entre em outro navegador com a mesma conta e confirme que os dados aparecem.
-8. Crie uma segunda conta e confirme que ela não vê os dados da primeira.
-
-OBSERVAÇÃO SOBRE O GITHUB
-A integração automática disponível nesta sessão conseguiu ler e analisar o repositório,
-mas o GitHub retornou erro 403 ao tentar criar branch e gravar arquivos. Por isso, este
-pacote foi preparado para substituição direta no repositório.
+COMO VINCULAR OUTRO USUÁRIO
+1. Entre como proprietário ou administrador.
+2. Abra Configurações > Organização e permissões.
+3. Clique em Vincular usuário.
+4. Informe o e-mail exato e defina perfil/permissões.
+5. O usuário entra na organização no próximo login. Se ainda não tiver conta,
+   deverá se cadastrar usando exatamente o e-mail convidado.

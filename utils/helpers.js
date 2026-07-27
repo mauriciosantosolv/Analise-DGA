@@ -56,6 +56,7 @@ Object.assign(U, {
 
 /* ===== UI: toasts, modais, confirmação, loading ===== */
 const UI = {
+  modalStack:[],
   toast(msg, type='info', ms=3800){
     const icons = {info:'info', success:'check-circle', error:'x-circle', warn:'alert-triangle'};
     const colors = {info:'var(--blue)', success:'var(--green)', error:'var(--red)', warn:'var(--amber)'};
@@ -66,8 +67,13 @@ const UI = {
     U.icons();
     setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(), 260); }, ms);
   },
-  modal({title, body, footer, wide=false, onOpen}){
+  modal({title, body, footer, wide=false, onOpen, replace=false}){
     const ov = document.getElementById('modal-overlay'), m = document.getElementById('modal');
+    if(ov.classList.contains('open') && !replace){
+      const fragment=document.createDocumentFragment();
+      while(m.firstChild) fragment.appendChild(m.firstChild);
+      this.modalStack.push({className:m.className, fragment});
+    }
     m.className = 'modal' + (wide ? ' wide' : '');
     m.innerHTML = `<div class="modal-head"><h2>${title}</h2><button class="icon-btn" onclick="UI.close()"><i data-lucide="x"></i></button></div>
       <div class="modal-body">${body}</div>${footer ? `<div class="modal-foot">${footer}</div>` : ''}`;
@@ -75,7 +81,26 @@ const UI = {
     U.icons();
     if(onOpen) onOpen(m);
   },
-  close(){ document.getElementById('modal-overlay').classList.remove('open'); },
+  close(){
+    const ov=document.getElementById('modal-overlay'), m=document.getElementById('modal');
+    const previous=this.modalStack.pop();
+    if(previous){
+      m.className=previous.className;
+      m.innerHTML='';
+      m.appendChild(previous.fragment);
+      ov.classList.add('open');
+      U.icons();
+    }else{
+      ov.classList.remove('open');
+      m.innerHTML='';
+    }
+  },
+  closeAll(){
+    this.modalStack=[];
+    const ov=document.getElementById('modal-overlay'), m=document.getElementById('modal');
+    ov.classList.remove('open'); m.innerHTML='';
+  },
+  isModalOpen(){ return document.getElementById('modal-overlay').classList.contains('open'); },
   confirm(msg, onYes, danger=true){
     this.modal({
       title:'Confirmação',
@@ -83,7 +108,7 @@ const UI = {
       footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
               <button class="btn ${danger?'btn-danger':'btn-primary'}" id="confirm-yes">Confirmar</button>`
     });
-    document.getElementById('confirm-yes').onclick = () => { UI.close(); onYes(); };
+    document.getElementById('confirm-yes').onclick = () => { UI.closeAll(); onYes(); };
   },
   loading(on, msg='Processando…'){
     document.getElementById('loading-msg').textContent = msg;

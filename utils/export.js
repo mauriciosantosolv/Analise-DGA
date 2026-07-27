@@ -43,7 +43,14 @@ const Exports = {
     U.download(`${store}-${U.isoDate(new Date())}.json`, JSON.stringify(this.rows(store), null, 1), 'application/json');
     UI.toast('JSON exportado', 'success');
   },
-  toPDF(){ UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info'); setTimeout(()=>window.print(), 400); },
+  toPDF(){
+    document.body.classList.remove('printing-project');
+    document.body.classList.add('printing-dashboard');
+    const cleanup = () => document.body.classList.remove('printing-dashboard');
+    window.addEventListener('afterprint', cleanup, {once:true});
+    UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
+    setTimeout(()=>window.print(), 400);
+  },
   projectPDF(projectId){
     const p = State.projects.find(x=>x.id===projectId); if(!p) return;
     const s = Biz.projectStats(p), cats = Biz.categoryStats([p]);
@@ -79,9 +86,14 @@ const Exports = {
       </table>
       <div class="print-foot">Realizado inclui compras, contas pagas, mão de obra e custos da base de cálculo. Projetado contém somente o Planejamento. Gerado em ${new Date().toLocaleString('pt-BR')}.</div>`;
     document.body.appendChild(report);
+    document.body.classList.remove('printing-dashboard');
+    document.body.classList.add('printing-project');
     UI.close();
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
-    window.addEventListener('afterprint', () => report.remove(), {once:true});
+    window.addEventListener('afterprint', () => {
+      report.remove();
+      document.body.classList.remove('printing-project');
+    }, {once:true});
     setTimeout(()=>window.print(), 250);
   },
   toImage(){

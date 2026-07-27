@@ -1,17 +1,31 @@
-# Clique Obras — ativação da base em nuvem
+# cliqueobras v2.1 — Supabase
 
-O sistema continua abrindo em modo local enquanto a nuvem não for configurada. Depois da ativação, ele exige login e sincroniza projetos, orçamentos, lançamentos, planejamento, medições, clientes, categorias e configurações.
+O sistema usa Supabase Auth e uma base compartilhada por organização. Projetos,
+orçamentos, financeiro, planejamento, medições, clientes, categorias e
+configurações continuam no `app_records`, agora protegidos por RLS de
+organização e permissões por módulo.
 
-## 1. Criar o banco
+## Ativação
 
-1. Crie um projeto no Supabase.
-2. Abra **SQL Editor**.
-3. Cole e execute todo o conteúdo de `supabase/schema.sql`.
-4. Em **Authentication > Users**, crie o usuário que terá acesso ao sistema.
+1. Abra o SQL Editor do projeto Supabase.
+2. Execute `supabase/schema.sql` completo.
+3. Confira se as tabelas abaixo estão com RLS ativo:
+   - `app_records`
+   - `profiles`
+   - `organizations`
+   - `organization_members`
+   - `organization_invitations`
+4. Em `Authentication > URL Configuration`, use:
+   - Site URL: `https://cliqueobras.com`
+   - Redirect URL: `https://cliqueobras.com/**`
 
-## 2. Ligar o site à nuvem
+O SQL é idempotente e migra contas existentes sem apagar registros: cada conta
+atual recebe sua própria organização e permanece proprietária dos dados que já
+possuía.
 
-Edite `config/cloud-config.js`:
+## Configuração do frontend
+
+`config/cloud-config.js` deve conter apenas a URL e a Publishable Key:
 
 ```js
 window.CLIQUE_OBRAS_CLOUD = {
@@ -22,22 +36,24 @@ window.CLIQUE_OBRAS_CLOUD = {
 };
 ```
 
-Use somente a **Publishable key**. Nunca use `sb_secret_...`, `service_role`, senha do banco ou qualquer chave administrativa no navegador.
+Nunca use `sb_secret_...`, `service_role`, senha do banco ou qualquer chave
+administrativa no navegador.
 
-## 3. Publicar
+## Perfis de acesso
 
-Envie a pasta completa para o GitHub/Hostinger, preservando a estrutura de subpastas. O site deve ser servido por HTTPS.
+- Proprietário: acesso completo e proteção para a organização nunca ficar sem dono.
+- Administrador: acesso completo; gerencia usuários comuns.
+- Editor: permissões configuráveis de visualização e edição por módulo.
+- Leitor: permissões configuráveis de consulta; edição bloqueada no frontend e no RLS.
 
-No primeiro login:
+Convites são associados ao e-mail autenticado. Se a conta já existir, o vínculo
+é aceito no próximo login. Se não existir, o usuário deve se cadastrar com o
+mesmo e-mail.
 
-- se a nuvem estiver vazia, a base já existente no navegador é enviada automaticamente;
-- se a nuvem já tiver registros, ela passa a ser a fonte principal e atualiza o cache do aparelho;
-- se a internet cair durante uma gravação, a alteração fica em fila e é sincronizada quando a conexão voltar.
+## Ordem segura de publicação
 
-## 4. Usar em outro aparelho
-
-Abra o mesmo endereço e entre com o mesmo usuário. Os dados serão carregados da nuvem, não de um banco isolado daquele navegador.
-
-## Segurança
-
-O arquivo SQL ativa Row Level Security (RLS): o usuário autenticado só consegue ler e alterar as próprias linhas. A chave pública identifica o aplicativo; ela não substitui o login e não libera acesso aos dados.
+1. Execute o SQL.
+2. Publique todos os arquivos da versão v2.1 juntos.
+3. Teste com o proprietário atual.
+4. Convide um segundo usuário de teste e valide as permissões antes de liberar
+   para clientes.

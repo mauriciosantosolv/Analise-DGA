@@ -126,12 +126,11 @@ const AuthUI = (() => {
     const topbar=document.getElementById('topbar'), theme=document.getElementById('theme-toggle');
     if(!topbar) return;
     const btn=document.createElement('button');
-    btn.type='button'; btn.id='account-toggle'; btn.className='icon-btn'; btn.title=(Cloud.user()||{}).email||'Minha conta';
+    btn.type='button'; btn.id='account-toggle'; btn.className='icon-btn';
+    btn.title='Abrir configurações da conta';
+    btn.setAttribute('aria-label','Abrir configurações da conta');
     btn.innerHTML='<i data-lucide="circle-user-round"></i>';
-    btn.onclick=()=>{
-      const email=esc((Cloud.user()||{}).email||'');
-      UI.modal({title:'Minha conta',body:`<div class="account-summary"><i data-lucide="circle-user-round"></i><div><b>${email}</b><small>Dados protegidos e sincronizados pelo Supabase</small></div></div>`,footer:`<button class="btn btn-ghost" onclick="UI.close();App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button><button class="btn btn-danger" onclick="UI.close();App.logoutCloud()"><i data-lucide="log-out"></i>Sair</button>`});
-    };
+    btn.onclick=()=>App.go('configuracoes');
     topbar.insertBefore(btn,theme||null); U.icons();
   }
   return {show,mountAccountButton,friendlyError};
