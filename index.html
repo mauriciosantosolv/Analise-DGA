@@ -4,24 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Centro de Controle Financeiro — Gestão de Obras</title>
-<!-- ============================================================
-     CENTRO DE CONTROLE FINANCEIRO DE OBRAS
-     Software de gestão financeira de projetos de engenharia elétrica
-
-     Arquitetura modular (scripts clássicos, compatível com file://):
-       css/        design system (fonts, variables, layout,
-                   dashboard, tables, components)
-       database/   indexeddb.js — ÚNICO ponto de acesso ao banco
-       utils/      format.js · helpers.js · export.js
-       js/         importer.js · router.js · app.js
-       modules/    dashboard, custos (regras financeiras),
-                   compras, orcamentos, relatorios, configuracoes,
-                   projetos, clientes, planejamento, medicoes
-       assets/     vendor/ (xlsx, chart.js, lucide) · fonts/
-
-     ATENÇÃO: a ordem dos <script> no fim do <body> é obrigatória
-     (database → utils → custos → importer → router → módulos → app).
-     ============================================================ -->
 <link rel="stylesheet" href="css/fonts.css">
 <script src="assets/vendor/xlsx.min.js"></script>
 <script src="assets/vendor/chart.min.js"></script>
@@ -31,9 +13,9 @@
 <link rel="stylesheet" href="css/dashboard.css">
 <link rel="stylesheet" href="css/tables.css">
 <link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
-<!-- ================= [2] INTERFACE ================= -->
 <div id="app">
   <aside id="sidebar">
     <div class="brand">
@@ -61,7 +43,6 @@
     <div id="sidebar-footer"><span id="storage-status">v2.0 · dados locais</span><br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
   </aside>
   <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
-
   <main>
     <div id="finance-ticker" aria-label="Desempenho financeiro dos projetos"></div>
     <header id="topbar">
@@ -75,16 +56,9 @@
       <button class="icon-btn" id="future-toggle" title="Gastos previstos" aria-label="Abrir gastos previstos"><i data-lucide="calendar-clock"></i></button>
       <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
     </header>
-    <div id="content-wrap">
-      <div id="content"></div>
-      <aside id="rightbar">
-        <div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div>
-        <div id="rightbar-content"></div>
-      </aside>
-    </div>
+    <div id="content-wrap"><div id="content"></div><aside id="rightbar"><div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div><div id="rightbar-content"></div></aside></div>
   </main>
 </div>
-
 <div id="modal-overlay"><div class="modal" id="modal"></div></div>
 <div id="toasts"></div>
 <div class="loading-overlay" id="loading"><div class="spinner"></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
@@ -113,5 +87,6 @@
 <script src="modules/relatorios/relatorios.js"></script>
 <script src="modules/configuracoes/configuracoes.js"></script>
 <script src="js/app.js"></script>
+<script src="js/auth-ui.js"></script>
 </body>
 </html>
