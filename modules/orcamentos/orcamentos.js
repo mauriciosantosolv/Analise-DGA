@@ -20,7 +20,7 @@ Views.orcamentos = {
   title:'Orçamentos',
   render(){
     const byProj = {};
-    State.budgets.filter(b=>!State.filters.project || b.projectId===State.filters.project).forEach(b => { (byProj[b.projectId] = byProj[b.projectId]||[]).push(b); });
+    State.budgets.forEach(b => { (byProj[b.projectId] = byProj[b.projectId]||[]).push(b); });
     $c().innerHTML = `
       <div class="toolbar">
         <button class="btn btn-primary" onclick="Importer.pick('budget')"><i data-lucide="upload"></i>Importar Modelo de Orçamentos</button>
@@ -64,7 +64,7 @@ Views.orcamentos = {
       footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
               <button class="btn btn-primary" id="bg-save"><i data-lucide="check"></i>Salvar</button>` });
     document.getElementById('bg-save').onclick = async () => {
-      b.category = Biz.categoryName(document.getElementById('bg-cat').value.trim() || b.category);
+      b.category = document.getElementById('bg-cat').value.trim() || b.category;
       b.value = U.num(document.getElementById('bg-value').value);
       await DB.put('budgets', b); await State.reload();
       UI.close(); UI.toast('Orçamento atualizado', 'success'); App.render();
@@ -75,15 +75,14 @@ Views.orcamentos = {
     const p = State.projects.find(x=>x.id===pid);
     UI.modal({ title:`Nova Categoria no Orçamento — ${U.esc(p?p.proposal:'')}`, body:`
       <div class="form-grid">
-        <div><label>Categoria *</label><input id="bg-add-cat" list="cat-list-b"><datalist id="cat-list-b">${Biz.uniqueCategories().map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
+        <div><label>Categoria *</label><input id="bg-add-cat" list="cat-list-b"><datalist id="cat-list-b">${State.categories.map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
         <div><label>Valor Orçado *</label><input id="bg-add-value" type="number" step="0.01"></div>
       </div>`,
       footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
               <button class="btn btn-primary" id="bg-add-save"><i data-lucide="check"></i>Adicionar</button>` });
     document.getElementById('bg-add-save').onclick = async () => {
-      const rawCat = document.getElementById('bg-add-cat').value.trim();
-      if(!rawCat) return UI.toast('Informe a categoria', 'warn');
-      const cat = Biz.categoryName(rawCat);
+      const cat = document.getElementById('bg-add-cat').value.trim();
+      if(!cat) return UI.toast('Informe a categoria', 'warn');
       await DB.put('budgets', {id:U.id(), projectId:pid, category:cat, value:U.num(document.getElementById('bg-add-value').value), importedAt:Date.now(), file:'(manual)'});
       await State.reload(); UI.close(); UI.toast('Categoria adicionada ao orçamento', 'success'); App.render();
     };

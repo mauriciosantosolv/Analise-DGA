@@ -60,24 +60,13 @@ const Importer = (() => {
     }
   };
 
-  const KIND_LABELS = {budget:'Orçamentos', purchase:'Compras', paidAccount:'Contas pagas', labor:'Mão de obra'};
-
-  function configuredMap(kind){
-    const all = State.settings.importMappings || {};
-    return all[kind] || null;
-  }
-
-  // Encontra o índice de cada coluna pelo texto do cabeçalho, nunca pela posição.
-  // Quando o administrador cadastrou um modelo, os cabeçalhos salvos têm prioridade.
-  function mapHeaders(headerRow, map, kind){
+  // Encontra o índice de cada coluna a partir do cabeçalho
+  function mapHeaders(headerRow, map){
     const cols = {}, missing = [];
     const normHead = headerRow.map(h => U.norm(h));
-    const saved = configuredMap(kind);
     for(const [field, aliases] of Object.entries(map)){
       let idx = -1;
-      const learned = saved && saved.fields ? U.norm(saved.fields[field]) : '';
-      if(learned) idx = normHead.findIndex(h => h === learned);
-      for(const a of (idx === -1 ? aliases : [])){
+      for(const a of aliases){
         idx = normHead.findIndex(h => h === a);
         if(idx === -1) idx = normHead.findIndex(h => h && (h.includes(a) || a.includes(h)) && h.length > 2);
         if(idx !== -1) break;
@@ -122,16 +111,13 @@ const Importer = (() => {
   }
 
   async function ensureCategory(name){
-    const n = Biz.categoryKey(name);
-    if(!n) return '';
-    let existing=State.categories.find(c => Biz.categoryKey(c.name) === n);
-    if(!existing){
+    const n = U.norm(name);
+    if(!n) return;
+    if(!State.categories.find(c => U.norm(c.name) === n)){
       const palette = ['#2563EB','#16A34A','#D97706','#DC2626','#7C3AED','#0891B2','#DB2777','#65A30D','#EA580C','#4F46E5'];
-      const c = {id:U.id(), name:Biz.categoryName(name), color:palette[State.categories.length % palette.length], icon:'tag'};
+      const c = {id:U.id(), name:String(name).trim(), color:palette[State.categories.length % palette.length], icon:'tag'};
       await DB.put('categories', c); State.categories.push(c);
-      existing=c;
     }
-    return existing.name;
   }
 
   const SPECIAL_BUDGET = ['total','valor de venda']; // linhas especiais do modelo de orçamentos
@@ -139,7 +125,7 @@ const Importer = (() => {
   async function importBudget(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.budget, 'budget');
+    const {cols, missing} = mapHeaders(rows[0], MAPS.budget);
     if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: <b>${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0, skipped = [], saleUpdates = 0;
     const records = [];
@@ -151,8 +137,8 @@ const Importer = (() => {
       const p = await ensureProject(rawProj, created);
       if(catNorm === 'valor de venda'){ if(val>0){ p.saleValue = val; await DB.put('projects', p); saleUpdates++; } continue; }
       if(SPECIAL_BUDGET.includes(catNorm)) continue; // TOTAL é derivado, não armazenado
-      const category=await ensureCategory(cat);
-      records.push({id:U.id(), projectId:p.id, category, value:val, importedAt:Date.now(), file:file.name});
+      await ensureCategory(cat);
+      records.push({id:U.id(), projectId:p.id, category:String(cat).trim(), value:val, importedAt:Date.now(), file:file.name});
       added++;
     }
     await DB.bulkPut('budgets', records);
@@ -163,7 +149,7 @@ const Importer = (() => {
   async function importPurchases(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.purchase, 'purchase');
+    const {cols, missing} = mapHeaders(rows[0], MAPS.purchase);
     const critical = missing.filter(f => ['project','value','category'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -180,19 +166,19 @@ const Importer = (() => {
       if(rawProj==null || !cat || !(val>0 || val<0)){ skipped.push(i+1); continue; }
       const p = await ensureProject(rawProj, created);
       const date = cols.date!=null ? U.parseDate(r[cols.date]) : null;
-      const category=await ensureCategory(cat);
       const rec = {
-        id:U.id(), projectId:p.id, category,
+        id:U.id(), projectId:p.id, category:cat,
         supplier: cols.supplier!=null ? String(r[cols.supplier]??'').trim() : '',
         desc:     cols.desc!=null ? String(r[cols.desc]??'').trim() : '',
         notes:    cols.notes!=null ? String(r[cols.notes]??'').trim() : '',
         order:    cols.order!=null ? String(r[cols.order]??'').trim() : '',
-        value:val, date: date ? U.isoDate(date) : '', costCenter:category,
+        value:val, date: date ? U.isoDate(date) : '', costCenter:cat,
         importedAt:Date.now(), file:file.name, sourceType:'purchase'
       };
-      rec.dedupe = [p.proposal, rec.order, rec.supplier, cat, rec.desc, rec.value, rec.date].join('|');
+      rec.dedupe = [p.proposal, rec.order, rec.supplier, rec.category, rec.desc, rec.value, rec.date].join('|');
       seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
       if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
+      await ensureCategory(cat);
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -205,7 +191,7 @@ const Importer = (() => {
   async function importPaidAccounts(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount, 'paidAccount');
+    const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount);
     const critical = missing.filter(f => ['project','category','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -220,16 +206,16 @@ const Importer = (() => {
       const date = U.parseDate(r[cols.date]);
       const account = cols.account!=null ? String(r[cols.account]??'').trim() : '';
       const desc = cols.desc!=null ? String(r[cols.desc]??'').trim() : '';
-      const category=await ensureCategory(cat);
       const rec = {
-        id:U.id(), projectId:p.id, category, supplier:account,
+        id:U.id(), projectId:p.id, category:cat, supplier:account,
         desc:desc || 'Conta paga', notes:'', order:'', value:val,
-        date:date ? U.isoDate(date) : '', costCenter:category,
+        date:date ? U.isoDate(date) : '', costCenter:cat,
         importedAt:Date.now(), file:file.name, sourceType:'paidAccount'
       };
-      rec.dedupe = ['paidAccount', p.proposal, cat, account, desc, rec.value, rec.date].join('|');
+      rec.dedupe = ['paidAccount', p.proposal, rec.category, account, desc, rec.value, rec.date].join('|');
       seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
       if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
+      await ensureCategory(cat);
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -243,7 +229,7 @@ const Importer = (() => {
   async function importLabor(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.labor, 'labor');
+    const {cols, missing} = mapHeaders(rows[0], MAPS.labor);
     const critical = missing.filter(f => ['project','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
@@ -251,7 +237,7 @@ const Importer = (() => {
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
     const seenCount = {}, records = [];
     const laborCategory = 'Mão de Obra';
-    const canonicalLaborCategory=await ensureCategory(laborCategory);
+    await ensureCategory(laborCategory);
     for(let i=1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], val = U.num(r[cols.value]);
@@ -259,9 +245,9 @@ const Importer = (() => {
       const p = await ensureProject(rawProj, created);
       const date = U.parseDate(r[cols.date]);
       const rec = {
-        id:U.id(), projectId:p.id, category:canonicalLaborCategory, supplier:'',
+        id:U.id(), projectId:p.id, category:laborCategory, supplier:'',
         desc:'Custo de mão de obra', notes:'', order:'', value:val,
-        date:date ? U.isoDate(date) : '', costCenter:canonicalLaborCategory,
+        date:date ? U.isoDate(date) : '', costCenter:laborCategory,
         importedAt:Date.now(), file:file.name, sourceType:'labor'
       };
       rec.dedupe = ['labor', p.proposal, rec.value, rec.date].join('|');
@@ -272,48 +258,6 @@ const Importer = (() => {
     await DB.bulkPut('purchases', records);
     await State.reload();
     return {summary:{projects:created, added, skipped, type:'Mão de obra'}};
-  }
-
-
-
-  async function saveModel(file, kind){
-    const rows = await readWorkbook(file);
-    if(!rows.length || !rows[0].some(Boolean)) throw new Error('O modelo não possui cabeçalho válido.');
-    const map = MAPS[kind];
-    if(!map) throw new Error('Base de dados não reconhecida.');
-    const detected = mapHeaders(rows[0], map, null);
-    const criticalByKind = {budget:['project','category','value'], purchase:['project','category','value'], paidAccount:['project','category','value','date'], labor:['project','value','date']};
-    const missingCritical = (criticalByKind[kind]||[]).filter(f=>detected.cols[f] == null);
-    if(missingCritical.length) throw new Error('Não foi possível identificar no modelo: '+missingCritical.join(', ')+'.');
-    const fields = {};
-    Object.entries(detected.cols).forEach(([field, idx]) => fields[field] = String(rows[0][idx]??'').trim());
-    const mappings = {...(State.settings.importMappings||{})};
-    mappings[kind] = {fileName:file.name, savedAt:Date.now(), fields};
-    await State.setSetting('importMappings', mappings);
-    return mappings[kind];
-  }
-
-  function pickModel(kind){
-    const inp = document.getElementById('file-input');
-    inp.onchange = async () => {
-      const file = inp.files[0]; inp.value=''; if(!file) return;
-      UI.loading(true, 'Analisando cabeçalhos do modelo…');
-      try{
-        const saved = await saveModel(file, kind);
-        UI.loading(false);
-        UI.toast(`Modelo de ${KIND_LABELS[kind]} atualizado sem alterar dados existentes`, 'success', 5000);
-        if(State.view==='configuracoes') Views.configuracoes.render();
-      }catch(err){ UI.loading(false); UI.toast('Modelo não salvo: '+U.esc(err.message), 'error', 6000); }
-    };
-    inp.click();
-  }
-
-  async function clearModel(kind){
-    const mappings = {...(State.settings.importMappings||{})};
-    delete mappings[kind];
-    await State.setSetting('importMappings', mappings);
-    UI.toast('Modelo removido. O reconhecimento padrão por cabeçalhos continua ativo.', 'warn');
-    if(State.view==='configuracoes') Views.configuracoes.render();
   }
 
   function renderSummary(s){
@@ -346,5 +290,5 @@ const Importer = (() => {
     inp.click();
   }
 
-  return { pick, handle, pickModel, clearModel, saveModel, KIND_LABELS };
+  return { pick, handle };
 })();
