@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="application-version" content="2.2.0">
+<meta name="application-version" content="2.3.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -15,19 +15,19 @@
 <script src="assets/vendor/chart.min.js"></script>
 <script src="assets/vendor/lucide.min.js"></script>
 <link rel="stylesheet" href="css/variables.css">
-<link rel="stylesheet" href="css/layout.v2.2.0.css">
+<link rel="stylesheet" href="css/layout.v2.3.0.css">
 <link rel="stylesheet" href="css/dashboard.css">
 <link rel="stylesheet" href="css/tables.css">
-<link rel="stylesheet" href="css/components.v2.2.0.css">
+<link rel="stylesheet" href="css/components.v2.3.0.css">
 <link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
 <div id="app">
   <aside id="sidebar">
-    <div class="brand">
+    <button class="brand brand-profile-button" id="account-toggle" type="button" title="Abrir perfil e configurações" aria-label="Abrir perfil e configurações">
       <div class="brand-logo" id="company-logo-box"><i data-lucide="zap"></i></div>
-      <div><b id="company-name">Controle Financeiro</b><small>Gestão de Obras</small></div>
-    </div>
+      <div><b id="company-name">Controle Financeiro</b><small>Perfil e configurações</small></div>
+    </button>
     <nav id="nav">
       <div class="nav-sep">Visão Geral</div>
       <button class="nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
@@ -48,7 +48,7 @@
       <div class="nav-sep">Conta</div>
       <button class="nav-item nav-logout" id="nav-logout" type="button"><i data-lucide="log-out"></i>Sair</button>
     </nav>
-    <div id="sidebar-footer"><span id="storage-status">v2.2 · carregando…</span><br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
+    <div id="sidebar-footer"><span id="storage-status">v2.3 · carregando…</span><br><kbd>Ctrl</kbd>+<kbd>K</kbd> pesquisa · <kbd>Ctrl</kbd>+<kbd>D</kbd> tema</div>
   </aside>
   <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
   <main>
@@ -62,7 +62,6 @@
         <div id="search-results"></div>
       </div>
       <button class="icon-btn" id="future-toggle" title="Gastos previstos" aria-label="Abrir gastos previstos"><i data-lucide="calendar-clock"></i></button>
-      <button class="account-button" id="account-toggle" type="button" title="Abrir configurações da conta" aria-label="Abrir configurações da conta"><i data-lucide="circle-user-round"></i><span>Perfil</span></button>
       <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
     </header>
     <div id="content-wrap"><div id="content"></div><aside id="rightbar"><div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div><div id="rightbar-content"></div></aside></div>
@@ -74,13 +73,13 @@
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
 <input type="file" id="json-input" accept=".json" style="display:none">
 <input type="file" id="img-input" accept="image/png,image/jpeg,image/svg+xml" style="display:none">
-<script src="config/cloud-config.js?v=2.2.0"></script>
-<script src="database/cloud.v2.2.0.js"></script>
-<script src="database/indexeddb.v2.2.0.js"></script>
+<script src="config/cloud-config.js?v=2.3.0"></script>
+<script src="database/cloud.v2.3.0.js"></script>
+<script src="database/indexeddb.v2.3.0.js"></script>
 <script src="utils/format.js"></script>
 <script src="utils/helpers.js"></script>
 <script src="modules/custos/custos.js"></script>
-<script src="js/importer.v2.2.0.js"></script>
+<script src="js/importer.v2.3.0.js"></script>
 <script src="js/router.js"></script>
 <script src="modules/projetos/projetos.js"></script>
 <script src="modules/orcamentos/orcamentos.js"></script>
@@ -90,12 +89,12 @@
 <script src="modules/configuracoes/categorias.js"></script>
 <script src="modules/custos/basecalculo.js"></script>
 <script src="modules/dashboard/charts.js"></script>
-<script src="modules/compras/compras.v2.2.0.js"></script>
+<script src="modules/compras/compras.v2.3.0.js"></script>
 <script src="modules/dashboard/dashboard.js"></script>
 <script src="utils/export.js"></script>
 <script src="modules/relatorios/relatorios.js"></script>
-<script src="modules/configuracoes/configuracoes.v2.2.0.js"></script>
-<script src="js/app.v2.2.0.js"></script>
-<script src="js/auth-ui.v2.2.0.js"></script>
+<script src="modules/configuracoes/configuracoes.v2.3.0.js"></script>
+<script src="js/app.v2.3.0.js"></script>
+<script src="js/auth-ui.v2.3.0.js"></script>
 </body>
 </html>

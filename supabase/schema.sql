@@ -275,6 +275,20 @@ as $$
     );
 $$;
 
+-- E-mail confirmado da conta autenticada. A leitura vem de auth.users, não de
+-- metadados editáveis no navegador, e é usada para validar convites.
+create or replace function clique_obras_private.current_user_email()
+returns text
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select lower(coalesce(u.email,''))
+  from auth.users u
+  where u.id=(select auth.uid());
+$$;
+
 revoke all on all functions in schema clique_obras_private from public;
 grant usage on schema clique_obras_private to authenticated;
 grant execute on function clique_obras_private.is_org_member(uuid) to authenticated;
@@ -284,6 +298,7 @@ grant execute on function clique_obras_private.can_manage_users(uuid) to authent
 grant execute on function clique_obras_private.can_view_store(uuid,text) to authenticated;
 grant execute on function clique_obras_private.can_edit_store(uuid,text) to authenticated;
 grant execute on function clique_obras_private.can_view_profile(uuid) to authenticated;
+grant execute on function clique_obras_private.current_user_email() to authenticated;
 
 -- Cria o perfil e a organização de novos usuários. Quando houver convite
 -- pendente, o usuário entra diretamente na organização convidada.
@@ -379,6 +394,56 @@ drop trigger if exists clique_obras_on_auth_user_updated on auth.users;
 create trigger clique_obras_on_auth_user_updated
 after update of email, raw_user_meta_data on auth.users
 for each row execute function clique_obras_private.handle_user_updated();
+
+-- Aceita todos os convites pendentes do usuário em uma única transação.
+-- A função não recebe IDs nem permissões do navegador: usa o usuário
+-- autenticado e copia exatamente os dados definidos pelo administrador.
+create or replace function public.accept_organization_invitations()
+returns integer
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  actor_email text;
+  pending record;
+  accepted_count integer := 0;
+begin
+  if actor_id is null then
+    raise exception 'Sessão autenticada obrigatória.';
+  end if;
+
+  actor_email := clique_obras_private.current_user_email();
+  if coalesce(actor_email,'') = '' then
+    raise exception 'A conta autenticada não possui e-mail válido.';
+  end if;
+
+  for pending in
+    select i.*
+    from public.organization_invitations i
+    where i.status='pending'
+      and lower(i.email)=actor_email
+    order by i.created_at
+    for update
+  loop
+    insert into public.organization_members (organization_id,user_id,role,permissions)
+    values (pending.organization_id,actor_id,pending.role,pending.permissions)
+    on conflict (organization_id,user_id) do nothing;
+
+    update public.organization_invitations
+    set status='accepted', accepted_at=coalesce(accepted_at,now())
+    where id=pending.id;
+
+    accepted_count := accepted_count + 1;
+  end loop;
+
+  return accepted_count;
+end;
+$$;
+
+revoke all on function public.accept_organization_invitations() from public, anon;
+grant execute on function public.accept_organization_invitations() to authenticated;
 
 -- Preenche organization_id para compatibilidade com a versão anterior do
 -- frontend, que enviava apenas user_id.
@@ -488,7 +553,7 @@ begin
   if clique_obras_private.can_manage_users(old.organization_id) then
     return new;
   end if;
-  if lower(old.email) <> lower(coalesce((select auth.jwt())->>'email',''))
+  if lower(old.email) <> clique_obras_private.current_user_email()
     or new.organization_id <> old.organization_id
     or new.email <> old.email
     or new.role <> old.role
@@ -560,11 +625,14 @@ with check (
   clique_obras_private.can_manage_users(organization_id)
   or (
     user_id=(select auth.uid())
+    and role in ('admin','editor','viewer')
     and exists (
       select 1 from public.organization_invitations i
       where i.organization_id=organization_members.organization_id
         and i.status='pending'
-        and lower(i.email)=lower(coalesce((select auth.jwt())->>'email',''))
+        and lower(i.email)=clique_obras_private.current_user_email()
+        and i.role=organization_members.role
+        and i.permissions=organization_members.permissions
     )
   )
 );
@@ -586,8 +654,8 @@ on public.organization_invitations for select to authenticated
 using (
   clique_obras_private.can_manage_users(organization_id)
   or (
-    status='pending'
-    and lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+    lower(email)=clique_obras_private.current_user_email()
+    and status in ('pending','accepted')
   )
 );
 
@@ -606,12 +674,15 @@ using (
   clique_obras_private.can_manage_users(organization_id)
   or (
     status='pending'
-    and lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+    and lower(email)=clique_obras_private.current_user_email()
   )
 )
 with check (
   clique_obras_private.can_manage_users(organization_id)
-  or lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+  or (
+    status='accepted'
+    and lower(email)=clique_obras_private.current_user_email()
+  )
 );
 
 drop policy if exists "cliqueobras_invitations_delete" on public.organization_invitations;
