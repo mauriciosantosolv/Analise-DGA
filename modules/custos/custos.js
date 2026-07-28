@@ -121,11 +121,13 @@ const Biz = {
     const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // somente compras
     const planned = State.planning.filter(x => x.projectId === p.id && inCategory(x));
     const projected = planned.reduce((s,x) => s+x.value, 0); // somente Planejamento
-    // Medições: faturado e aguardando aprovação são separados. Somente registros
-    // com status Faturada/Faturado alimentam o card verde de faturamento.
+    // Medições: cada etapa do fluxo é calculada separadamente para que o
+    // dashboard mostre o que aguarda aprovação, o que já foi aprovado e o que
+    // foi faturado, sem perder o total efetivamente medido.
     const measurements = State.measurements.filter(m => m.projectId === p.id);
     const measured = measurements.reduce((s,m)=>s+m.value,0);
     const invoiced = measurements.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((s,m)=>s+m.value,0);
+    const approved = measurements.filter(m=>U.norm(m.status).startsWith('aprova')).reduce((s,m)=>s+m.value,0);
     const awaitingApproval = measurements.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
     const invoicedPct = p.saleValue > 0 ? invoiced / p.saleValue * 100 : null;
@@ -168,7 +170,7 @@ const Biz = {
     return { budgetTotal, spent, spentPurchases, projected, projectedPurchases, committedTotal, balance,
              consumed, marginPlanned, marginCurrent, profit, deviation, daysLeft, dailyBurn,
              burnoutDate, health, light, overhead, plannedFuture:projected, purchases, budgets,
-             measured, measuredPct, invoiced, invoicedPct, awaitingApproval };
+             measured, measuredPct, invoiced, invoicedPct, approved, awaitingApproval };
   },
 
   measurementCompletion(p){

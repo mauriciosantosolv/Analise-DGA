@@ -108,7 +108,7 @@ const DB = (() => {
     Cloud.bindCurrentUser();
     return {mode:'downloaded-cloud',records:remote.length};
   }
-  return { open, all, put, bulkPut, del, clear, syncFromCloud, uploadLocalToCloud, STORES };
+  return { open, all, put, bulkPut, del, clear, clearLocalCache, syncFromCloud, uploadLocalToCloud, STORES };
 })();
 
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */

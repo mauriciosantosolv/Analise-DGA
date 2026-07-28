@@ -22,6 +22,9 @@ const Cloud = (() => {
   const cfg = window.CLIQUE_OBRAS_CLOUD || {};
   let session = null;
   let orgContext = {organizations:[], active:null};
+  let realtimeClient = null;
+  let realtimeChannel = null;
+  let realtimeStatus = 'CLOSED';
   let warnedOffline = false;
   let accessDeniedMessage = '';
 
@@ -166,6 +169,8 @@ const Cloud = (() => {
       });
       saveSession(data);
       if(!user()) await fetchCurrentUser();
+      if(realtimeClient && session && session.access_token)
+        await realtimeClient.realtime.setAuth(session.access_token);
       return true;
     }catch(e){ saveSession(null); return false; }
   }
@@ -223,15 +228,32 @@ const Cloud = (() => {
     const organizations=await request(`/rest/v1/organizations?select=id,name,created_by,created_at&id=in.(${ids.map(encodeURIComponent).join(',')})`, {
       headers:authHeaders(false)
     }) || [];
+    const profiles=await request(`/rest/v1/profiles?select=active_organization_id&id=eq.${encodeURIComponent(user().id)}&limit=1`, {
+      headers:authHeaders(false)
+    }) || [];
     const byId=Object.fromEntries(organizations.map(x=>[x.id,x]));
     const choices=memberships.map(m=>({
       ...(byId[m.organization_id]||{id:m.organization_id,name:'Organização'}),
-      membership:{role:m.role,permissions:m.permissions||{}}
+      membership:{role:m.role,permissions:m.permissions||{}},
+      joinedAt:m.joined_at
     }));
-    const saved=localStorage.getItem(ACTIVE_ORG_KEY);
-    const selected=choices.find(x=>x.id===saved) || choices[0];
+    const cloudSaved=profiles[0] && profiles[0].active_organization_id;
+    const localSaved=localStorage.getItem(ACTIVE_ORG_KEY);
+    const selected=choices.find(x=>x.id===cloudSaved) ||
+      choices.find(x=>x.id===localSaved) ||
+      choices[0];
     localStorage.setItem(ACTIVE_ORG_KEY,selected.id);
     orgContext={organizations:choices,active:selected};
+    // Migra a preferência que existia apenas neste navegador para o perfil
+    // remoto. Assim, o mesmo usuário abre a mesma organização em qualquer
+    // aparelho.
+    if(cloudSaved!==selected.id){
+      await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(user().id)}`, {
+        method:'PATCH',
+        headers:{...authHeaders(true),Prefer:'return=minimal'},
+        body:JSON.stringify({active_organization_id:selected.id})
+      });
+    }
     return orgContext;
   }
   async function ensureSession(){
@@ -260,6 +282,7 @@ const Cloud = (() => {
   }
   async function signOut(){
     const accessToken=session&&session.access_token;
+    stopRealtime();
     saveSession(null);
     if(!accessToken) return;
     const controller=typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -302,10 +325,74 @@ const Cloud = (() => {
       throw err;
     }
   }
-  function switchOrganization(id){
+  async function switchOrganization(id){
     if(!orgContext.organizations.some(x=>x.id===id)) throw new Error('Organização não disponível para esta conta.');
+    await ensureFresh();
+    await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(user().id)}`, {
+      method:'PATCH',
+      headers:{...authHeaders(true),Prefer:'return=minimal'},
+      body:JSON.stringify({active_organization_id:id})
+    });
     localStorage.setItem(ACTIVE_ORG_KEY,id);
+    stopRealtime();
     location.reload();
+  }
+
+  async function refreshOrganizationContext(){
+    const previousId=(organization()||{}).id || '';
+    await loadOrganizationContext();
+    return {
+      changed:previousId!==((organization()||{}).id||''),
+      organization:organization()
+    };
+  }
+
+  function stopRealtime(){
+    if(realtimeClient && realtimeChannel){
+      try{ realtimeClient.removeChannel(realtimeChannel); }catch(e){}
+    }
+    realtimeChannel=null;
+    realtimeClient=null;
+    realtimeStatus='CLOSED';
+  }
+
+  async function startRealtime(onChange){
+    stopRealtime();
+    if(!active() || !organization() || !window.supabase || typeof window.supabase.createClient!=='function')
+      return false;
+    realtimeClient=window.supabase.createClient(baseUrl(),cfg.publishableKey,{
+      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+      realtime:{params:{eventsPerSecond:10}}
+    });
+    await realtimeClient.realtime.setAuth(session.access_token);
+    const orgId=organization().id;
+    const emit=(kind,payload)=>{
+      if(typeof onChange==='function') onChange({kind,payload,organizationId:orgId});
+    };
+    let subscribedOnce=false;
+    realtimeChannel=realtimeClient
+      .channel(`clique-obras-${orgId}-${user().id}`)
+      .on('postgres_changes',{
+        event:'*',schema:'public',table:'app_records',
+        filter:`organization_id=eq.${orgId}`
+      },payload=>emit('records',payload))
+      .on('postgres_changes',{
+        event:'*',schema:'public',table:'organization_members'
+      },payload=>emit('membership',payload))
+      .on('postgres_changes',{
+        event:'UPDATE',schema:'public',table:'organizations',
+        filter:`id=eq.${orgId}`
+      },payload=>emit('organization',payload))
+      .subscribe((status,error)=>{
+        realtimeStatus=status;
+        if(status==='SUBSCRIBED'){
+          if(subscribedOnce) emit('reconnected',null);
+          subscribedOnce=true;
+        }else if(error && typeof console!=='undefined'){
+          console.warn('Falha na sincronização em tempo real.',error);
+        }
+      });
+    return true;
   }
 
   function scopeId(){ return user() && organization() ? `${user().id}:${organization().id}` : ''; }
@@ -518,9 +605,11 @@ const Cloud = (() => {
     signOut, resetPassword, updatePassword, updateDisplayName, consumeAuthCallback, refresh, user,
     accessDeniedMessage:()=>accessDeniedMessage,
     organization, organizations, membership, role, switchOrganization,
+    refreshOrganizationContext,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
+    startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };

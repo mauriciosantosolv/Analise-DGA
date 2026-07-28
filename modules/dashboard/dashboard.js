@@ -47,7 +47,9 @@ Views.dashboard = {
     const stats = projects.map(p=>({p, s:Biz.projectStats(p, categoryFilter)}));
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
     const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
+    const measured = sum('measured');
     const invoiced = sum('invoiced');
+    const approved = sum('approved');
     const awaitingApproval = sum('awaitingApproval');
     const budgetTotal = sum('budgetTotal');
     // A fonte de verdade é projectStats(): assim, o Realizado do topo sempre
@@ -80,8 +82,8 @@ Views.dashboard = {
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Medido / Faturado', U.money(invoiced), 'ruler', 'accent-green', 'Aguardando aprovação: '+U.money(awaitingApproval), `App.goFiltered('medicoes','${selectedProject}')`)}
-        ${kpi('Saldo a Medir', U.money(revenue-invoiced), 'file-clock')}
+        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, `App.goFiltered('medicoes','${selectedProject}')`)}
+        ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos','${selectedProject}')`)}
         ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro','${selectedProject}')`)}
         ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento','${selectedProject}')`)}

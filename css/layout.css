@@ -41,8 +41,12 @@ main{display:flex;flex-direction:column;overflow:hidden}
 .topbar-actions{justify-content:flex-end}
 #page-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #global-search-wrap{position:relative;width:100%;max-width:430px;justify-self:center}
-#global-search{padding-left:36px}
+#global-search{padding-left:36px;padding-right:42px}
 #global-search-wrap>svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text3);pointer-events:none}
+#global-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:29px;height:29px;border:0;border-radius:8px;background:transparent;color:var(--text3);display:none;align-items:center;justify-content:center;z-index:2}
+#global-search-clear.visible{display:flex}
+#global-search-clear:hover,#global-search-clear:focus-visible{background:var(--surface2);color:var(--text)}
+#global-search-clear svg{width:15px;height:15px}
 #search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);max-height:380px;overflow-y:auto;display:none;z-index:100}
 #search-results.open{display:block}
 .sr-item{padding:9px 13px;cursor:pointer;display:flex;gap:10px;align-items:center;font-size:.87rem;border-bottom:1px solid var(--border2)}

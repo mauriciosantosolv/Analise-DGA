@@ -143,7 +143,15 @@ Views.configuracoes = {
         </div></div>`;
     let logo = State.settings.companyLogo || '';
     if(cloudConnected && Cloud.organizations().length>1)
-      document.getElementById('cfg-active-org').onchange=e=>Cloud.switchOrganization(e.target.value);
+      document.getElementById('cfg-active-org').onchange=async e=>{
+        try{
+          UI.loading(true,'Trocando organização…');
+          await Cloud.switchOrganization(e.target.value);
+        }catch(err){
+          UI.loading(false);
+          UI.toast('Não foi possível trocar a organização: '+U.esc(err.message||err),'error',6500);
+        }
+      };
     if(cloudConnected){
       document.getElementById('cfg-user-name-save').onclick=()=>this.saveOwnName();
       document.getElementById('cfg-user-name').onkeydown=e=>{

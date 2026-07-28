@@ -87,6 +87,7 @@ Dash.projectBanner = function(){
         ${statusTag(p.status)}<span class="tag tag-gray">${U.esc(p.type||'—')}</span>
         ${p.client?`<span class="tag tag-blue">${U.esc(p.client)}</span>`:''}
         <span class="tag tag-green">Faturado: ${U.money(st.invoiced)}</span>
+        ${st.approved?`<span class="tag tag-blue">Aprovado: ${U.money(st.approved)}</span>`:''}
         ${st.awaitingApproval?`<span class="tag tag-amber">Aguardando aprovação: ${U.money(st.awaitingApproval)}</span>`:''}</div>
       <div class="project-dates">
         <div><small>Data de início</small><b>${p.start?U.date(p.start):'Não informado'}</b></div>

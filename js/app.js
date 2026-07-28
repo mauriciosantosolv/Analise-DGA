@@ -17,6 +17,8 @@
 const App = {
   historyReady:false,
   lastCloudRefresh:0,
+  realtimeSyncTimer:null,
+  accessCheckTimer:null,
   viewStores:{
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
@@ -202,8 +204,11 @@ const App = {
 
   /* Pesquisa global */
   initSearch(){
-    const inp = document.getElementById('global-search'), box = document.getElementById('search-results');
+    const inp = document.getElementById('global-search');
+    const box = document.getElementById('search-results');
+    const clear = document.getElementById('global-search-clear');
     const run = () => {
+      if(clear) clear.classList.toggle('visible',inp.value.length>0);
       const q = U.norm(inp.value);
       if(q.length < 2){ box.classList.remove('open'); return; }
       const out = [];
@@ -230,6 +235,13 @@ const App = {
     };
     inp.oninput = U.debounce(run, 200);
     inp.onfocus = () => { if(inp.value.length>=2) run(); };
+    if(clear) clear.onclick = () => {
+      inp.value='';
+      clear.classList.remove('visible');
+      box.classList.remove('open');
+      box.innerHTML='';
+      inp.focus();
+    };
     document.addEventListener('click', e => { if(!e.target.closest('#global-search-wrap')) box.classList.remove('open'); });
   },
 
@@ -283,8 +295,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.4 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.4 · dados locais';
+      el.textContent=`v2.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.5 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -324,6 +336,44 @@ const App = {
       this.applyStorageStatus(); this.render();
     }catch(err){
       if(showToast){ UI.loading(false); UI.toast('Falha ao sincronizar: '+U.esc(err.message),'error',7000); }
+    }
+  },
+  scheduleRealtimeSync(change={}){
+    if(change.kind==='membership'){
+      this.validateCloudAccess();
+      return;
+    }
+    clearTimeout(this.realtimeSyncTimer);
+    const attempt=async()=>{
+      if(typeof UI!=='undefined' && UI.isModalOpen()){
+        this.realtimeSyncTimer=setTimeout(attempt,1000);
+        return;
+      }
+      await this.syncCloudNow(false);
+      if(change.kind==='organization') this.applyBranding();
+    };
+    this.realtimeSyncTimer=setTimeout(attempt,350);
+  },
+  async validateCloudAccess(silent=true){
+    if(typeof Cloud==='undefined' || !Cloud.active()) return false;
+    try{
+      const result=await Cloud.refreshOrganizationContext();
+      if(result.changed){
+        location.reload();
+        return false;
+      }
+      this.applyBranding();
+      return true;
+    }catch(err){
+      if(err && err.code==='NO_ORGANIZATION_ACCESS'){
+        try{ await DB.clearLocalCache(); }catch(e){}
+        await Cloud.signOut();
+        location.reload();
+        return false;
+      }
+      if(!silent && typeof UI!=='undefined')
+        UI.toast('Não foi possível validar o acesso à organização: '+U.esc(err.message||err),'warn',6000);
+      return false;
     }
   },
   logoutCloud(){
@@ -457,6 +507,11 @@ const App = {
     this.applyTheme(State.settings.theme || 'light');
     this.applyBranding();
     this.applyStorageStatus();
+    if(typeof Cloud!=='undefined' && Cloud.active()){
+      await Cloud.startRealtime(change=>this.scheduleRealtimeSync(change));
+      clearInterval(this.accessCheckTimer);
+      this.accessCheckTimer=setInterval(()=>this.validateCloudAccess(true),60000);
+    }
     // A preferência navCollapsed salva em versões anteriores é ignorada de
     // propósito: o menu no desktop agora é sempre visível (estabilidade).
     const initialView=this.initHistory();
@@ -470,7 +525,12 @@ const App = {
       else if(++iconTries > 20) clearInterval(iconTimer);
     }, 500);
     this._booted = true;
-    window.addEventListener('online',()=>{ if(Cloud.active()) Cloud.flushQueue().then(()=>this.applyStorageStatus()); });
+    window.addEventListener('online',()=>{
+      if(Cloud.active()) Cloud.flushQueue()
+        .then(()=>this.syncCloudNow(false))
+        .then(()=>Cloud.startRealtime(change=>this.scheduleRealtimeSync(change)))
+        .then(()=>this.applyStorageStatus());
+    });
     document.addEventListener('visibilitychange',()=>{
       if(!document.hidden && Cloud.active() && Date.now()-this.lastCloudRefresh>120000 && !UI.isModalOpen())
         this.syncCloudNow(false);

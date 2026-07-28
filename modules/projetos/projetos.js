@@ -109,12 +109,20 @@ Views.projetos = {
     const s = Biz.projectStats(p);
     const cats = Biz.categoryStats([p]);
     const ring = Dash.healthRing(s.health, s.light);
+    const canJustify=typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('projects');
+    const deviationLabel=s.deviation==null
+      ? 'Sem base para calcular'
+      : s.deviation>0
+        ? `Estouro previsto de ${U.pct(s.deviation)}`
+        : s.deviation<0
+          ? `Economia prevista de ${U.pct(-s.deviation)}`
+          : 'Sem desvio previsto';
     UI.modal({ title:`${U.esc(U.projLabel(p))}`, wide:true, body:`
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
         ${ring}
         <div class="kpi-grid" style="flex:1;margin:0">
           <div class="kpi"><div class="k-label">Venda</div><div class="k-value">${U.money(p.saleValue)}</div></div>
-          <div class="kpi accent-green"><div class="k-label">Medido / Faturado</div><div class="k-value">${U.money(s.invoiced)}</div><div class="k-sub">Aguardando aprovação: ${U.money(s.awaitingApproval)}</div></div>
+          <div class="kpi accent-green"><div class="k-label">Total Medido</div><div class="k-value">${U.money(s.measured)}</div><div class="k-sub">Faturado: ${U.money(s.invoiced)} · Aprovado: ${U.money(s.approved)} · Aguardando: ${U.money(s.awaitingApproval)}</div></div>
           <div class="kpi"><div class="k-label">Orçado</div><div class="k-value">${U.money(s.budgetTotal)}</div></div>
           <div class="kpi"><div class="k-label">Realizado</div><div class="k-value">${U.money(s.spent)}</div><div class="k-sub">${U.pct(s.consumed)} do orçamento</div></div>
           <div class="kpi ${s.balance<0?'accent-red':'accent-green'}"><div class="k-label">Saldo</div><div class="k-value">${U.money(s.balance)}</div></div>
@@ -122,12 +130,20 @@ Views.projetos = {
           <div class="kpi ${s.marginCurrent<0?'accent-red':'accent-blue'}"><div class="k-label">Margem Atual</div><div class="k-value">${U.pct(s.marginCurrent)}</div><div class="k-sub">Prevista: ${U.pct(s.marginPlanned)}</div></div>
         </div>
       </div>
-      <div class="import-log" style="margin-bottom:14px">
-        <b>Compromisso financeiro</b> — realizado + planejamento: <b>${U.money(s.committedTotal)}</b>
-        · margem estimada <b>${U.pct(s.marginCurrent)}</b>
-        ${s.burnoutDate?` · orçamento esgota em <b>${U.date(s.burnoutDate)}</b>`:''}
-        ${s.deviation!=null?` · ${s.deviation>0?`estouro previsto de <b style="color:var(--red)">${U.pct(s.deviation)}</b>`:`economia prevista de <b style="color:var(--green)">${U.pct(-s.deviation)}</b>`}`:''}
-        ${s.daysLeft!=null?` · ${s.daysLeft} dias restantes de contrato`:''}
+      <div class="card deviation-justification" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <div><h3>Resultado e justificativa do desvio</h3><small style="color:var(--text3)">Este conteúdo aparece ao abrir o projeto pelo ticker ou pelo semáforo financeiro.</small></div>
+          <span class="tag ${s.deviation!=null&&s.deviation>0?'tag-red':s.deviation!=null&&s.deviation<0?'tag-green':'tag-gray'}">${U.esc(deviationLabel)}</span>
+        </div>
+        <div class="import-log" style="margin-bottom:10px">
+          Saldo atual: <b style="color:${s.balance<0?'var(--red)':'var(--green)'}">${U.money(s.balance)}</b>
+          · margem estimada <b>${U.pct(s.marginCurrent)}</b>
+          ${s.burnoutDate?` · orçamento pode se esgotar em <b>${U.date(s.burnoutDate)}</b>`:''}
+          ${s.daysLeft!=null?` · ${s.daysLeft} dias restantes de contrato`:''}
+        </div>
+        <label for="project-deviation-justification">Justificativa registrada pelo usuário</label>
+        <textarea id="project-deviation-justification" rows="3" maxlength="1200" placeholder="Explique a causa do desvio, o impacto e a ação prevista." ${canJustify?'':'disabled'}>${U.esc(p.deviationJustification||'')}</textarea>
+        ${p.deviationJustifiedAt?`<small style="display:block;margin-top:6px;color:var(--text3)">Atualizada em ${U.date(p.deviationJustifiedAt)}${p.deviationJustifiedBy?` por ${U.esc(p.deviationJustifiedBy)}`:''}.</small>`:''}
       </div>
       <div class="project-dates" style="margin-bottom:14px">
         <div><small>Data de início</small><b>${p.start?U.date(p.start):'Não informado'}</b></div>
@@ -143,10 +159,31 @@ Views.projetos = {
           <td class="num">${U.pct(c.committedPct)}</td><td class="num">${U.pct(c.weight)}</td>
           <td>${Dash.trendIcon(c.trend)}</td><td>${lightDot(c.status)}</td></tr>`).join('')}</tbody>
       </table></div></div>`,
-      footer:`<button class="btn btn-ghost" onclick="Dash.simulator('${p.id}')"><i data-lucide="sliders-horizontal"></i>Simulador</button>
+      footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification('${p.id}')"><i data-lucide="message-square-check"></i>Salvar justificativa</button>`:''}
+              <button class="btn btn-ghost" onclick="Dash.simulator('${p.id}')"><i data-lucide="sliders-horizontal"></i>Simulador</button>
               <button class="btn btn-ghost" onclick="Exports.projectPDF('${p.id}')"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
-              <button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
+              <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`
     });
+  },
+  async saveDeviationJustification(id){
+    const p=State.projects.find(x=>x.id===id);
+    const field=document.getElementById('project-deviation-justification');
+    if(!p || !field) return;
+    const current=typeof Cloud!=='undefined' && Cloud.active() ? Cloud.user()||{} : {};
+    const author=String((current.user_metadata&&current.user_metadata.full_name)||current.email||'Usuário');
+    const justification=field.value.trim();
+    const updated={
+      ...p,
+      deviationJustification:justification,
+      deviationJustifiedAt:new Date().toISOString(),
+      deviationJustifiedBy:author
+    };
+    await DB.put('projects',updated);
+    await State.reload();
+    UI.close();
+    this.detail(id);
+    UI.toast(justification?'Justificativa do desvio salva':'Justificativa removida','success');
+    App.renderTicker();
   },
   compare(){
     const opts = State.projects.map(p=>`<option value="${p.id}">${U.esc(U.projLabel(p))}</option>`).join('');

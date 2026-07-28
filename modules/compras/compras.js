@@ -380,16 +380,28 @@ Dash.purchaseForm = function(id){
       desc:document.getElementById('pf-desc').value.trim(), notes:document.getElementById('pf-notes').value,
       sourceType:document.getElementById('pf-source').value };
     if(!vals.projectId || !vals.category) return UI.toast('Preencha projeto e categoria', 'warn');
-    let offsetError=null;
+    if(!(Number(vals.value)>0)) return UI.toast('Informe um valor de gasto maior que zero','warn');
+    let offsetApplied=false;
     if(isNew){
       const created={ id:U.id(), ...vals, costCenter:vals.category,
         importedAt:Date.now(), file:`(manual - ${{purchase:'Compra',paidAccount:'Conta paga',labor:'Mão de obra'}[vals.sourceType]})` };
-      await DB.put('purchases',created);
       const useOffset=document.getElementById('pf-offset').checked;
       const planId=document.getElementById('pf-plan').value;
-      if(useOffset&&planId){
-        try{ await Views.financeiro.offsetPlanning(created,planId); }
-        catch(err){ offsetError=err; }
+      if(useOffset&&!planId)
+        return UI.toast('Selecione o item planejado que deverá ser abatido','warn');
+      try{
+        // offsetPlanning já salva o lançamento depois de reduzir o
+        // planejamento e restaura o saldo se qualquer etapa falhar. Evita o
+        // antigo salvamento duplo, que podia deixar a despesa registrada sem o
+        // abatimento solicitado.
+        if(useOffset){
+          offsetApplied=await Views.financeiro.offsetPlanning(created,planId);
+          if(!offsetApplied) throw new Error('O abatimento selecionado não pôde ser aplicado.');
+        }else{
+          await DB.put('purchases',created);
+        }
+      }catch(err){
+        return UI.toast('Não foi possível salvar o lançamento com o abatimento: '+U.esc(err.message||err),'error',7500);
       }
     } else {
       Object.assign(x, vals);
@@ -397,8 +409,7 @@ Dash.purchaseForm = function(id){
     }
     await State.reload();
     UI.close(); App.render();
-    if(offsetError) UI.toast(`Lançamento salvo, mas o planejamento não foi abatido: ${U.esc(offsetError.message)}`,'warn',7000);
-    else UI.toast(isNew?'Lançamento adicionado':'Lançamento atualizado', 'success');
+    UI.toast(offsetApplied?'Lançamento adicionado e planejamento abatido':isNew?'Lançamento adicionado':'Lançamento atualizado', 'success');
   };
 };
 

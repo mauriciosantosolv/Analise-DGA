@@ -356,7 +356,7 @@ main {
   height: 42px;
   min-height: 42px;
   padding-left: 38px;
-  padding-right: 14px;
+  padding-right: 44px;
   border-color: var(--border2);
   border-radius: 13px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
