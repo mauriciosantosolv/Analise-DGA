@@ -3,7 +3,7 @@
  *
  * Responsabilidades:
  * - tela de configurações (tema, moeda, marca)
- * - tela e rotinas de backup: exportar, restaurar, limpar banco
+ * - tela e rotinas de backup: exportar e restaurar
  *
  * Dependências:
  * - database
@@ -42,16 +42,6 @@ const Backup = {
       fr.readAsText(f);
     };
     inp.click();
-  },
-  async wipe(){
-    UI.confirm('<b>Atenção:</b> isto apagará TODOS os dados do sistema (projetos, compras, orçamentos, planejamento, clientes). Esta ação não pode ser desfeita. Deseja realmente continuar?', () => {
-      UI.confirm('Última confirmação: apagar tudo definitivamente?', async () => {
-        UI.loading(true, 'Limpando banco…');
-        for(const s of DB.STORES) await DB.clear(s);
-        await State.reload();
-        UI.loading(false); UI.toast('Banco de dados limpo', 'warn'); App.render();
-      });
-    });
   }
 };
 
@@ -318,7 +308,9 @@ Views.configuracoes = {
   async saveOrganizationName(){
     try{
       await Cloud.updateOrganizationName(document.getElementById('team-org-name').value);
-      UI.toast('Nome da organização atualizado','success'); App.applyStorageStatus();
+      UI.toast('Nome da organização atualizado','success');
+      App.applyStorageStatus();
+      App.applyBranding();
     }catch(err){ UI.toast('Não foi possível atualizar: '+U.esc(err.message),'error',6500); }
   }
 };
@@ -344,9 +336,6 @@ Views.backup = {
         <div class="card"><h3 style="margin-bottom:8px"><i data-lucide="history" style="width:16px;height:16px"></i> Snapshot Automático</h3>
           <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Cópia diária dos dados guardada neste navegador. ${(()=>{ try{ const t = +localStorage.getItem('ccf_snap_time'); return t ? 'Último: ' + U.date(t) : 'Ainda não criado.'; }catch(e){ return '—'; } })()}</p>
           <button class="btn btn-ghost btn-sm" onclick="Views.backup.restoreSnapshot()">Restaurar Snapshot</button></div>
-        <div class="card" style="border-color:var(--red)"><h3 style="margin-bottom:8px;color:var(--red)"><i data-lucide="trash-2" style="width:16px;height:16px"></i> Limpar Banco</h3>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Apaga todos os dados. Requer dupla confirmação.</p>
-          <button class="btn btn-danger btn-sm" onclick="Backup.wipe()">Apagar Tudo</button></div>
       </div>`;
     U.icons();
   },

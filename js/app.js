@@ -64,7 +64,7 @@ const App = {
     if(!target) return;
     const code=target.getAttribute('onclick')||'';
     const mutating=target.classList.contains('btn-danger') ||
-      /(?:\.form\(|purchaseForm\(|Importer\.pick\(|\.remove|\.wipe|\.restore|\.save)/.test(code) ||
+      /(?:\.form\(|purchaseForm\(|Importer\.pick\(|\.remove|\.restore|\.save)/.test(code) ||
       /(?:^|-)save$/.test(target.id||'');
     if(!mutating) return;
     event.preventDefault(); event.stopImmediatePropagation();
@@ -166,8 +166,12 @@ const App = {
   },
 
   /* Painel lateral fixo — gastos futuros */
+  futureExpenseRows(){
+    const projectId=State.filters.project || '';
+    return projectId ? State.planning.filter(x=>x.projectId===projectId) : State.planning;
+  },
   renderRightbar(){
-    const fut = Biz.futureExpenses();
+    const fut = Biz.futureExpenses(this.futureExpenseRows());
     const block = (title, items) => `
       <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
       ${items.length ? items.slice(0,6).map(x => { const p = State.projects.find(pr=>pr.id===x.projectId); return `
@@ -180,7 +184,7 @@ const App = {
     U.icons();
   },
   showFutureExpenses(){
-    const fut = Biz.futureExpenses();
+    const fut = Biz.futureExpenses(this.futureExpenseRows());
     const sections = [['Hoje',fut.today],['Próximos 7 dias',fut.d7],['8–15 dias',fut.d15],['16–30 dias',fut.d30]];
     UI.modal({
       title:'Gastos Previstos',
@@ -254,7 +258,18 @@ const App = {
     State.setSetting('theme', t); this.applyTheme(t);
   },
   applyBranding(){
-    if(State.settings.companyName) document.getElementById('company-name').textContent = State.settings.companyName;
+    const userName=document.getElementById('sidebar-user-name');
+    const orgName=document.getElementById('sidebar-org-name');
+    if(typeof Cloud!=='undefined' && Cloud.active()){
+      const current=Cloud.user()||{};
+      const email=String(current.email||'');
+      const displayName=String((current.user_metadata&&current.user_metadata.full_name)||email.split('@')[0]||'Usuário');
+      if(userName) userName.textContent=displayName;
+      if(orgName) orgName.textContent=(Cloud.organization()||{}).name || State.settings.companyName || 'Organização';
+    }else{
+      if(userName) userName.textContent='CliqueObras';
+      if(orgName) orgName.textContent=State.settings.companyName || 'Gestão de obras';
+    }
     if(State.settings.companyLogo){
       const box = document.getElementById('company-logo-box');
       box.style.background = 'transparent'; // remove fundo/borda quando há logo própria
@@ -266,8 +281,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.3 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.3 · dados locais';
+      el.textContent=`v2.1 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.0 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -309,16 +324,10 @@ const App = {
       if(showToast){ UI.loading(false); UI.toast('Falha ao sincronizar: '+U.esc(err.message),'error',7000); }
     }
   },
-  async logoutCloud(){
-    const logout=document.getElementById('nav-logout');
-    if(logout) logout.disabled=true;
-    UI.loading(true,'Saindo da conta…');
-    try{
-      await Cloud.signOut();
-    }finally{
-      // O parâmetro força a hospedagem a devolver a tela atualizada de login.
-      location.replace(`${location.origin}${location.pathname}?logout=${Date.now()}`);
-    }
+  logoutCloud(){
+    UI.confirm('Sair da conta da nuvem neste aparelho?',async()=>{
+      await Cloud.signOut(); location.reload();
+    },false);
   },
 
   _booted:false,
@@ -387,7 +396,11 @@ const App = {
       throw new Error('A nuvem está marcada como ativa, mas a URL ou a Publishable key em config/cloud-config.js é inválida.');
     if(typeof Cloud!=='undefined' && Cloud.configured()){
       const signedIn=await Cloud.ensureSession();
-      if(!signedIn){ UI.loading(false); this.showCloudLogin(); return; }
+      if(!signedIn){
+        UI.loading(false);
+        this.showCloudLogin(typeof Cloud.accessDeniedMessage==='function' ? Cloud.accessDeniedMessage() : '');
+        return;
+      }
       UI.loading(true,'Sincronizando base na nuvem…');
       await DB.syncFromCloud();
       this.lastCloudRefresh=Date.now();
@@ -425,8 +438,6 @@ const App = {
     document.querySelectorAll('.nav-item[data-view]').forEach(b => b.onclick = () => this.go(b.dataset.view));
     const logout=document.getElementById('nav-logout');
     if(logout) logout.onclick=()=>this.logoutCloud();
-    const account=document.getElementById('account-toggle');
-    if(account) account.onclick=()=>this.go('configuracoes');
     document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
     document.getElementById('future-toggle').onclick = () => this.showFutureExpenses();
     // Recolher menu no desktop foi REMOVIDO por estabilidade (travava a aba

@@ -23,6 +23,7 @@ const Cloud = (() => {
   let session = null;
   let orgContext = {organizations:[], active:null};
   let warnedOffline = false;
+  let accessDeniedMessage = '';
 
   function configured(){
     return cfg.enabled === true && cfg.provider === 'supabase' &&
@@ -159,15 +160,31 @@ const Cloud = (() => {
   }
 
   async function acceptPendingInvitations(){
-    // A associação e a baixa do convite precisam acontecer na mesma transação.
-    // O RPC valida o usuário autenticado e copia exatamente o perfil/permissões
-    // definidos pelo administrador, sem permitir promoção pelo navegador.
-    const accepted=await request('/rest/v1/rpc/accept_organization_invitations', {
-      method:'POST',
-      headers:{...authHeaders(true),Prefer:'return=representation'},
-      body:'{}'
-    });
-    return Number(accepted)||0;
+    const email=String((user()||{}).email||'').trim().toLowerCase();
+    if(!email) return 0;
+    const invites=await request(`/rest/v1/organization_invitations?select=id,organization_id,role,permissions&status=eq.pending&email=eq.${encodeURIComponent(email)}`, {
+      headers:authHeaders(false)
+    }) || [];
+    let accepted=0;
+    for(const invite of invites){
+      await request('/rest/v1/organization_members?on_conflict=organization_id%2Cuser_id', {
+        method:'POST',
+        headers:{...authHeaders(true),Prefer:'resolution=ignore-duplicates,return=minimal'},
+        body:JSON.stringify({
+          organization_id:invite.organization_id,
+          user_id:user().id,
+          role:invite.role||'viewer',
+          permissions:invite.permissions||{view:['projects'],edit:[],manage_users:false}
+        })
+      });
+      await request(`/rest/v1/organization_invitations?id=eq.${encodeURIComponent(invite.id)}`, {
+        method:'PATCH',
+        headers:{...authHeaders(true),Prefer:'return=minimal'},
+        body:JSON.stringify({status:'accepted',accepted_at:new Date().toISOString()})
+      });
+      accepted++;
+    }
+    return accepted;
   }
 
   async function loadOrganizationContext(){
@@ -178,8 +195,11 @@ const Cloud = (() => {
     const memberships=await request(`/rest/v1/organization_members?select=organization_id,role,permissions,joined_at&user_id=eq.${encodeURIComponent(user().id)}&order=joined_at.asc`, {
       headers:authHeaders(false)
     }) || [];
-    if(!memberships.length)
-      throw new Error('Sua conta ainda não está vinculada a uma organização do cliqueobras.');
+    if(!memberships.length){
+      const err=new Error('Seu acesso ao CliqueObras foi removido ou ainda não foi liberado por uma organização.');
+      err.code='NO_ORGANIZATION_ACCESS';
+      throw err;
+    }
     const ids=memberships.map(x=>x.organization_id);
     const organizations=await request(`/rest/v1/organizations?select=id,name,created_by,created_at&id=in.(${ids.map(encodeURIComponent).join(',')})`, {
       headers:authHeaders(false)
@@ -209,26 +229,21 @@ const Cloud = (() => {
     try{ await loadOrganizationContext(); }
     catch(e){
       if(e.status===401){ saveSession(null); return false; }
+      if(e.code==='NO_ORGANIZATION_ACCESS'){
+        accessDeniedMessage='Acesso indisponível. Solicite ao administrador da organização para liberar novamente a sua conta.';
+        saveSession(null);
+        localStorage.removeItem(ACTIVE_ORG_KEY);
+        return false;
+      }
       throw e;
     }
     return active();
   }
   async function signOut(){
-    // Remove primeiro a sessão deste navegador. O logout continua funcionando
-    // mesmo se o usuário estiver offline ou se o endpoint remoto demorar.
-    const accessToken=session && session.access_token;
+    try{
+      if(hasToken()) await request('/auth/v1/logout', {method:'POST',headers:authHeaders(false)});
+    }catch(e){}
     saveSession(null);
-    localStorage.removeItem(ACTIVE_ORG_KEY);
-    const projectRef=(baseUrl().match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/i)||[])[1];
-    if(projectRef) localStorage.removeItem(`sb-${projectRef}-auth-token`);
-    if(accessToken){
-      fetch(baseUrl()+'/auth/v1/logout',{
-        method:'POST',
-        keepalive:true,
-        headers:{apikey:cfg.publishableKey,Authorization:`Bearer ${accessToken}`}
-      }).catch(()=>{});
-    }
-    return true;
   }
 
   function organization(){ return orgContext.active; }
@@ -474,6 +489,7 @@ const Cloud = (() => {
   return {
     configured, requested:()=>cfg.enabled===true, active, ensureSession, signIn, signUp,
     signOut, resetPassword, updatePassword, consumeAuthCallback, refresh, user,
+    accessDeniedMessage:()=>accessDeniedMessage,
     organization, organizations, membership, role, switchOrganization,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,

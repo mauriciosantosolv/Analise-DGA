@@ -121,29 +121,7 @@ const AuthUI = (() => {
     U.icons();
     setTimeout(()=>{ const first=el.querySelector('input'); if(first) first.focus(); },50);
   }
-  function mountAccountButton(){
-    let btn=document.getElementById('account-toggle');
-    if(!Cloud.active()){
-      if(btn) btn.hidden=true;
-      return;
-    }
-    const topbar=document.getElementById('topbar'), theme=document.getElementById('theme-toggle');
-    if(!btn){
-      if(!topbar) return;
-      btn=document.createElement('button');
-      btn.type='button'; btn.id='account-toggle'; btn.className='account-button';
-      btn.innerHTML='<i data-lucide="circle-user-round"></i><span>Perfil</span>';
-      topbar.insertBefore(btn,theme||null);
-    }
-    btn.hidden=false;
-    btn.title='Abrir perfil e configurações';
-    btn.setAttribute('aria-label','Abrir perfil e configurações');
-    btn.onclick=()=>App.go('configuracoes');
-    const label=btn.querySelector('span');
-    if(label) label.textContent='Perfil';
-    U.icons();
-  }
-  return {show,mountAccountButton,friendlyError};
+  return {show,friendlyError};
 })();
 
 (() => {
@@ -170,6 +148,5 @@ const AuthUI = (() => {
       return;
     }
     await originalInit();
-    if(this._booted) AuthUI.mountAccountButton();
   };
 })();

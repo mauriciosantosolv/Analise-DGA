@@ -74,10 +74,7 @@
 .check-item input{width:17px;height:17px;flex:0 0 auto}
 .permission-banner{display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;padding:11px 13px;border:1px solid var(--amber);background:var(--amber-soft);border-radius:10px;color:var(--text2);font-size:.84rem}
 .permission-banner svg{width:17px;height:17px;color:var(--amber);flex:0 0 auto;margin-top:1px}
-.batch-filter-title{display:flex;align-items:center;gap:9px;margin-bottom:11px;color:var(--text)}
-.batch-filter-title>svg{width:20px;color:var(--blue);flex-shrink:0}
-.batch-filter-title small{display:block;color:var(--text3);font-weight:400;margin-top:2px}
-.batch-filters{display:grid;grid-template-columns:2fr repeat(3,minmax(130px,1fr));gap:9px;margin-bottom:12px}
+.batch-filters{display:grid;grid-template-columns:2fr repeat(4,minmax(130px,1fr));gap:9px;margin-bottom:12px}
 .batch-filters .filter-actions{display:flex;gap:7px;align-items:end}
 .batch-filter-summary{display:flex;gap:12px;align-items:center;flex-wrap:wrap;color:var(--text2);font-size:.83rem;margin-bottom:10px}
 .planning-offset-box{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2)}

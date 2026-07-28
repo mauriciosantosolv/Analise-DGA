@@ -74,15 +74,12 @@ Views.financeiro = {
     key = decodeURIComponent(key);
     const b = this.batches().find(x=>x.key===key); if(!b) return;
     UI.modal({ title:`Importação — ${U.esc(b.file)}`, wide:true, body:`
-      <div class="batch-filter-title"><i data-lucide="list-filter"></i><div><b>Filtros da importação</b><small>Use um ou mais campos para localizar informações específicas dentro deste arquivo.</small></div></div>
       <div class="batch-filters">
         <div><label>Pesquisar</label><input id="batch-search" placeholder="Projeto, categoria, fornecedor, descrição…"></div>
         <div><label>Projeto</label><select id="batch-project"><option value="">Todos</option>${[...new Set(b.items.map(x=>x.projectId))].map(id=>{const p=State.projects.find(x=>x.id===id);return `<option value="${U.esc(id)}">${U.esc(p?U.projLabel(p):'?')}</option>`;}).join('')}</select></div>
         <div><label>Origem</label><select id="batch-source"><option value="">Todas</option><option value="purchase">Compra</option><option value="paidAccount">Conta paga</option><option value="labor">Mão de obra</option></select></div>
         <div><label>Categoria</label><select id="batch-category"><option value="">Todas</option>${[...new Map(b.items.map(x=>[Biz.categoryKey(x.category),Biz.categoryName(x.category)])).values()].sort().map(x=>`<option value="${U.esc(x)}">${U.esc(x)}</option>`).join('')}</select></div>
         <div><label>Período</label><div style="display:flex;gap:6px"><input id="batch-date-from" type="date" title="Data inicial"><input id="batch-date-to" type="date" title="Data final"></div></div>
-        <div><label>Valor mínimo</label><input id="batch-value-min" type="number" step="0.01" placeholder="0,00"></div>
-        <div><label>Valor máximo</label><input id="batch-value-max" type="number" step="0.01" placeholder="Sem limite"></div>
       </div>
       <div class="batch-filter-summary"><span id="batch-summary"></span><button class="btn btn-ghost btn-sm" id="batch-clear"><i data-lucide="filter-x"></i>Limpar filtros</button></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:58vh"><table>
@@ -92,10 +89,10 @@ Views.financeiro = {
       footer:`<button class="btn btn-primary" onclick="UI.close()">Fechar</button>`,
       onOpen:()=>{
         const apply=()=>this.renderBatchRows(b.items);
-        ['batch-search','batch-project','batch-source','batch-category','batch-date-from','batch-date-to','batch-value-min','batch-value-max']
-          .forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener(['batch-search','batch-value-min','batch-value-max'].includes(id)?'input':'change',apply); });
+        ['batch-search','batch-project','batch-source','batch-category','batch-date-from','batch-date-to']
+          .forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener(id==='batch-search'?'input':'change',apply); });
         document.getElementById('batch-clear').onclick=()=>{
-          ['batch-search','batch-project','batch-source','batch-category','batch-date-from','batch-date-to','batch-value-min','batch-value-max'].forEach(id=>document.getElementById(id).value='');
+          ['batch-search','batch-project','batch-source','batch-category','batch-date-from','batch-date-to'].forEach(id=>document.getElementById(id).value='');
           apply();
         };
         apply();
@@ -105,16 +102,13 @@ Views.financeiro = {
     const get=id=>(document.getElementById(id)||{}).value||'';
     const q=U.norm(get('batch-search')), project=get('batch-project'), source=get('batch-source');
     const category=get('batch-category'), from=get('batch-date-from'), to=get('batch-date-to');
-    const minRaw=get('batch-value-min'), maxRaw=get('batch-value-max');
-    const min=minRaw===''?null:U.num(minRaw), max=maxRaw===''?null:U.num(maxRaw);
     const rows=items.filter(x=>{
       const p=State.projects.find(pr=>pr.id===x.projectId);
       const text=U.norm(`${p?U.projLabel(p):''} ${x.supplier||''} ${x.category||''} ${x.desc||''} ${x.order||''} ${x.value}`);
       return (!q||text.includes(q)) && (!project||x.projectId===project) &&
         (!source||(x.sourceType||'purchase')===source) &&
         (!category||Biz.sameCategory(x.category,category)) &&
-        (!from||x.date>=from) && (!to||x.date<=to) &&
-        (min===null||Number(x.value)>=min) && (max===null||Number(x.value)<=max);
+        (!from||x.date>=from) && (!to||x.date<=to);
     }).sort((a,c)=>(c.date||'').localeCompare(a.date||''));
     const total=rows.reduce((s,x)=>s+x.value,0);
     document.getElementById('batch-summary').innerHTML=`Exibindo <b>${rows.length}</b> de ${items.length} lançamento(s) · total filtrado <b>${U.money2(total)}</b>`;
@@ -257,16 +251,16 @@ Views.financeiro = {
     })).filter(x=>x.enabled&&x.planId);
     if(!selections.length) return UI.toast('Selecione ao menos um abatimento.','warn');
     UI.loading(true,'Abatendo gastos do planejamento…');
-    let applied=0, skipped=0, firstError='';
+    let applied=0, skipped=0;
     for(const item of selections){
       try{
         const purchase=State.purchases.find(x=>x.id===item.purchaseId);
         if(purchase && await this.offsetPlanning(purchase,item.planId)) applied++;
-      }catch(err){ skipped++; if(!firstError) firstError=err.message||String(err); }
+      }catch(err){ skipped++; }
     }
     await State.reload();
     UI.loading(false); UI.closeAll(); App.render();
-    UI.toast(`${applied} gasto(s) abatido(s) do planejamento${skipped?` · ${skipped} não aplicado(s): ${U.esc(firstError)}`:''}`,skipped?'warn':'success',7500);
+    UI.toast(`${applied} gasto(s) abatido(s) do planejamento${skipped?` · ${skipped} não aplicado(s)`:''}`,skipped?'warn':'success',6500);
   },
   table(q){
     this.q = q ?? this.q ?? '';
@@ -340,7 +334,7 @@ Dash.purchaseForm = function(id){
       <div class="full"><label>Descrição</label><input id="pf-desc" value="${U.esc(x.desc)}"></div>
       <div class="full"><label>Observações</label><textarea id="pf-notes" rows="2">${U.esc(x.notes)}</textarea></div>
       ${isNew?`<div class="full planning-offset-box">
-        <label class="check-item"><input id="pf-offset" type="checkbox"><span><b>Abater automaticamente este gasto do valor planejado</b><small>Quando houver planejamento do mesmo projeto e categoria, o saldo será reduzido ao salvar.</small></span></label>
+        <label class="check-item"><input id="pf-offset" type="checkbox"><span><b>Abater este gasto do valor planejado</b><small>Evita lançar o realizado e depois corrigir manualmente o planejamento.</small></span></label>
         <div id="pf-plan-wrap" style="display:none;margin-top:10px"><label>Item planejado a reduzir</label><select id="pf-plan"></select></div>
         <small class="planning-offset-help" id="pf-plan-help">Selecione projeto e categoria para localizar planejamentos compatíveis.</small>
       </div>`:x.planningOffset?`<div class="full planning-offset-box"><b>Este lançamento já abateu ${U.money2(x.planningOffset.amount)} do planejamento.</b><small class="planning-offset-help">Se o lançamento for excluído, o saldo planejado será restaurado automaticamente.</small></div>`:''}
@@ -362,17 +356,13 @@ Dash.purchaseForm = function(id){
       planSelect.innerHTML=matches.map(plan=>`<option value="${U.esc(plan.id)}">${U.date(plan.date)} · ${U.esc(plan.desc||plan.category)} · saldo ${U.money2(plan.value)}</option>`).join('');
       offset.disabled=!mayEditPlanning || !matches.length;
       if(offset.disabled){ offset.checked=false; planWrap.style.display='none'; }
-      else if(offset.dataset.touched!=='true'){
-        offset.checked=true;
-        planWrap.style.display='block';
-      }
       help.textContent=!mayEditPlanning
         ? 'Seu usuário não possui permissão para alterar o planejamento.'
         : matches.length
           ? `${matches.length} item(ns) planejado(s) compatível(is) encontrado(s).`
           : 'Nenhum planejamento com o mesmo projeto e categoria foi encontrado.';
     };
-    offset.onchange=()=>{ offset.dataset.touched='true'; planWrap.style.display=offset.checked?'block':'none'; };
+    offset.onchange=()=>{ planWrap.style.display=offset.checked?'block':'none'; };
     ['pf-proj','pf-cat','pf-date'].forEach(id=>document.getElementById(id).addEventListener(id==='pf-cat'?'input':'change',refreshPlans));
     document.getElementById('pf-source').onchange=e=>{
       if(e.target.value==='labor' && !document.getElementById('pf-cat').value.trim())
