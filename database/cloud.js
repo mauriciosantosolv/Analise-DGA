@@ -119,6 +119,25 @@ const Cloud = (() => {
       method:'PUT', headers:authHeaders(true), body:JSON.stringify({password})
     });
   }
+  async function updateDisplayName(displayName){
+    await ensureFresh();
+    const clean=String(displayName||'').trim().replace(/\s+/g,' ');
+    if(clean.length<2) throw new Error('Informe um nome com pelo menos 2 caracteres.');
+    if(clean.length>100) throw new Error('O nome pode ter no máximo 100 caracteres.');
+    const result=await request('/auth/v1/user', {
+      method:'PUT',
+      headers:authHeaders(true),
+      body:JSON.stringify({data:{full_name:clean}})
+    });
+    const updated=result&&result.user ? result.user : result;
+    if(updated&&updated.id){
+      session.user=updated;
+      localStorage.setItem(SESSION_KEY,JSON.stringify(session));
+    }else{
+      await fetchCurrentUser();
+    }
+    return user();
+  }
   async function consumeAuthCallback(){
     const raw=String(location.hash||'').replace(/^#/,'');
     if(!/(^|&)(access_token|error|error_description)=/.test(raw)) return null;
@@ -240,10 +259,18 @@ const Cloud = (() => {
     return active();
   }
   async function signOut(){
-    try{
-      if(hasToken()) await request('/auth/v1/logout', {method:'POST',headers:authHeaders(false)});
-    }catch(e){}
+    const accessToken=session&&session.access_token;
     saveSession(null);
+    if(!accessToken) return;
+    const controller=typeof AbortController!=='undefined' ? new AbortController() : null;
+    const timeout=controller ? setTimeout(()=>controller.abort(),1500) : null;
+    try{
+      await fetch(baseUrl()+'/auth/v1/logout', {
+        method:'POST',
+        headers:{apikey:cfg.publishableKey,Authorization:`Bearer ${accessToken}`},
+        ...(controller?{signal:controller.signal}:{})
+      });
+    }catch(e){}finally{ if(timeout) clearTimeout(timeout); }
   }
 
   function organization(){ return orgContext.active; }
@@ -488,7 +515,7 @@ const Cloud = (() => {
   loadSession();
   return {
     configured, requested:()=>cfg.enabled===true, active, ensureSession, signIn, signUp,
-    signOut, resetPassword, updatePassword, consumeAuthCallback, refresh, user,
+    signOut, resetPassword, updatePassword, updateDisplayName, consumeAuthCallback, refresh, user,
     accessDeniedMessage:()=>accessDeniedMessage,
     organization, organizations, membership, role, switchOrganization,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,

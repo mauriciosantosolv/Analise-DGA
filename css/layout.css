@@ -36,9 +36,11 @@ main{display:flex;flex-direction:column;overflow:hidden}
 #sidebar-footer{padding:12px 14px;border-top:1px solid var(--border2);font-size:.75rem;color:var(--text3)}
 
 /* ===== Topbar ===== */
-#topbar{display:flex;align-items:center;gap:14px;padding:12px 26px;background:var(--glass);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:20}
-#page-title{flex-shrink:0}
-#global-search-wrap{position:relative;flex:1;max-width:430px}
+#topbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,430px) minmax(0,1fr);align-items:center;gap:14px;padding:12px 26px;background:var(--glass);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:20}
+.topbar-left,.topbar-actions{display:flex;align-items:center;gap:10px;min-width:0}
+.topbar-actions{justify-content:flex-end}
+#page-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#global-search-wrap{position:relative;width:100%;max-width:430px;justify-self:center}
 #global-search{padding-left:36px}
 #global-search-wrap>svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text3);pointer-events:none}
 #search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);max-height:380px;overflow-y:auto;display:none;z-index:100}
@@ -75,8 +77,10 @@ main{display:flex;flex-direction:column;overflow:hidden}
   #sidebar.open{transform:none;visibility:visible}
   #mobile-menu-backdrop{position:fixed;inset:0;z-index:50;border:0;background:rgba(15,23,42,.48);backdrop-filter:blur(2px)}
   #app.menu-open #mobile-menu-backdrop{display:block}
-  #topbar{padding:9px 10px;gap:8px;flex-wrap:wrap}
-  #page-title{font-size:1.05rem;max-width:calc(100vw - 116px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #global-search-wrap{order:3;flex:1 0 100%;max-width:none}
+  #topbar{grid-template-columns:minmax(0,1fr) auto;padding:9px 10px;gap:8px}
+  .topbar-left{grid-column:1;grid-row:1}
+  .topbar-actions{grid-column:2;grid-row:1}
+  #page-title{font-size:1.05rem}
+  #global-search-wrap{grid-column:1/-1;grid-row:2;max-width:none}
   #global-search{font-size:16px}
 }

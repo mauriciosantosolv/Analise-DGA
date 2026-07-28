@@ -70,13 +70,23 @@ Views.configuracoes = {
     const cloudConnected=typeof Cloud!=='undefined' && Cloud.active();
     const org=cloudConnected?Cloud.organization():null;
     const currentRole=cloudConnected?Cloud.role():'';
+    const currentUser=cloudConnected?(Cloud.user()||{}):{};
+    const currentDisplayName=String((currentUser.user_metadata&&currentUser.user_metadata.full_name)||'').trim();
     $c().innerHTML = `
       ${cloudConnected?`<div class="card" style="max-width:900px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <div class="account-summary" style="padding:0;flex:1;min-width:240px"><i data-lucide="circle-user-round"></i><div><b>${U.esc((Cloud.user()||{}).email||'Usuário')}</b><small><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span> · ${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</small></div></div>
+          <div class="account-summary" style="padding:0;flex:1;min-width:240px"><i data-lucide="circle-user-round"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small>${U.esc(currentUser.email||'')} · <span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span> · ${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</small></div></div>
           <button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button>
         </div>
         ${Cloud.organizations().length>1?`<div style="margin-top:12px;max-width:420px"><label>Organização ativa</label><select id="cfg-active-org">${Cloud.organizations().map(x=>`<option value="${U.esc(x.id)}" ${x.id===org.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select></div>`:''}
+        <div class="profile-name-editor">
+          <label for="cfg-user-name">Seu nome no sistema</label>
+          <div class="profile-name-row">
+            <input id="cfg-user-name" type="text" maxlength="100" autocomplete="name" value="${U.esc(currentDisplayName)}" placeholder="Digite seu nome">
+            <button class="btn btn-primary" id="cfg-user-name-save" type="button"><i data-lucide="check"></i>Salvar meu nome</button>
+          </div>
+          <small>Este nome aparece no perfil e para os demais usuários da organização.</small>
+        </div>
       </div>`:''}
       <div class="card" style="max-width:560px">
         <h2 style="margin-bottom:14px">Empresa</h2>
@@ -134,6 +144,12 @@ Views.configuracoes = {
     let logo = State.settings.companyLogo || '';
     if(cloudConnected && Cloud.organizations().length>1)
       document.getElementById('cfg-active-org').onchange=e=>Cloud.switchOrganization(e.target.value);
+    if(cloudConnected){
+      document.getElementById('cfg-user-name-save').onclick=()=>this.saveOwnName();
+      document.getElementById('cfg-user-name').onkeydown=e=>{
+        if(e.key==='Enter'){ e.preventDefault(); this.saveOwnName(); }
+      };
+    }
     document.getElementById('cfg-logo-btn').onclick = () => {
       const inp = document.getElementById('img-input');
       inp.onchange = () => { const f = inp.files[0]; inp.value=''; if(!f) return;
@@ -160,6 +176,25 @@ Views.configuracoes = {
     };
     if(cloudConnected) this.loadTeam();
     U.icons();
+  },
+  async saveOwnName(){
+    const input=document.getElementById('cfg-user-name');
+    const clean=String(input&&input.value||'').trim().replace(/\s+/g,' ');
+    try{
+      UI.loading(true,'Atualizando seu nome…');
+      await Cloud.updateDisplayName(clean);
+      UI.loading(false);
+      if(input) input.value=clean;
+      const summary=document.getElementById('cfg-profile-current-name');
+      if(summary) summary.textContent=clean;
+      App.applyBranding();
+      UI.toast('Seu nome foi atualizado','success');
+      await this.loadTeam();
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível atualizar seu nome: '+U.esc(err.message),'error',6500);
+      if(input) input.focus();
+    }
   },
   async loadTeam(){
     const box=document.getElementById('team-content'); if(!box) return;

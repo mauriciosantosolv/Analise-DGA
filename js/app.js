@@ -272,8 +272,10 @@ const App = {
     }
     if(State.settings.companyLogo){
       const box = document.getElementById('company-logo-box');
-      box.style.background = 'transparent'; // remove fundo/borda quando há logo própria
-      box.innerHTML = `<img src="${State.settings.companyLogo}" class="logo-clean" style="width:100%;height:100%;object-fit:contain">`;
+      if(box){
+        box.style.background = 'transparent'; // remove fundo/borda quando há logo própria
+        box.innerHTML = `<img src="${State.settings.companyLogo}" class="logo-clean" style="width:100%;height:100%;object-fit:contain">`;
+      }
     }
   },
   applyStorageStatus(){
@@ -281,8 +283,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.1 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.0 · dados locais';
+      el.textContent=`v2.4 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.4 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
