@@ -13,11 +13,15 @@ const Cloud = (() => {
   const BOUND_SCOPE_KEY = 'clique_obras_local_scope';
   const LEGACY_BOUND_USER_KEY = 'clique_obras_local_owner';
   const ACTIVE_ORG_KEY = 'clique_obras_active_organization';
-  const ALL_STORES = ['projects','budgets','purchases','planning','clients','categories','settings','measurements'];
+  const ALL_STORES = [
+    'projects','budgets','purchases','planning','clients','categories','settings','measurements',
+    'rdos','crew','labor_rates','rdo_financial'
+  ];
   const DEFAULT_PERMISSIONS = {
     view:ALL_STORES.slice(),
     edit:ALL_STORES.slice(),
-    manage_users:false
+    manage_users:false,
+    rdo_projects:[]
   };
   const cfg = window.CLIQUE_OBRAS_CLOUD || {};
   let session = null;
@@ -328,6 +332,16 @@ const Cloud = (() => {
     if(!configured()) return true;
     return fullAccess() || (membership()||{}).permissions?.manage_users===true;
   }
+  function rdoProjects(){
+    if(fullAccess()) return State.projects.map(p=>({id:String(p.id),label:U.projLabel(p)}));
+    const list=(membership()||{}).permissions?.rdo_projects;
+    return Array.isArray(list)
+      ? list.filter(x=>x && x.id!=null).map(x=>({id:String(x.id),label:String(x.label||'Projeto')}))
+      : [];
+  }
+  function canUseRdoProject(projectId){
+    return fullAccess() || rdoProjects().some(x=>x.id===String(projectId));
+  }
   function canEditAny(){ return fullAccess() || permissionList('edit').length>0; }
   function assertCanEdit(store){
     if(!canEditStore(store)){
@@ -599,10 +613,85 @@ const Cloud = (() => {
     return out;
   }
 
+  async function measurementLinks(projectId=''){
+    await ensureFresh();
+    if(!organization() || !canViewStore('measurements')) return [];
+    const parts=[
+      `select=rdo_id,measurement_id,project_id,linked_at`,
+      `organization_id=eq.${encodeURIComponent(organization().id)}`
+    ];
+    if(projectId) parts.push(`project_id=eq.${encodeURIComponent(String(projectId))}`);
+    return request('/rest/v1/rdo_measurement_links?'+parts.join('&'),{headers:authHeaders(false)}) || [];
+  }
+
+  async function claimRdoMeasurement(rdoIds,measurementId,projectId){
+    await ensureFresh();
+    if(!organization() || !canEditStore('measurements')) throw new Error('Medição indisponível.');
+    const unique=[...new Set((rdoIds||[]).map(String).filter(Boolean))];
+    if(!unique.length) throw new Error('Selecione ao menos um RDO aprovado.');
+    const rows=unique.map(rdoId=>({
+      organization_id:organization().id,
+      rdo_id:rdoId,
+      measurement_id:String(measurementId),
+      project_id:String(projectId),
+      linked_by:user().id
+    }));
+    try{
+      await request('/rest/v1/rdo_measurement_links',{
+        method:'POST',
+        headers:{...authHeaders(true),Prefer:'return=minimal'},
+        body:JSON.stringify(rows)
+      });
+    }catch(err){
+      if(err.status===409) throw new Error('Um dos RDOs selecionados já pertence a outra medição. Atualize a tela e tente novamente.');
+      throw err;
+    }
+    return rows;
+  }
+
+  async function releaseRdoMeasurement(measurementId){
+    await ensureFresh();
+    if(!organization() || !canEditStore('measurements')) return false;
+    const query=[
+      `organization_id=eq.${encodeURIComponent(organization().id)}`,
+      `measurement_id=eq.${encodeURIComponent(String(measurementId))}`
+    ].join('&');
+    await request('/rest/v1/rdo_measurement_links?'+query,{
+      method:'DELETE',
+      headers:authHeaders(false)
+    });
+    return true;
+  }
+
+  async function ensureRdoCostPosting(rdoId,projectId,purchaseRecordId,amount){
+    await ensureFresh();
+    if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
+    const body={
+      organization_id:organization().id,
+      rdo_id:String(rdoId),
+      project_id:String(projectId),
+      purchase_record_id:String(purchaseRecordId),
+      amount:Number(amount)||0,
+      posted_by:user().id
+    };
+    await request('/rest/v1/rdo_cost_postings?on_conflict=organization_id%2Crdo_id',{
+      method:'POST',
+      headers:{...authHeaders(true),Prefer:'resolution=ignore-duplicates,return=minimal'},
+      body:JSON.stringify(body)
+    });
+    return body;
+  }
+
   function normalizedPermissions(input={}){
     const view=[...new Set((input.view||[]).filter(x=>ALL_STORES.includes(x)))];
     const edit=[...new Set((input.edit||[]).filter(x=>view.includes(x)))];
-    return {view,edit,manage_users:input.manage_users===true};
+    const rdoProjects=Array.isArray(input.rdo_projects)
+      ? input.rdo_projects
+        .filter(x=>x && x.id!=null)
+        .slice(0,500)
+        .map(x=>({id:String(x.id),label:String(x.label||'Projeto').slice(0,180)}))
+      : [];
+    return {view,edit,manage_users:input.manage_users===true,rdo_projects:rdoProjects};
   }
   function assertAssignable(roleName,permissions){
     const actorRole=role();
@@ -694,11 +783,13 @@ const Cloud = (() => {
     organization, organizations, membership, role, switchOrganization,
     refreshOrganizationContext,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
+    rdoProjects, canUseRdoProject,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
     clearCurrentQueue,
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
+    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, ensureRdoCostPosting,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };
 })();

@@ -105,7 +105,11 @@ Views.configuracoes = {
     ['budgets','Orçamentos','Custos orçados e valores de venda'],
     ['purchases','Financeiro','Compras, contas pagas e mão de obra'],
     ['planning','Planejamento','Gastos futuros e calendário'],
+    ['rdos','Diários de Obra','Preenchimento e consulta dos RDOs autorizados'],
     ['measurements','Medições','Medições e faturamento'],
+    ['crew','Colaboradores','Equipe disponível para os diários'],
+    ['labor_rates','Valores HH','Custos e valores comerciais por projeto'],
+    ['rdo_financial','Apuração HH','Snapshots de custo e venda dos RDOs aprovados'],
     ['clients','Clientes','Cadastro de clientes'],
     ['categories','Categorias','Padronização das categorias'],
     ['settings','Configurações financeiras','Empresa, ticker e base de cálculo']
@@ -113,7 +117,12 @@ Views.configuracoes = {
   defaultPermissions(role){
     const all=this.permissionModules.map(x=>x[0]);
     if(role==='editor') return {view:all,edit:all,manage_users:false};
-    if(role==='viewer') return {view:all,edit:[],manage_users:false};
+    if(role==='viewer') return {
+      view:all.filter(x=>!['labor_rates','rdo_financial'].includes(x)),
+      edit:[],
+      manage_users:false,
+      rdo_projects:[]
+    };
     return {view:all,edit:all,manage_users:true};
   },
   render(){
@@ -295,7 +304,7 @@ Views.configuracoes = {
         <tbody>${members.map(m=>{const profile=m.profile||{};const locked=m.role==='owner'||(m.role==='admin'&&currentRole!=='owner');return `
           <tr><td><b>${U.esc(profile.full_name||profile.email||'Usuário')}</b><br><small>${U.esc(profile.email||m.user_id)}${m.user_id===currentId?' · você':''}</small></td>
           <td><span class="tag ${locked?'tag-blue':'tag-gray'}">${U.esc(roleLabels[m.role]||m.role)}</span></td>
-          <td><small>${locked||m.role==='admin'?'Acesso completo':`${(m.permissions?.view||[]).length} módulo(s) para visualizar · ${(m.permissions?.edit||[]).length} para editar`}</small></td>
+          <td><small>${locked||m.role==='admin'?'Acesso completo':`${(m.permissions?.view||[]).length} módulo(s) para visualizar · ${(m.permissions?.edit||[]).length} para editar · ${(m.permissions?.rdo_projects||[]).length} projeto(s) no RDO`}</small></td>
           <td>${locked?'':`<div style="display:flex;gap:5px"><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.memberPermissionForm(${U.jsArg(m.user_id)})" title="Editar permissões"><i data-lucide="shield-check"></i></button>${m.user_id!==currentId?`<button class="btn btn-danger btn-sm" onclick="Views.configuracoes.removeMember(${U.jsArg(m.user_id)})" title="Remover da organização"><i data-lucide="user-minus"></i></button>`:''}</div>`}</td></tr>`;}).join('')}</tbody>
       </table></div></div>
       ${invitations.length?`<h3 style="margin:18px 0 8px">Convites pendentes</h3><div class="table-wrap"><div class="table-scroll"><table>
@@ -316,6 +325,17 @@ Views.configuracoes = {
         <input class="perm-edit" data-store="${store}" type="checkbox" ${edit.has(store)?'checked':''} title="Pode editar">
       </div>`).join('')}</div>
       <div style="display:flex;gap:22px;margin-top:10px;color:var(--text2);font-size:.78rem"><span>1ª caixa: visualizar</span><span>2ª caixa: editar</span></div>
+      <div class="permission-projects">
+        <div class="permission-projects-head"><span><b>Projetos disponíveis no RDO</b><small>Somente estes projetos aparecem no preenchimento do diário.</small></span>
+          <div><button class="btn btn-ghost btn-sm" type="button" id="perm-projects-all">Todos</button><button class="btn btn-ghost btn-sm" type="button" id="perm-projects-none">Nenhum</button></div>
+        </div>
+        <div class="check-list permission-project-list" id="member-rdo-projects">
+          ${State.projects.map(project=>{
+            const selected=(p.rdo_projects||[]).some(item=>String(item.id)===String(project.id));
+            return `<label class="check-item"><input class="perm-rdo-project" type="checkbox" value="${U.esc(project.id)}" ${selected?'checked':''}><span><b>${U.esc(project.proposal||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`;
+          }).join('')||'<small style="color:var(--text3)">Nenhum projeto cadastrado.</small>'}
+        </div>
+      </div>
       <label class="check-item" style="margin-top:10px"><input id="perm-manage-users" type="checkbox" ${p.manage_users?'checked':''} ${canDelegate?'':'disabled'}><span><b>Gerenciar usuários</b><small>${canDelegate?'Permite convidar leitores e editores; somente o proprietário pode conceder esta delegação.':'Somente o proprietário pode conceder esta permissão.'}</small></span></label>`;
   },
   bindPermissionRole(){
@@ -335,17 +355,35 @@ Views.configuracoes = {
       apply();
     };
     document.querySelectorAll('.perm-edit').forEach(input=>input.onchange=()=>{
-      if(input.checked) document.querySelector(`.perm-view[data-store="${input.dataset.store}"]`).checked=true;
+      if(input.checked){
+        document.querySelector(`.perm-view[data-store="${input.dataset.store}"]`).checked=true;
+        if(input.dataset.store==='rdos'){
+          const crew=document.querySelector('.perm-view[data-store="crew"]');
+          if(crew) crew.checked=true;
+        }
+      }
     });
     document.querySelectorAll('.perm-view').forEach(input=>input.onchange=()=>{
       if(!input.checked) document.querySelector(`.perm-edit[data-store="${input.dataset.store}"]`).checked=false;
+      if(input.dataset.store==='rdos' && input.checked){
+        const crew=document.querySelector('.perm-view[data-store="crew"]');
+        if(crew) crew.checked=true;
+      }
     });
+    const allProjects=document.getElementById('perm-projects-all');
+    const noProjects=document.getElementById('perm-projects-none');
+    if(allProjects) allProjects.onclick=()=>document.querySelectorAll('.perm-rdo-project').forEach(x=>x.checked=true);
+    if(noProjects) noProjects.onclick=()=>document.querySelectorAll('.perm-rdo-project').forEach(x=>x.checked=false);
     apply();
   },
   readPermissionForm(){
     const view=[...document.querySelectorAll('.perm-view:checked')].map(x=>x.dataset.store);
     const edit=[...document.querySelectorAll('.perm-edit:checked')].map(x=>x.dataset.store).filter(x=>view.includes(x));
-    return {view,edit,manage_users:document.getElementById('perm-manage-users').checked};
+    const rdo_projects=[...document.querySelectorAll('.perm-rdo-project:checked')].map(input=>{
+      const project=State.projects.find(x=>String(x.id)===String(input.value));
+      return {id:String(input.value),label:project?U.projLabel(project):'Projeto'};
+    });
+    return {view,edit,manage_users:document.getElementById('perm-manage-users').checked,rdo_projects};
   },
   inviteForm(){
     const defaults=this.defaultPermissions('viewer');
@@ -429,7 +467,8 @@ Views.backup = {
   title:'Backup',
   render(){
     const counts = { Projetos:State.projects.length, Orçamentos:State.budgets.length, Lançamentos:State.purchases.length,
-      Medições:State.measurements.length, Planejamento:State.planning.length, Clientes:State.clients.length, Categorias:State.categories.length };
+      Medições:State.measurements.length, RDOs:State.rdos.length, Colaboradores:State.crew.length,
+      Planejamento:State.planning.length, Clientes:State.clients.length, Categorias:State.categories.length };
     $c().innerHTML = `
       <div class="kpi-grid">${Object.entries(counts).map(([k,v])=>`<div class="kpi"><div class="k-label">${k}</div><div class="k-value">${v}</div></div>`).join('')}</div>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
@@ -457,7 +496,7 @@ Views.backup = {
     catch(err){ return UI.toast('Snapshot inválido: '+U.esc(err.message),'error',7000); }
     UI.confirm(`Restaurar o snapshot de <b>${U.esc(snap.exportedAt ? U.date(snap.exportedAt) : '—')}</b>? Os dados serão mesclados ao banco atual (nada é apagado).`, async () => {
       UI.loading(true, 'Restaurando snapshot…');
-      for(const st of ['projects','budgets','purchases','planning','clients','categories','measurements','settings'])
+      for(const st of DB.STORES)
         if(clean[st].length) await DB.bulkPut(st, clean[st]);
       await State.reload(); UI.loading(false); UI.toast('Snapshot restaurado', 'success'); App.render();
     }, false);
@@ -467,6 +506,8 @@ Views.backup = {
     ['projects','budgets','purchases'].forEach(s => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(Exports.rows(s))), s));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.planning)), 'planning');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.measurements)), 'measurements');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.rdos)), 'rdos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.crew)), 'crew');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.clients.map(({logo,...c})=>c))), 'clients');
     XLSX.writeFile(wb, `banco-completo-${U.isoDate(new Date())}.xlsx`);
     UI.toast('Banco exportado em Excel', 'success');

@@ -66,7 +66,13 @@ Views.projetos = {
         <div><label>Nome</label><input id="f-name" value="${U.esc(p.name)}"></div>
         <div><label>Cliente</label><input id="f-client" list="client-list" value="${U.esc(p.client)}"><datalist id="client-list">${clientOpts}</datalist></div>
         <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${U.esc(p.saleValue||'')}"></div>
-        <div><label>Tipo</label><select id="f-type">${['HH','Obra','Fornecimento','Painel'].map(t=>`<option ${t===p.type?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div><label>Tipo de contrato</label><select id="f-type">${[
+          ['HH','HH — venda por RDO'],
+          ['Obra','Obra'],
+          ['Fornecimento','Fornecimento de material'],
+          ['Painel','Painel']
+        ].map(([value,label])=>`<option value="${value}" ${value===p.type?'selected':''}>${label}</option>`).join('')}</select>
+          <small>Somente projetos HH geram medição de venda a partir dos diários.</small></div>
         <div><label>Status</label><select id="f-status">${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
         <div><label>Data de Início</label><input id="f-start" type="date" value="${U.esc(p.start)}"></div>
         <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${U.esc(p.deadline)}"></div>

@@ -1,23 +1,29 @@
-# CliqueObras v2.6 — Supabase
+# CliqueObras v2.7 — Supabase
 
 O sistema usa Supabase Auth e uma base compartilhada por organização. Projetos,
-orçamentos, financeiro, planejamento, medições, clientes, categorias e
-configurações continuam no `app_records`, agora protegidos por RLS de
-organização e permissões por módulo.
+orçamentos, financeiro, planejamento, RDOs, colaboradores, valores HH,
+medições, clientes, categorias e configurações continuam no `app_records`,
+protegidos por RLS de organização, módulo e projeto autorizado.
 
 ## Ativação
 
 1. Exporte um backup antes de qualquer alteração.
 2. Abra o SQL Editor do projeto Supabase.
-3. Em instalação nova, execute `supabase/schema.sql` completo.
-4. Em uma instalação já existente, execute
-   `supabase/ATUALIZACAO-SEGURANCA-v2.6.sql`.
+3. Em instalação nova, execute `supabase/schema.sql` completo e depois, nesta
+   ordem:
+   - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
+   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`.
+4. Em uma instalação já existente, execute nesta ordem:
+   - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
+   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`.
 5. Confira se as tabelas abaixo estão com RLS ativo:
    - `app_records`
    - `profiles`
    - `organizations`
    - `organization_members`
    - `organization_invitations`
+   - `rdo_measurement_links`
+   - `rdo_cost_postings`
 6. Em `Authentication > URL Configuration`, use:
    - Site URL: `https://cliqueobras.com`
    - Redirect URL: `https://cliqueobras.com/**`
@@ -49,9 +55,14 @@ administrativa no navegador.
 - Editor: permissões configuráveis de visualização e edição por módulo.
 - Leitor: permissões configuráveis de consulta; edição bloqueada no frontend e no RLS.
 
+O administrador também seleciona quais projetos aparecem no preenchimento de
+RDO de cada usuário. Valores de custo e venda possuem permissões próprias.
+
 Somente o proprietário pode criar administradores ou delegar a gestão de
 usuários. Administradores e gestores delegados gerenciam leitores e editores,
-sem poder elevar privilégios.
+sem poder elevar privilégios. Um gestor delegado só pode conceder módulos,
+edições e projetos de RDO que já façam parte do próprio acesso; leitores
+delegados também não podem criar editores.
 
 Convites são associados ao e-mail autenticado. Se a conta já existir, o vínculo
 é aceito no próximo login. Se não existir, o usuário deve se cadastrar com o
@@ -59,8 +70,8 @@ mesmo e-mail.
 
 ## Ordem segura de publicação
 
-1. Exporte um backup e execute a migração v2.6.
-2. Publique todos os arquivos da versão v2.6 juntos.
+1. Exporte um backup e execute as migrações v2.7 na ordem indicada.
+2. Publique todos os arquivos da versão v2.7 juntos.
 3. Teste com o proprietário atual.
 4. Convide um segundo usuário de teste e valide as permissões antes de liberar
    para clientes.

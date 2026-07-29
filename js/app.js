@@ -22,14 +22,16 @@ const App = {
   viewStores:{
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
-    planejamento:['planning'], medicoes:['measurements'], clientes:['clients'],
+    planejamento:['planning'], rdos:['rdos'], medicoes:['measurements'],
+    colaboradores:['crew'], valoreshh:['labor_rates','rdo_financial'], clientes:['clients'],
     categorias:['categories'], basecalculo:['settings'],
     relatorios:['projects','budgets','purchases','planning','measurements'],
-    backup:['projects','budgets','purchases','planning','clients','categories','settings','measurements']
+    backup:['projects','budgets','purchases','planning','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial']
   },
   primaryStore(view=State.view){
     return ({projetos:'projects',orcamentos:'budgets',financeiro:'purchases',
-      planejamento:'planning',medicoes:'measurements',clientes:'clients',
+      planejamento:'planning',rdos:'rdos',medicoes:'measurements',
+      colaboradores:'crew',valoreshh:'labor_rates',clientes:'clients',
       categorias:'categories',basecalculo:'settings'})[view] || '';
   },
   canOpenView(view){
@@ -39,7 +41,7 @@ const App = {
     return !stores.length || stores.some(store=>Cloud.canViewStore(store));
   },
   firstAllowedView(){
-    return ['dashboard','projetos','orcamentos','financeiro','planejamento','medicoes','clientes','categorias','basecalculo','relatorios','configuracoes']
+    return ['dashboard','projetos','rdos','medicoes','colaboradores','orcamentos','financeiro','planejamento','clientes','categorias','basecalculo','relatorios','configuracoes']
       .find(view=>this.canOpenView(view)) || 'configuracoes';
   },
   applyNavigationPermissions(){
@@ -129,7 +131,6 @@ const App = {
   },
   go(view, options={}){
     if(!this.canOpenView(view)){
-      UI.toast('Este módulo não está liberado para o seu usuário.','warn',5000);
       view=this.firstAllowedView();
     }
     const changed=State.view!==view;
@@ -304,8 +305,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.6 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.6 · dados locais';
+      el.textContent=`v2.7 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.7 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -498,6 +499,8 @@ const App = {
           projects:State.projects, budgets:State.budgets, purchases:State.purchases,
           planning:State.planning, clients:State.clients.map(({logo, ...c}) => c),
           categories:State.categories, measurements:State.measurements,
+          rdos:State.rdos, crew:State.crew, labor_rates:State.laborRates,
+          rdo_financial:State.rdoFinancial,
           settings:Object.entries(State.settings).filter(([k]) => k !== 'companyLogo').map(([id, value]) => ({id, value})) });
         if(snap.length < 4500000){
           localStorage.setItem('ccf_snap', snap);

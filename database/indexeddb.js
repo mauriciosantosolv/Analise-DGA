@@ -2,7 +2,7 @@
  * Módulo Banco de Dados (IndexedDB)
  *
  * Responsabilidades:
- * - abertura e versionamento do banco ccf_obras (8 stores)
+ * - abertura e versionamento do banco ccf_obras
  * - operações CRUD (all, put, bulkPut, del, clear)
  * - cache local e sincronização opcional com a nuvem
  * - State: cache em memória do banco + filtros globais
@@ -12,8 +12,11 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 2;
-  const STORES = ['projects','budgets','purchases','planning','clients','categories','settings','measurements'];
+  const NAME = 'ccf_obras', VERSION = 3;
+  const STORES = [
+    'projects','budgets','purchases','planning','clients','categories','settings','measurements',
+    'rdos','crew','labor_rates','rdo_financial'
+  ];
   let db = null;
   function open(){
     return new Promise((res, rej) => {
@@ -115,11 +118,13 @@ const DB = (() => {
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
+  rdos:[], crew:[], laborRates:[], rdoFinancial:[],
   filters:{ project:'', client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
-    const [p,b,c,pl,cl,cat,st,me] = await Promise.all(DB.STORES.map(s=>DB.all(s)));
+    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial] = await Promise.all(DB.STORES.map(s=>DB.all(s)));
     this.projects=p; this.budgets=b; this.purchases=c; this.planning=pl; this.clients=cl; this.categories=cat; this.measurements=me;
+    this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial;
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
   async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; }
