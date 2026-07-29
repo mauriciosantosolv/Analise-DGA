@@ -20,6 +20,9 @@ for (const view of ["rdos", "colaboradores", "valoreshh", "medicoes"]) {
 const css = fs.readFileSync(path.join(root, "css/rdo.css"), "utf8");
 assert.match(css, /@media\(max-width:860px\)/);
 assert.match(css, /@media\(max-width:560px\)/);
+assert.match(css, /\.modal\.rdo-composer-modal/);
+assert.match(css, /height:100dvh/);
+assert.match(css, /body\.printing-rdo/);
 assert.doesNotMatch(css, /var\(--(?:radius|shadow-sm|surface3)\)/);
 
 const cloud = fs.readFileSync(path.join(root, "database/cloud.js"), "utf8");

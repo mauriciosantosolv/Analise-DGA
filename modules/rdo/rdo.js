@@ -9,6 +9,101 @@
  */
 const RDO = {
   statuses:['Rascunho','Enviado','Aprovado','Devolvido'],
+  attachmentCache:new Map(),
+  attachmentUrls:new Set(),
+
+  formatFileSize(bytes){
+    const size=Number(bytes)||0;
+    if(size<1024) return `${size} B`;
+    if(size<1024*1024) return `${(size/1024).toLocaleString('pt-BR',{maximumFractionDigits:1})} KB`;
+    return `${(size/1024/1024).toLocaleString('pt-BR',{maximumFractionDigits:1})} MB`;
+  },
+  isImage(attachment){
+    return /^image\/(?:jpeg|png|webp)$/i.test(String(attachment&&attachment.mimeType||''));
+  },
+  validateAttachmentFile(file){
+    const allowed=new Set(['image/jpeg','image/png','image/webp','application/pdf']);
+    if(!file || !allowed.has(String(file.type||'').toLowerCase()))
+      throw new Error('Use fotos JPG, PNG ou WebP, ou documentos PDF.');
+    if(!file.size || file.size>8*1024*1024)
+      throw new Error('Cada anexo deve ter no máximo 8 MB.');
+  },
+  fileDataUrl(file){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||''));
+      reader.onerror=()=>reject(reader.error||new Error('Não foi possível ler o arquivo.'));
+      reader.readAsDataURL(file);
+    });
+  },
+  async attachmentsFor(rdoId,{refresh=false}={}){
+    const key=String(rdoId||'');
+    if(!refresh && this.attachmentCache.has(key)) return this.attachmentCache.get(key).slice();
+    let rows=[];
+    if(typeof Cloud!=='undefined' && Cloud.active())
+      rows=await Cloud.listRdoAttachments(key);
+    else
+      rows=(State.rdoAttachments||[]).filter(item=>String(item.rdoId)===key);
+    this.attachmentCache.set(key,rows.slice());
+    return rows;
+  },
+  async saveAttachment(rdo,file){
+    this.validateAttachmentFile(file);
+    if(typeof Cloud!=='undefined' && Cloud.active())
+      return Cloud.uploadRdoAttachment(rdo.id,rdo.projectId,file);
+    const id=U.id();
+    const dataUrl=await this.fileDataUrl(file);
+    const attachment={
+      id,rdoId:String(rdo.id),projectId:String(rdo.projectId),
+      fileName:String(file.name||'arquivo').slice(0,180),
+      mimeType:String(file.type||'application/octet-stream'),
+      sizeBytes:Number(file.size)||0,
+      dataUrl,
+      uploadedAt:new Date().toISOString()
+    };
+    await DB.attachmentPut(attachment);
+    return attachment;
+  },
+  async removeAttachment(rdoId,attachmentId){
+    const rdo=State.rdos.find(item=>String(item.id)===String(rdoId));
+    if(!rdo || !this.canEdit(rdo)) return UI.toast('Este RDO está bloqueado para edição.','warn');
+    const rows=await this.attachmentsFor(rdoId);
+    const attachment=rows.find(item=>String(item.id)===String(attachmentId));
+    if(!attachment) return;
+    try{
+      UI.loading(true,'Removendo anexo…');
+      if(typeof Cloud!=='undefined' && Cloud.active())
+        await Cloud.removeRdoAttachment(attachment);
+      else
+        await DB.attachmentDel(attachment.id);
+      this.attachmentCache.delete(String(rdoId));
+      await State.reload();
+      UI.loading(false);
+      UI.toast('Anexo removido','success');
+      UI.closeAll();
+      this.form(rdoId);
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível remover o anexo: '+U.esc(err.message||err),'error',7000);
+    }
+  },
+  async attachmentUrl(attachment){
+    if(attachment&&attachment.dataUrl){
+      const safe=U.safeImageSrc(attachment.dataUrl);
+      if(!safe) throw new Error('A imagem local não pôde ser validada.');
+      return safe;
+    }
+    const blob=await Cloud.downloadRdoAttachment(attachment.objectPath);
+    const url=URL.createObjectURL(blob);
+    this.attachmentUrls.add(url);
+    setTimeout(()=>{
+      if(this.attachmentUrls.has(url)){
+        URL.revokeObjectURL(url);
+        this.attachmentUrls.delete(url);
+      }
+    },300000);
+    return url;
+  },
 
   fullAccess(){
     return typeof Cloud==='undefined' || !Cloud.active() || ['owner','admin'].includes(Cloud.role());
@@ -97,7 +192,8 @@ const RDO = {
   },
   statusTag(status){
     const tone={Aprovado:'tag-green',Enviado:'tag-amber',Devolvido:'tag-red',Rascunho:'tag-gray'}[status]||'tag-gray';
-    return `<span class="tag ${tone}">${U.esc(status||'Rascunho')}</span>`;
+    const label={Enviado:'Aguardando aprovação'}[status]||status||'Rascunho';
+    return `<span class="tag ${tone}">${U.esc(label)}</span>`;
   },
   authorName(){
     const user=typeof Cloud!=='undefined'&&Cloud.active()?Cloud.user()||{}:{};
@@ -220,6 +316,7 @@ const RDO = {
     const initialEntries=new Map((existing?.entries||[]).map(row=>[String(row.employeeId),row]));
     const defaultShift={start:'07:30',end:'17:30',breakMinutes:60};
     const defaultHours=this.workedHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes);
+    const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,overtime100:0};
     const workerCard=employee=>{
       const saved=initialEntries.get(String(employee.id));
       const selected=existing?!!saved:true;
@@ -243,41 +340,112 @@ const RDO = {
     UI.modal({
       title:existing?`Editar ${U.esc(existing.number||'RDO')}`:'Novo Diário de Obra',
       wide:true,
-      body:`<div class="rdo-form">
-        <div class="form-grid">
-          <div><label>Projeto *</label><select id="rdo-project">${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
-          <div><label>Data *</label><input id="rdo-date" type="date" value="${U.esc(existing?.date||U.isoDate(new Date()))}"></div>
-          <div class="full"><label>Local / frente de serviço</label><input id="rdo-location" maxlength="180" value="${U.esc(existing?.location||'')}" placeholder="Ex.: Subestação SE-04"></div>
-          <div class="full"><label>Serviço realizado *</label><textarea id="rdo-description" rows="3" maxlength="1600" placeholder="Descreva claramente o que foi executado.">${U.esc(existing?.description||'')}</textarea></div>
-        </div>
-        <section class="rdo-team-section">
-          <div class="rdo-section-title"><div><h3>Equipe e horas trabalhadas</h3><small>O horário informado abaixo é aplicado automaticamente a todos os colaboradores selecionados.</small></div></div>
-          <div class="rdo-team-template">
-            <label>Entrada<input id="rdo-all-start" type="time" value="${defaultShift.start}"></label>
-            <label>Saída<input id="rdo-all-end" type="time" value="${defaultShift.end}"></label>
-            <label>Intervalo (min)<input id="rdo-all-break" type="number" min="0" max="360" step="5" value="${defaultShift.breakMinutes}"></label>
-            <label>Normal<input id="rdo-all-regular" type="number" min="0" max="24" step="0.25" value="${defaultHours.regular}"></label>
-            <label>HE 50%<input id="rdo-all-50" type="number" min="0" max="24" step="0.25" value="${defaultHours.overtime50}"></label>
-            <label>HE 100%<input id="rdo-all-100" type="number" min="0" max="24" step="0.25" value="0"></label>
-          </div>
-          <div class="rdo-worker-list">${crew.map(workerCard).join('')}</div>
-        </section>
-        <div class="form-grid">
-          <div class="full"><label>Ocorrências e observações</label><textarea id="rdo-notes" rows="2" maxlength="1200">${U.esc(existing?.notes||'')}</textarea></div>
+      body:`<div class="rdo-composer">
+        <aside class="rdo-stepper" aria-label="Etapas do diário">
+          ${[
+            ['1','Informações','calendar-days'],
+            ['2','Equipe e horas','users-round'],
+            ['3','Serviço e anexos','camera'],
+            ['4','Revisão','badge-check']
+          ].map(([step,label,icon])=>`<button type="button" data-rdo-step-target="${step}"><span><i data-lucide="${icon}"></i></span><b>${label}</b></button>`).join('')}
+          <div class="rdo-draft-note"><i data-lucide="shield-check"></i><span><b>Rascunho protegido</b><small>Salve para continuar depois.</small></span></div>
+        </aside>
+        <div class="rdo-composer-main">
+          <section class="rdo-step" data-rdo-step="1">
+            <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3><p>Defina o projeto, a data e a frente de serviço.</p></div></div>
+            <div class="form-grid">
+              <div><label>Projeto *</label><select id="rdo-project" ${existing?'disabled':''}>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
+              <div><label>Data do serviço *</label><input id="rdo-date" type="date" value="${U.esc(existing?.date||U.isoDate(new Date()))}"></div>
+              <div class="full"><label>Local / frente de serviço</label><input id="rdo-location" maxlength="180" value="${U.esc(existing?.location||'')}" placeholder="Ex.: Subestação SE-04"></div>
+            </div>
+            <div class="rdo-context-card"><i data-lucide="briefcase-business"></i><div><b>Projeto autorizado para este usuário</b><small>A lista respeita as permissões configuradas pelo administrador.</small></div><i data-lucide="check-circle-2"></i></div>
+          </section>
+
+          <section class="rdo-step" data-rdo-step="2" hidden>
+            <div class="rdo-step-heading"><span>02</span><div><h3>Equipe e horas trabalhadas</h3><p>O horário geral preenche automaticamente todos os colaboradores selecionados.</p></div></div>
+            <div class="rdo-team-template">
+              <label>Entrada<input id="rdo-all-start" type="time" value="${U.esc(sharedEntry.start||defaultShift.start)}"></label>
+              <label>Saída<input id="rdo-all-end" type="time" value="${U.esc(sharedEntry.end||defaultShift.end)}"></label>
+              <label>Intervalo (min)<input id="rdo-all-break" type="number" min="0" max="360" step="5" value="${Number(sharedEntry.breakMinutes)||0}"></label>
+              <label>Normal<input id="rdo-all-regular" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.regular)||0}"></label>
+              <label>HE 50%<input id="rdo-all-50" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime50)||0}"></label>
+              <label>HE 100%<input id="rdo-all-100" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime100)||0}"></label>
+            </div>
+            <div class="rdo-team-summary" id="rdo-team-summary"></div>
+            <div class="rdo-worker-list">${crew.map(workerCard).join('')}</div>
+          </section>
+
+          <section class="rdo-step" data-rdo-step="3" hidden>
+            <div class="rdo-step-heading"><span>03</span><div><h3>Serviço e evidências</h3><p>Descreva o trabalho e registre as fotos do campo.</p></div></div>
+            <div class="form-grid">
+              <div class="full"><label>Serviço realizado *</label><textarea id="rdo-description" rows="5" maxlength="1600" placeholder="Descreva claramente o que foi executado.">${U.esc(existing?.description||'')}</textarea><small class="rdo-char-count"><span id="rdo-description-count">${String(existing?.description||'').length}</span>/1.600 caracteres</small></div>
+            </div>
+            <div class="rdo-upload-grid">
+              <button class="rdo-upload-card primary" id="rdo-camera-button" type="button"><i data-lucide="camera"></i><b>Tirar foto</b><small>Usar a câmera do celular</small></button>
+              <button class="rdo-upload-card" id="rdo-file-button" type="button"><i data-lucide="paperclip"></i><b>Anexar arquivo</b><small>Foto ou documento PDF</small></button>
+              <input id="rdo-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+              <input id="rdo-file-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
+            </div>
+            <div class="rdo-attachments-head"><b id="rdo-attachment-count">0 anexos adicionados</b><small>As fotos serão incluídas no PDF do diário.</small></div>
+            <div class="rdo-attachment-list" id="rdo-attachment-list"><div class="rdo-attachment-empty">Nenhuma evidência anexada.</div></div>
+            <div class="form-grid">
+              <div class="full"><label>Ocorrências e observações <small>Opcional</small></label><textarea id="rdo-notes" rows="3" maxlength="1200" placeholder="Registre atrasos, impedimentos ou outros eventos relevantes.">${U.esc(existing?.notes||'')}</textarea></div>
+            </div>
+          </section>
+
+          <section class="rdo-step" data-rdo-step="4" hidden>
+            <div class="rdo-step-heading"><span>04</span><div><h3>Revise antes de enviar</h3><p>Confira as informações que seguirão para aprovação.</p></div></div>
+            <div class="rdo-review-grid" id="rdo-review"></div>
+            <label class="rdo-confirmation"><input id="rdo-confirmation" type="checkbox"><span><i data-lucide="check"></i></span>Confirmo que revisei os horários, colaboradores, serviço e anexos.</label>
+          </section>
         </div>
       </div>`,
-      footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
+      footer:`<button class="btn btn-ghost" id="rdo-back"><i data-lucide="chevron-left"></i><span>Cancelar</span></button>
+        <div class="rdo-footer-spacer"></div>
         <button class="btn btn-ghost" id="rdo-save-draft"><i data-lucide="save"></i>Salvar rascunho</button>
-        <button class="btn btn-primary" id="rdo-submit"><i data-lucide="send"></i>Enviar para aprovação</button>`,
-      onOpen:()=>{
+        <button class="btn btn-primary" id="rdo-next">Continuar<i data-lucide="chevron-right"></i></button>
+        <button class="btn btn-primary" id="rdo-submit" hidden><i data-lucide="send"></i>Enviar para aprovação</button>`,
+      onOpen:async modal=>{
+        modal.classList.add('rdo-composer-modal');
         const cards=[...document.querySelectorAll('.rdo-worker-card')];
+        let currentStep=1;
+        let pendingFiles=[];
+        let savedAttachments=[];
+        let busy=false;
+        const byId=id=>document.getElementById(id);
+
         const refreshTotal=card=>{
           const total=['regular','overtime50','overtime100'].reduce((sum,key)=>sum+U.num(card.querySelector(`[data-field="${key}"]`).value),0);
           card.querySelector('.rdo-worker-total').textContent=`${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h`;
         };
+        const sharedValues=()=>({
+          start:byId('rdo-all-start').value,
+          end:byId('rdo-all-end').value,
+          breakMinutes:byId('rdo-all-break').value,
+          regular:byId('rdo-all-regular').value,
+          overtime50:byId('rdo-all-50').value,
+          overtime100:byId('rdo-all-100').value
+        });
+        const applyToCard=card=>{
+          Object.entries(sharedValues()).forEach(([field,value])=>{
+            card.querySelector(`[data-field="${field}"]`).value=value;
+          });
+          refreshTotal(card);
+        };
+        const refreshTeamSummary=()=>{
+          const selected=cards.filter(card=>card.querySelector('.rdo-worker-select input').checked);
+          const hours=selected.reduce((sum,card)=>sum+['regular','overtime50','overtime100'].reduce(
+            (total,key)=>total+U.num(card.querySelector(`[data-field="${key}"]`).value),0
+          ),0);
+          byId('rdo-team-summary').innerHTML=`<span><b>${selected.length}</b> colaboradores selecionados</span><span><b>${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b> no total</span>`;
+        };
         cards.forEach(card=>{
           const checkbox=card.querySelector('.rdo-worker-select input');
-          checkbox.onchange=()=>card.classList.toggle('selected',checkbox.checked);
+          checkbox.onchange=()=>{
+            card.classList.toggle('selected',checkbox.checked);
+            if(checkbox.checked) applyToCard(card);
+            refreshTeamSummary();
+          };
           card.querySelectorAll('[data-field="start"],[data-field="end"],[data-field="breakMinutes"]').forEach(input=>input.onchange=()=>{
             const hours=this.workedHours(
               card.querySelector('[data-field="start"]').value,
@@ -287,36 +455,33 @@ const RDO = {
             card.querySelector('[data-field="regular"]').value=hours.regular;
             card.querySelector('[data-field="overtime50"]').value=hours.overtime50;
             refreshTotal(card);
+            refreshTeamSummary();
           });
-          card.querySelectorAll('[data-field="regular"],[data-field="overtime50"],[data-field="overtime100"]').forEach(input=>input.oninput=()=>refreshTotal(card));
+          card.querySelectorAll('[data-field="regular"],[data-field="overtime50"],[data-field="overtime100"]').forEach(input=>input.oninput=()=>{
+            refreshTotal(card);
+            refreshTeamSummary();
+          });
           refreshTotal(card);
         });
         const applyToAll=()=>{
-          const values={
-            start:document.getElementById('rdo-all-start').value,
-            end:document.getElementById('rdo-all-end').value,
-            breakMinutes:document.getElementById('rdo-all-break').value,
-            regular:document.getElementById('rdo-all-regular').value,
-            overtime50:document.getElementById('rdo-all-50').value,
-            overtime100:document.getElementById('rdo-all-100').value
-          };
           cards.filter(card=>card.querySelector('.rdo-worker-select input').checked).forEach(card=>{
-            Object.entries(values).forEach(([field,value])=>card.querySelector(`[data-field="${field}"]`).value=value);
-            refreshTotal(card);
+            applyToCard(card);
           });
+          refreshTeamSummary();
         };
         const recalcTemplate=()=>{
           const hours=this.workedHours(
-            document.getElementById('rdo-all-start').value,
-            document.getElementById('rdo-all-end').value,
-            document.getElementById('rdo-all-break').value
+            byId('rdo-all-start').value,
+            byId('rdo-all-end').value,
+            byId('rdo-all-break').value
           );
-          document.getElementById('rdo-all-regular').value=hours.regular;
-          document.getElementById('rdo-all-50').value=hours.overtime50;
+          byId('rdo-all-regular').value=hours.regular;
+          byId('rdo-all-50').value=hours.overtime50;
           applyToAll();
         };
-        ['rdo-all-start','rdo-all-end','rdo-all-break'].forEach(id=>document.getElementById(id).onchange=recalcTemplate);
-        ['rdo-all-regular','rdo-all-50','rdo-all-100'].forEach(id=>document.getElementById(id).oninput=applyToAll);
+        ['rdo-all-start','rdo-all-end','rdo-all-break'].forEach(fieldId=>byId(fieldId).onchange=recalcTemplate);
+        ['rdo-all-regular','rdo-all-50','rdo-all-100'].forEach(fieldId=>byId(fieldId).oninput=applyToAll);
+
         const collect=()=>({
           ...(existing||{
             id:U.id(),
@@ -342,20 +507,337 @@ const RDO = {
               overtime50:U.num(card.querySelector('[data-field="overtime50"]').value),
               overtime100:U.num(card.querySelector('[data-field="overtime100"]').value)
             };
-          })
+          }),
+          attachmentCount:savedAttachments.length+pendingFiles.length
         });
-        const persist=async status=>{
-          try{
-            await this.save(collect(),status);
-            UI.close();
-            UI.toast(status==='Enviado'?'RDO enviado para aprovação':'Rascunho salvo','success');
-            App.render();
-          }catch(err){ UI.toast(U.esc(err.message||err),'warn',6500); }
+
+        const renderAttachments=()=>{
+          const rows=[
+            ...savedAttachments.map(item=>({...item,saved:true})),
+            ...pendingFiles.map(item=>({
+              id:item.id,fileName:item.file.name,mimeType:item.file.type,sizeBytes:item.file.size,
+              previewUrl:item.previewUrl,saved:false
+            }))
+          ];
+          byId('rdo-attachment-count').textContent=`${rows.length} ${rows.length===1?'anexo adicionado':'anexos adicionados'}`;
+          byId('rdo-attachment-list').innerHTML=rows.map(item=>`<article class="rdo-attachment-item">
+            <span class="rdo-attachment-thumb ${this.isImage(item)?'image':'file'}">
+              ${item.previewUrl?`<img src="${U.esc(item.previewUrl)}" alt="">`:`<i data-lucide="${this.isImage(item)?'image':'file-text'}"></i>`}
+            </span>
+            <span><b>${U.esc(item.fileName||'arquivo')}</b><small>${this.isImage(item)?'Foto':'Documento'} · ${this.formatFileSize(item.sizeBytes)}</small></span>
+            <button type="button" class="icon-btn" data-remove-${item.saved?'saved':'pending'}="${U.esc(item.id)}" aria-label="Remover ${U.esc(item.fileName||'anexo')}"><i data-lucide="x"></i></button>
+          </article>`).join('')||'<div class="rdo-attachment-empty"><i data-lucide="image-plus"></i><span>Nenhuma evidência anexada.</span></div>';
+          byId('rdo-attachment-list').querySelectorAll('[data-remove-pending]').forEach(button=>button.onclick=()=>{
+            const target=pendingFiles.find(item=>String(item.id)===String(button.dataset.removePending));
+            if(target&&target.previewUrl){
+              URL.revokeObjectURL(target.previewUrl);
+              this.attachmentUrls.delete(target.previewUrl);
+            }
+            pendingFiles=pendingFiles.filter(item=>String(item.id)!==String(button.dataset.removePending));
+            renderAttachments();
+          });
+          byId('rdo-attachment-list').querySelectorAll('[data-remove-saved]').forEach(button=>button.onclick=()=>{
+            this.removeAttachment(existing.id,button.dataset.removeSaved);
+          });
+          U.icons();
         };
-        document.getElementById('rdo-save-draft').onclick=()=>persist('Rascunho');
-        document.getElementById('rdo-submit').onclick=()=>persist('Enviado');
+
+        const queueFiles=files=>{
+          for(const file of files){
+            if(savedAttachments.length+pendingFiles.length>=12){
+              UI.toast('Cada RDO pode ter no máximo 12 anexos.','warn',6000);
+              break;
+            }
+            try{
+              this.validateAttachmentFile(file);
+              const previewUrl=/^image\//.test(file.type)?URL.createObjectURL(file):'';
+              if(previewUrl){
+                this.attachmentUrls.add(previewUrl);
+                setTimeout(()=>{
+                  if(this.attachmentUrls.has(previewUrl)){
+                    URL.revokeObjectURL(previewUrl);
+                    this.attachmentUrls.delete(previewUrl);
+                  }
+                },300000);
+              }
+              pendingFiles.push({id:U.id(),file,previewUrl});
+            }catch(err){ UI.toast(U.esc(err.message||err),'warn',6500); }
+          }
+          renderAttachments();
+        };
+        byId('rdo-camera-button').onclick=()=>byId('rdo-camera-input').click();
+        byId('rdo-file-button').onclick=()=>byId('rdo-file-input').click();
+        byId('rdo-camera-input').onchange=event=>{ queueFiles([...event.target.files]); event.target.value=''; };
+        byId('rdo-file-input').onchange=event=>{ queueFiles([...event.target.files]); event.target.value=''; };
+        byId('rdo-description').oninput=()=>{ byId('rdo-description-count').textContent=byId('rdo-description').value.length; };
+
+        const selectedCards=()=>cards.filter(card=>card.querySelector('.rdo-worker-select input').checked);
+        const validateStep=step=>{
+          if(step===1 && (!byId('rdo-project').value||!byId('rdo-date').value)){
+            UI.toast('Informe o projeto e a data do serviço.','warn');
+            return false;
+          }
+          if(step===2){
+            if(!selectedCards().length){
+              UI.toast('Selecione ao menos um colaborador.','warn');
+              return false;
+            }
+            if(selectedCards().some(card=>['regular','overtime50','overtime100'].reduce(
+              (sum,key)=>sum+U.num(card.querySelector(`[data-field="${key}"]`).value),0
+            )<=0)){
+              UI.toast('Todos os colaboradores selecionados precisam ter horas informadas.','warn',6000);
+              return false;
+            }
+          }
+          if(step===3 && !byId('rdo-description').value.trim()){
+            UI.toast('Descreva o serviço realizado.','warn');
+            return false;
+          }
+          return true;
+        };
+
+        const updateReview=()=>{
+          const rdo=collect();
+          const project=projects.find(item=>String(item.id)===String(rdo.projectId));
+          const regular=rdo.entries.reduce((sum,row)=>sum+(Number(row.regular)||0),0);
+          const extra50=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime50)||0),0);
+          const extra100=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime100)||0),0);
+          byId('rdo-review').innerHTML=`
+            <article><div><i data-lucide="calendar-days"></i><b>Informações</b><button type="button" data-review-step="1">Editar</button></div>
+              <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
+            <article><div><i data-lucide="users-round"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
+              <dl><span><dt>Equipe</dt><dd>${rdo.entries.length} pessoas</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span></dl></article>
+            <article class="full"><div><i data-lucide="file-check-2"></i><b>Serviço e evidências</b><button type="button" data-review-step="3">Editar</button></div>
+              <p>${U.esc(rdo.description)}</p><span class="rdo-review-tag"><i data-lucide="paperclip"></i>${rdo.attachmentCount} ${rdo.attachmentCount===1?'anexo':'anexos'}</span></article>`;
+          byId('rdo-review').querySelectorAll('[data-review-step]').forEach(button=>button.onclick=()=>showStep(Number(button.dataset.reviewStep),true));
+          U.icons();
+        };
+
+        const showStep=(step,force=false)=>{
+          const next=Math.max(1,Math.min(4,Number(step)||1));
+          if(!force && next>currentStep && !validateStep(currentStep)) return;
+          currentStep=next;
+          document.querySelectorAll('[data-rdo-step]').forEach(section=>section.hidden=Number(section.dataset.rdoStep)!==currentStep);
+          document.querySelectorAll('[data-rdo-step-target]').forEach(button=>{
+            const number=Number(button.dataset.rdoStepTarget);
+            button.classList.toggle('active',number===currentStep);
+            button.classList.toggle('complete',number<currentStep);
+          });
+          byId('rdo-back').querySelector('span').textContent=currentStep===1?'Cancelar':'Voltar';
+          byId('rdo-next').hidden=currentStep===4;
+          byId('rdo-submit').hidden=currentStep!==4;
+          if(currentStep===4) updateReview();
+          modal.querySelector('.modal-body').scrollTop=0;
+        };
+        document.querySelectorAll('[data-rdo-step-target]').forEach(button=>button.onclick=()=>{
+          const step=Number(button.dataset.rdoStepTarget);
+          if(step<=currentStep+1) showStep(step,step<currentStep);
+        });
+        byId('rdo-back').onclick=()=>currentStep===1?UI.close():showStep(currentStep-1,true);
+        byId('rdo-next').onclick=()=>showStep(currentStep+1);
+
+        const persist=async status=>{
+          if(busy) return;
+          try{
+            if(![1,2,3].every(validateStep)) return;
+            if(status==='Enviado' && !byId('rdo-confirmation').checked)
+              return UI.toast('Confirme a revisão antes de enviar.','warn',5500);
+            const rdo=collect();
+            busy=true;
+            UI.loading(true,pendingFiles.length?'Salvando diário e anexos…':'Salvando diário…');
+            await this.save(rdo,'Rascunho');
+            for(const pending of [...pendingFiles]){
+              const attachment=await this.saveAttachment(rdo,pending.file);
+              savedAttachments.push(attachment);
+              pendingFiles=pendingFiles.filter(item=>item.id!==pending.id);
+            }
+            this.attachmentCache.set(String(rdo.id),savedAttachments.slice());
+            const saved=status==='Enviado'
+              ? await this.save({...rdo,attachmentCount:savedAttachments.length},'Enviado')
+              : {...rdo,status:'Rascunho',attachmentCount:savedAttachments.length};
+            await State.reload();
+            UI.loading(false);
+            busy=false;
+            App.render();
+            if(status==='Enviado'){
+              this.submitSuccess(saved,savedAttachments.length);
+            }else{
+              UI.closeAll();
+              UI.toast('Rascunho e anexos salvos','success');
+            }
+          }catch(err){
+            UI.loading(false);
+            busy=false;
+            renderAttachments();
+            UI.toast(U.esc(err.message||err),'warn',7000);
+          }
+        };
+        byId('rdo-save-draft').onclick=()=>persist('Rascunho');
+        byId('rdo-submit').onclick=()=>persist('Enviado');
+        refreshTeamSummary();
+        renderAttachments();
+        showStep(1,true);
+        if(existing){
+          try{
+            savedAttachments=await this.attachmentsFor(existing.id,{refresh:true});
+            if(document.getElementById('rdo-attachment-list')) renderAttachments();
+          }catch(err){
+            UI.toast('Os anexos não puderam ser carregados agora.','warn',6000);
+          }
+        }
       }
     });
+  },
+
+  submitSuccess(rdo,attachmentCount=0){
+    const total=(rdo.entries||[]).reduce(
+      (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
+    );
+    UI.modal({
+      title:'RDO enviado',
+      replace:true,
+      body:`<section class="rdo-success">
+        <span class="rdo-success-icon"><i data-lucide="check"></i></span>
+        <small>${U.esc(rdo.number||'Diário de Obra')}</small>
+        <h2>Diário enviado para aprovação</h2>
+        <p>O registro ficou disponível para revisão do responsável e está bloqueado para edição enquanto aguarda aprovação.</p>
+        <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users-round"></i>${(rdo.entries||[]).length} colaboradores</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
+      </section>`,
+      footer:`<button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
+        <button class="btn btn-primary" onclick="UI.closeAll()"><i data-lucide="list"></i>Voltar aos diários</button>`,
+      onOpen:modal=>modal.classList.add('rdo-success-modal')
+    });
+  },
+
+  async renderDetailAttachments(rdoId){
+    const container=document.getElementById('rdo-detail-attachments');
+    if(!container) return;
+    try{
+      const rows=await this.attachmentsFor(rdoId,{refresh:true});
+      if(!document.getElementById('rdo-detail-attachments')) return;
+      if(!rows.length){
+        container.innerHTML='<div class="rdo-attachment-empty"><i data-lucide="image-off"></i><span>Nenhuma evidência anexada.</span></div>';
+        return U.icons();
+      }
+      const display=await Promise.all(rows.map(async attachment=>{
+        let url='';
+        if(this.isImage(attachment)){
+          try{ url=await this.attachmentUrl(attachment); }catch(err){}
+        }
+        return {...attachment,url};
+      }));
+      if(!document.getElementById('rdo-detail-attachments')) return;
+      container.innerHTML=display.map(attachment=>`<button type="button" class="rdo-evidence-card" data-attachment-id="${U.esc(attachment.id)}">
+        <span>${attachment.url?`<img src="${U.esc(attachment.url)}" alt="${U.esc(attachment.fileName)}">`:`<i data-lucide="${this.isImage(attachment)?'image':'file-text'}"></i>`}</span>
+        <b>${U.esc(attachment.fileName)}</b><small>${this.formatFileSize(attachment.sizeBytes)}</small>
+      </button>`).join('');
+      container.querySelectorAll('[data-attachment-id]').forEach(button=>button.onclick=()=>{
+        this.previewAttachment(rdoId,button.dataset.attachmentId);
+      });
+      U.icons();
+    }catch(err){
+      container.innerHTML='<div class="rdo-attachment-empty">Não foi possível carregar as evidências agora.</div>';
+    }
+  },
+
+  async previewAttachment(rdoId,attachmentId){
+    try{
+      const rows=await this.attachmentsFor(rdoId);
+      const attachment=rows.find(item=>String(item.id)===String(attachmentId));
+      if(!attachment) throw new Error('Anexo não encontrado.');
+      if(!this.isImage(attachment)) return this.downloadAttachment(rdoId,attachmentId);
+      UI.loading(true,'Abrindo foto…');
+      const url=await this.attachmentUrl(attachment);
+      UI.loading(false);
+      UI.modal({
+        title:U.esc(attachment.fileName),
+        wide:true,
+        body:`<div class="rdo-photo-preview"><img src="${U.esc(url)}" alt="${U.esc(attachment.fileName)}"></div>`,
+        footer:`<button class="btn btn-ghost" onclick="RDO.downloadAttachment(${U.jsArg(rdoId)},${U.jsArg(attachmentId)})"><i data-lucide="download"></i>Baixar</button><button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
+      });
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível abrir o anexo: '+U.esc(err.message||err),'error',6500);
+    }
+  },
+
+  async downloadAttachment(rdoId,attachmentId){
+    try{
+      const rows=await this.attachmentsFor(rdoId);
+      const attachment=rows.find(item=>String(item.id)===String(attachmentId));
+      if(!attachment) throw new Error('Anexo não encontrado.');
+      UI.loading(true,'Preparando anexo…');
+      const blob=attachment.dataUrl
+        ? await fetch(attachment.dataUrl).then(response=>response.blob())
+        : await Cloud.downloadRdoAttachment(attachment.objectPath);
+      UI.loading(false);
+      U.download(attachment.fileName,blob,attachment.mimeType);
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível baixar o anexo: '+U.esc(err.message||err),'error',6500);
+    }
+  },
+
+  async print(id){
+    const rdo=State.rdos.find(item=>String(item.id)===String(id));
+    if(!rdo) return UI.toast('RDO não encontrado.','warn');
+    try{
+      UI.loading(true,'Preparando PDF do diário…');
+      const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
+      const images=[];
+      for(const attachment of attachments.filter(item=>this.isImage(item))){
+        try{ images.push({...attachment,url:await this.attachmentUrl(attachment)}); }catch(err){}
+      }
+      const old=document.getElementById('rdo-print-report');
+      if(old) old.remove();
+      const report=document.createElement('section');
+      report.id='rdo-print-report';
+      const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/favicon.svg';
+      const total=(rdo.entries||[]).reduce(
+        (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
+      );
+      const status=rdo.status==='Enviado'?'Aguardando aprovação':rdo.status;
+      report.innerHTML=`<header>
+        <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra</small></span></div>
+        <div class="rdo-print-number"><small>RDO</small><b>${U.esc(rdo.number||rdo.id)}</b><span>${U.esc(status||'Rascunho')}</span></div>
+      </header>
+      <div class="rdo-print-facts">
+        <span><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></span>
+        <span><small>Data</small><b>${U.date(rdo.date)}</b></span>
+        <span><small>Local</small><b>${U.esc(rdo.location||'Não informado')}</b></span>
+        <span><small>Total apontado</small><b>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b></span>
+      </div>
+      <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
+      <section class="rdo-print-section"><h2>Equipe e horas</h2>
+        <table><thead><tr><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
+        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(row.internalRole||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
+      </section>
+      ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
+      <section class="rdo-print-section"><h2>Evidências fotográficas</h2>
+        ${images.length?`<div class="rdo-print-photos">${images.map((image,index)=>`<figure><img src="${U.esc(image.url)}" alt=""><figcaption>Foto ${String(index+1).padStart(2,'0')} · ${U.esc(image.fileName)}</figcaption></figure>`).join('')}</div>`:'<p>Nenhuma foto anexada.</p>'}
+        ${attachments.some(item=>!this.isImage(item))?`<div class="rdo-print-files"><b>Documentos anexados:</b> ${attachments.filter(item=>!this.isImage(item)).map(item=>U.esc(item.fileName)).join(' · ')}</div>`:''}
+      </section>
+      <footer>Gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
+      document.body.appendChild(report);
+      document.body.classList.add('printing-rdo');
+      await Promise.race([
+        Promise.all([...report.querySelectorAll('img')].map(image=>image.complete?Promise.resolve():new Promise(resolve=>{
+          image.onload=resolve; image.onerror=resolve;
+        }))),
+        new Promise(resolve=>setTimeout(resolve,1800))
+      ]);
+      UI.loading(false);
+      UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
+      window.addEventListener('afterprint',()=>{
+        report.remove();
+        document.body.classList.remove('printing-rdo');
+      },{once:true});
+      setTimeout(()=>window.print(),250);
+    }catch(err){
+      UI.loading(false);
+      document.body.classList.remove('printing-rdo');
+      UI.toast('Não foi possível gerar o PDF: '+U.esc(err.message||err),'error',7000);
+    }
   },
 
   detail(id){
@@ -385,28 +867,43 @@ const RDO = {
         <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${U.money(financial.costTotal)}</div></div>
         <div class="kpi accent-blue"><div class="k-label">Venda apurada</div><div class="k-value">${U.money(financial.saleTotal)}</div></div>
       </div>`:''}
-      ${rdo.notes?`<div class="import-log"><b>Observações:</b> ${U.esc(rdo.notes)}</div>`:''}`,
+      ${rdo.notes?`<div class="import-log"><b>Observações:</b> ${U.esc(rdo.notes)}</div>`:''}
+      <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
       footer:`${this.canEdit(rdo)?`<button class="btn btn-ghost" onclick="UI.close();RDO.form(${U.jsArg(rdo.id)})"><i data-lucide="pencil"></i>Editar</button>`:''}
         ${rdo.status==='Enviado'&&typeof Cloud!=='undefined'&&Cloud.canEditStore('rdos')?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}
         ${rdo.status==='Enviado'&&this.canApprove()?`<button class="btn btn-primary" onclick="RDO.approve(${U.jsArg(rdo.id)})"><i data-lucide="badge-check"></i>Aprovar diário</button>`:''}
-        <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`
+        <button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
+        <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`,
+      onOpen:()=>this.renderDetailAttachments(rdo.id)
     });
   }
 };
 
 Views.rdos={
   title:'Diários de Obra',
+  query:'',
+  status:'Todos',
+  setStatus(status){ this.status=status; this.render(); },
+  setQuery(value){ this.query=String(value||''); this.render(); },
   render(){
     const linked=RDO.linkedRdoIds();
     const projectIds=new Set(RDO.allowedProjects().map(x=>String(x.id)));
-    const rows=State.rdos
+    const allRows=State.rdos
       .filter(rdo=>projectIds.has(String(rdo.projectId)))
       .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-    const approved=rows.filter(x=>x.status==='Aprovado').length;
-    const pending=rows.filter(x=>x.status==='Enviado').length;
-    const hours=rows.reduce((sum,rdo)=>sum+(rdo.entries||[]).reduce((s,row)=>s+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0),0);
-    $c().innerHTML=`<div class="toolbar">
-      <div><h2>RDO e apontamento de equipe</h2><small>Registro operacional por projeto, data e colaborador.</small></div>
+    const normalized=U.norm(this.query);
+    const rows=allRows.filter(rdo=>{
+      const matchesStatus=this.status==='Todos'||rdo.status===this.status;
+      const haystack=U.norm(`${rdo.number||''} ${RDO.projectLabel(rdo.projectId)} ${rdo.description||''} ${rdo.location||''}`);
+      return matchesStatus&&(!normalized||haystack.includes(normalized));
+    });
+    const approved=allRows.filter(x=>x.status==='Aprovado').length;
+    const pending=allRows.filter(x=>x.status==='Enviado').length;
+    const drafts=allRows.filter(x=>x.status==='Rascunho').length;
+    const returned=allRows.filter(x=>x.status==='Devolvido').length;
+    const hours=allRows.reduce((sum,rdo)=>sum+(rdo.entries||[]).reduce((s,row)=>s+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0),0);
+    $c().innerHTML=`<div class="toolbar rdo-page-toolbar">
+      <div><h2>Diários de obra</h2><small>Acompanhe o preenchimento, as evidências e o fluxo de aprovação.</small></div>
       <div class="spacer"></div>
       ${typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos')?'<button class="btn btn-primary" onclick="RDO.form()"><i data-lucide="plus"></i>Novo RDO</button>':''}
     </div>
@@ -415,6 +912,18 @@ Views.rdos={
       <div class="kpi accent-amber"><div class="k-label">Aguardando aprovação</div><div class="k-value">${pending}</div></div>
       <div class="kpi accent-green"><div class="k-label">Aprovados</div><div class="k-value">${approved}</div></div>
       <div class="kpi accent-blue"><div class="k-label">Horas registradas</div><div class="k-value">${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</div></div>
+    </div>
+    <div class="rdo-filter-panel">
+      <div class="rdo-search"><i data-lucide="search"></i><input id="rdo-search" value="${U.esc(this.query)}" placeholder="Buscar RDO, projeto ou serviço" aria-label="Buscar diários">${this.query?'<button id="rdo-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div>
+      <div class="rdo-filter-chips">
+        ${[
+          ['Todos',allRows.length],
+          ['Rascunho',drafts],
+          ['Enviado',pending],
+          ['Aprovado',approved],
+          ['Devolvido',returned]
+        ].map(([status,count])=>`<button type="button" class="${this.status===status?'active':''}" data-rdo-status="${status}">${status==='Enviado'?'Aguardando':status}<span>${count}</span></button>`).join('')}
+      </div>
     </div>
     <div class="rdo-list">${rows.map(rdo=>{
       const total=(rdo.entries||[]).reduce((sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0);
@@ -426,7 +935,19 @@ Views.rdos={
         <span class="rdo-status">${RDO.statusTag(rdo.status)}${linked.has(String(rdo.id))?'<small>Medido</small>':''}</span>
         <i data-lucide="chevron-right"></i>
       </button>`;
-    }).join('')||'<div class="empty card"><i data-lucide="clipboard-check"></i><br>Nenhum diário registrado.</div>'}</div>`;
+    }).join('')||'<div class="empty card"><i data-lucide="clipboard-check"></i><br>Nenhum diário encontrado.</div>'}</div>`;
+    const search=document.getElementById('rdo-search');
+    if(search){
+      search.oninput=U.debounce(()=>{
+        this.query=search.value;
+        this.render();
+        const next=document.getElementById('rdo-search');
+        if(next){ next.focus(); next.setSelectionRange(next.value.length,next.value.length); }
+      },180);
+    }
+    const clear=document.getElementById('rdo-search-clear');
+    if(clear) clear.onclick=()=>{ this.query=''; this.render(); };
+    document.querySelectorAll('[data-rdo-status]').forEach(button=>button.onclick=()=>this.setStatus(button.dataset.rdoStatus));
     U.icons();
   }
 };

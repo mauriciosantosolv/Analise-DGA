@@ -12,18 +12,19 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 3;
+  const NAME = 'ccf_obras', VERSION = 4;
   const STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
     'rdos','crew','labor_rates','rdo_financial'
   ];
+  const LOCAL_STORES = [...STORES,'rdo_attachments'];
   let db = null;
   function open(){
     return new Promise((res, rej) => {
       const rq = indexedDB.open(NAME, VERSION);
       rq.onupgradeneeded = e => {
         const d = e.target.result;
-        STORES.forEach(s => { if(!d.objectStoreNames.contains(s)) d.createObjectStore(s, {keyPath:'id'}); });
+        LOCAL_STORES.forEach(s => { if(!d.objectStoreNames.contains(s)) d.createObjectStore(s, {keyPath:'id'}); });
       };
       rq.onsuccess = e => { db = e.target.result; res(db); };
       rq.onerror = () => rej(rq.error || new Error('Falha ao abrir o banco de dados local.'));
@@ -61,7 +62,7 @@ const DB = (() => {
     await localClear(store);
   }
   async function clearLocalCache(){
-    for(const store of STORES) await localClear(store);
+    for(const store of LOCAL_STORES) await localClear(store);
     try{
       localStorage.removeItem('ccf_snap');
       localStorage.removeItem('ccf_snap_time');
@@ -112,19 +113,28 @@ const DB = (() => {
     Cloud.bindCurrentUser();
     return {mode:'downloaded-cloud',records:remote.length};
   }
-  return { open, all, put, bulkPut, del, clear, clearLocalCache, syncFromCloud, uploadLocalToCloud, STORES };
+  const attachmentAll = () => all('rdo_attachments');
+  const attachmentPut = obj => localPut('rdo_attachments',obj);
+  const attachmentDel = id => localDel('rdo_attachments',id);
+  return {
+    open, all, put, bulkPut, del, clear, clearLocalCache, syncFromCloud, uploadLocalToCloud,
+    attachmentAll, attachmentPut, attachmentDel, STORES, LOCAL_STORES
+  };
 })();
 
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
-  rdos:[], crew:[], laborRates:[], rdoFinancial:[],
+  rdos:[], crew:[], laborRates:[], rdoFinancial:[], rdoAttachments:[],
   filters:{ project:'', client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
-    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial] = await Promise.all(DB.STORES.map(s=>DB.all(s)));
+    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial,attachments] = await Promise.all([
+      ...DB.STORES.map(s=>DB.all(s)),
+      DB.attachmentAll()
+    ]);
     this.projects=p; this.budgets=b; this.purchases=c; this.planning=pl; this.clients=cl; this.categories=cat; this.measurements=me;
-    this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial;
+    this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial; this.rdoAttachments=attachments;
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
   async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; }

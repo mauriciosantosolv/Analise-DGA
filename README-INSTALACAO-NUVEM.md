@@ -1,4 +1,4 @@
-# CliqueObras v2.7 — Supabase
+# CliqueObras v2.8 — Supabase
 
 O sistema usa Supabase Auth e uma base compartilhada por organização. Projetos,
 orçamentos, financeiro, planejamento, RDOs, colaboradores, valores HH,
@@ -12,10 +12,12 @@ protegidos por RLS de organização, módulo e projeto autorizado.
 3. Em instalação nova, execute `supabase/schema.sql` completo e depois, nesta
    ordem:
    - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
-   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`.
+   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`;
+   - `supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql`.
 4. Em uma instalação já existente, execute nesta ordem:
    - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
-   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`.
+   - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`;
+   - `supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql`.
 5. Confira se as tabelas abaixo estão com RLS ativo:
    - `app_records`
    - `profiles`
@@ -24,6 +26,7 @@ protegidos por RLS de organização, módulo e projeto autorizado.
    - `organization_invitations`
    - `rdo_measurement_links`
    - `rdo_cost_postings`
+   - `rdo_attachments`
 6. Em `Authentication > URL Configuration`, use:
    - Site URL: `https://cliqueobras.com`
    - Redirect URL: `https://cliqueobras.com/**`
@@ -70,8 +73,8 @@ mesmo e-mail.
 
 ## Ordem segura de publicação
 
-1. Exporte um backup e execute as migrações v2.7 na ordem indicada.
-2. Publique todos os arquivos da versão v2.7 juntos.
+1. Exporte um backup e execute as migrações na ordem indicada.
+2. Publique todos os arquivos da versão v2.8 juntos.
 3. Teste com o proprietário atual.
 4. Convide um segundo usuário de teste e valide as permissões antes de liberar
    para clientes.

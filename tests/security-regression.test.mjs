@@ -13,10 +13,10 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="2\.7\.0"/);
+assert.match(html, /name="application-version" content="2\.8\.0"/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=2\.7\.0/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=2\.8\.0/);
 
 const integrity = read("assets/vendor/INTEGRITY-SHA256.txt");
 for (const relative of [
@@ -39,6 +39,8 @@ assert.match(htaccess, /Strict-Transport-Security/);
 
 const cloud = read("database/cloud.js");
 assert.match(cloud, /rdo_projects:\[\]/);
+assert.match(cloud, /uploadRdoAttachment/);
+assert.match(cloud, /downloadRdoAttachment/);
 assert.doesNotMatch(cloud, /service_role|sb_secret/i);
 
 const configuration = read("modules/configuracoes/configuracoes.js");
@@ -48,6 +50,9 @@ assert.match(configuration, /U\.jsArg\(m\.user_id\)/);
 
 const rdo = read("modules/rdo/rdo.js");
 assert.match(rdo, /U\.jsArg\(rdo\.id\)/);
+assert.match(rdo, /Diário enviado para aprovação/);
+assert.match(rdo, /capture="environment"/);
+assert.match(rdo, /window\.print\(\)/);
 assert.doesNotMatch(rdo, /RDO\.detail\('\\?\$\{U\.esc/);
 
 const measurements = read("modules/medicoes/medicoes.js");
@@ -66,5 +71,13 @@ assert.match(rdoSql, /primary key \(organization_id,rdo_id\)/);
 assert.match(rdoSql, /create policy "cliqueobras_rdo_links_delete"/);
 assert.match(rdoSql, /grant select,insert,delete on table public\.rdo_measurement_links/);
 assert.doesNotMatch(rdoSql, /auth\.role\(\)/);
+
+const attachmentSql = read("supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql");
+assert.match(attachmentSql, /create table if not exists public\.rdo_attachments/);
+assert.match(attachmentSql, /alter table public\.rdo_attachments enable row level security/);
+assert.match(attachmentSql, /bucket_id='rdo-evidencias'/);
+assert.match(attachmentSql, /rdo_is_attachment_editable/);
+assert.match(attachmentSql, /grant select,insert,delete on table public\.rdo_attachments/);
+assert.doesNotMatch(attachmentSql, /auth\.role\(\)/);
 
 console.log("Security regression tests passed");

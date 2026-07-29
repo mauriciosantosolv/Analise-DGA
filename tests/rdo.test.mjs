@@ -59,4 +59,14 @@ assert.equal(missing.missingRates.length,1);
 assert.equal(missing.costTotal,0);
 assert.equal(missing.saleTotal,0);
 
+assert.doesNotThrow(()=>RDO.validateAttachmentFile({
+  name:"campo.jpg",type:"image/jpeg",size:1024
+}));
+assert.throws(()=>RDO.validateAttachmentFile({
+  name:"campo.svg",type:"image/svg+xml",size:1024
+}),/JPG/);
+assert.throws(()=>RDO.validateAttachmentFile({
+  name:"grande.jpg",type:"image/jpeg",size:9*1024*1024
+}),/8 MB/);
+
 console.log("RDO calculation tests passed");

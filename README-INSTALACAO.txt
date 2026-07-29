@@ -1,4 +1,4 @@
-CLIQUEOBRAS v2.7 — INSTALAÇÃO SEGURA
+CLIQUEOBRAS v2.8 — INSTALAÇÃO SEGURA
 
 Este é o pacote completo do sistema. Não misture arquivos de versões anteriores.
 
@@ -17,14 +17,15 @@ SUPABASE
 - Para instalação existente, execute nesta ordem:
   1. supabase/ATUALIZACAO-SEGURANCA-v2.7.sql
   2. supabase/ATUALIZACAO-v2.7-RDO-HH.sql
-- Para instalação nova, execute supabase/schema.sql e depois
-  supabase/ATUALIZACAO-v2.7-RDO-HH.sql.
+  3. supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql
+- Para instalação nova, execute supabase/schema.sql e as três atualizações
+  acima, na mesma ordem.
 - Ela preserva app_records e adiciona organizações, membros, convites, perfis
   e RLS por organização/permissão.
 - Nunca coloque service_role, Secret Key ou senha do banco no navegador.
 - Ative a proteção contra senhas comprometidas no painel de Authentication.
 
-PRINCIPAIS MUDANÇAS v2.7
+PRINCIPAIS MUDANÇAS v2.8
 - Hierarquia de equipe protegida no RLS contra elevação de privilégios.
 - Escrita remota validada antes de alterar o cache local.
 - Conflitos offline preservam a fila e não sobrescrevem a nuvem.
@@ -37,6 +38,11 @@ PRINCIPAIS MUDANÇAS v2.7
 - RDO medido não pode entrar em outra medição.
 - Aprovação lança somente o custo da mão de obra no realizado.
 - Custos, valores comerciais e snapshots possuem permissões separadas.
+- RDO guiado em quatro etapas, alinhado ao modelo operacional aprovado.
+- Fotos e PDFs anexados em bucket privado, com RLS por organização e projeto.
+- Confirmação visual após o envio para aprovação.
+- PDF individual do RDO com equipe, horas, serviço, ocorrências e fotos.
+- Formulário do RDO reconstruído para uso em smartphone sem rolagem horizontal.
 
 COMO VINCULAR OUTRO USUÁRIO
 1. Entre como proprietário, administrador ou gestor delegado.

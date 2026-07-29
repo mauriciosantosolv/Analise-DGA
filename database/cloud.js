@@ -13,6 +13,7 @@ const Cloud = (() => {
   const BOUND_SCOPE_KEY = 'clique_obras_local_scope';
   const LEGACY_BOUND_USER_KEY = 'clique_obras_local_owner';
   const ACTIVE_ORG_KEY = 'clique_obras_active_organization';
+  const RDO_BUCKET = 'rdo-evidencias';
   const ALL_STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
     'rdos','crew','labor_rates','rdo_financial'
@@ -682,6 +683,135 @@ const Cloud = (() => {
     return body;
   }
 
+  function attachmentRow(row={}){
+    return {
+      id:String(row.id||''),
+      rdoId:String(row.rdo_id||''),
+      projectId:String(row.project_id||''),
+      objectPath:String(row.object_path||''),
+      fileName:String(row.file_name||'arquivo'),
+      mimeType:String(row.mime_type||'application/octet-stream'),
+      sizeBytes:Number(row.size_bytes)||0,
+      uploadedBy:String(row.uploaded_by||''),
+      uploadedAt:row.uploaded_at||null
+    };
+  }
+
+  function storageId(){
+    if(globalThis.crypto && typeof globalThis.crypto.randomUUID==='function')
+      return globalThis.crypto.randomUUID();
+    const bytes=new Uint8Array(16);
+    if(globalThis.crypto && typeof globalThis.crypto.getRandomValues==='function')
+      globalThis.crypto.getRandomValues(bytes);
+    else
+      for(let i=0;i<bytes.length;i++) bytes[i]=Math.floor(Math.random()*256);
+    bytes[6]=(bytes[6]&15)|64;
+    bytes[8]=(bytes[8]&63)|128;
+    const hex=[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
+    return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+  }
+
+  function safeStorageName(name){
+    const clean=String(name||'arquivo')
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9._-]+/gi,'-')
+      .replace(/^-+|-+$/g,'')
+      .slice(-120);
+    return clean || 'arquivo';
+  }
+
+  async function authenticatedStorage(){
+    await ensureFresh();
+    if(!window.supabase || typeof window.supabase.createClient!=='function')
+      throw new Error('O serviço de arquivos não foi carregado.');
+    const client=window.supabase.createClient(baseUrl(),cfg.publishableKey,{
+      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+      global:{headers:{Authorization:`Bearer ${session.access_token}`}}
+    });
+    return client.storage.from(RDO_BUCKET);
+  }
+
+  async function listRdoAttachments(rdoId){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return [];
+    const query=[
+      'select=id,rdo_id,project_id,object_path,file_name,mime_type,size_bytes,uploaded_by,uploaded_at',
+      `organization_id=eq.${encodeURIComponent(organization().id)}`,
+      `rdo_id=eq.${encodeURIComponent(String(rdoId))}`,
+      'order=uploaded_at.asc'
+    ].join('&');
+    const rows=await request('/rest/v1/rdo_attachments?'+query,{headers:authHeaders(false)}) || [];
+    return rows.map(attachmentRow);
+  }
+
+  async function uploadRdoAttachment(rdoId,projectId,file){
+    await ensureFresh();
+    if(!organization() || !canEditStore('rdos') || !canUseRdoProject(projectId))
+      throw new Error('Não foi possível anexar arquivos a este RDO.');
+    const allowed=new Set(['image/jpeg','image/png','image/webp','application/pdf']);
+    const mime=String(file&&file.type||'').toLowerCase();
+    const size=Number(file&&file.size)||0;
+    if(!allowed.has(mime)) throw new Error('Use fotos JPG, PNG ou WebP, ou documentos PDF.');
+    if(!size || size>8*1024*1024) throw new Error('Cada anexo deve ter no máximo 8 MB.');
+    const id=storageId();
+    const path=[
+      organization().id,
+      String(projectId),
+      String(rdoId),
+      `${id}-${safeStorageName(file.name)}`
+    ].join('/');
+    const bucket=await authenticatedStorage();
+    const upload=await bucket.upload(path,file,{
+      cacheControl:'3600',
+      contentType:mime,
+      upsert:false
+    });
+    if(upload.error) throw upload.error;
+    const body={
+      id,
+      organization_id:organization().id,
+      rdo_id:String(rdoId),
+      project_id:String(projectId),
+      object_path:path,
+      file_name:String(file.name||'arquivo').slice(0,180),
+      mime_type:mime,
+      size_bytes:size,
+      uploaded_by:user().id
+    };
+    try{
+      const rows=await request('/rest/v1/rdo_attachments',{
+        method:'POST',
+        headers:{...authHeaders(true),Prefer:'return=representation'},
+        body:JSON.stringify(body)
+      }) || [];
+      return attachmentRow(rows[0]||body);
+    }catch(err){
+      try{ await bucket.remove([path]); }catch(cleanupError){}
+      throw err;
+    }
+  }
+
+  async function removeRdoAttachment(attachment){
+    await ensureFresh();
+    if(!organization() || !canEditStore('rdos')) throw new Error('Exclusão de anexo indisponível.');
+    const row=attachment||{};
+    const bucket=await authenticatedStorage();
+    const removed=await bucket.remove([String(row.objectPath||'')]);
+    if(removed.error) throw removed.error;
+    await request(`/rest/v1/rdo_attachments?id=eq.${encodeURIComponent(String(row.id||''))}&organization_id=eq.${encodeURIComponent(organization().id)}`,{
+      method:'DELETE',
+      headers:authHeaders(false)
+    });
+    return true;
+  }
+
+  async function downloadRdoAttachment(objectPath){
+    const bucket=await authenticatedStorage();
+    const result=await bucket.download(String(objectPath||''));
+    if(result.error) throw result.error;
+    return result.data;
+  }
+
   function normalizedPermissions(input={}){
     const view=[...new Set((input.view||[]).filter(x=>ALL_STORES.includes(x)))];
     const edit=[...new Set((input.edit||[]).filter(x=>view.includes(x)))];
@@ -790,6 +920,7 @@ const Cloud = (() => {
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, ensureRdoCostPosting,
+    listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };
 })();
