@@ -75,11 +75,11 @@ Dash.projectBanner = function(){
   const f = State.filters; if(!f.project) return '';
   const p = State.projects.find(x=>x.id===f.project); if(!p) return '';
   const c = State.clients.find(x=>x.name===p.client);
-  const logo = (c && c.logo) || p.clientLogo || '';
+  const logo = U.safeImageSrc((c && c.logo) || p.clientLogo || '');
   const st = Biz.projectStats(p, State.filters.category || '');
   return `<div class="card" style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">
-    ${logo ? `<img src="${logo}" class="logo-clean" style="width:84px;height:84px;object-fit:contain">`
-           : `<span class="avatar-ph" style="width:84px;height:84px;font-size:1.6rem;border-radius:14px">${U.initials(p.client||p.name||p.proposal)}</span>`}
+    ${logo ? `<img src="${U.esc(logo)}" class="logo-clean" style="width:84px;height:84px;object-fit:contain">`
+           : `<span class="avatar-ph" style="width:84px;height:84px;font-size:1.6rem;border-radius:14px">${U.esc(U.initials(p.client||p.name||p.proposal))}</span>`}
     <div style="flex:1;min-width:220px">
       <small style="color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.07em">Projeto em análise</small>
       <h1 style="margin:2px 0 6px">${U.esc(U.projLabel(p))}</h1>
@@ -124,7 +124,7 @@ Dash.drill = function(filter){
     <div class="table-wrap"><div class="table-scroll" style="max-height:420px"><table>
       <thead><tr><th>Data</th><th>Projeto</th><th>Fornecedor</th><th>Pedido/Nota</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
       <tbody>${rows.slice(0,400).map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
-        <tr class="clickable" onclick="Dash.showPurchase('${x.id}')">
+        <tr class="clickable" onclick="Dash.showPurchase(${U.jsArg(x.id)})">
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.supplier||'—')}</td>
           <td>${U.esc(x.order||'—')}</td>
           <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(x.desc||'—')}</td>
@@ -139,12 +139,12 @@ Dash.simulator = function(projectId){
   const b = Biz.baseRates();
   UI.modal({ title:`Simulador Financeiro — ${U.esc(U.projLabel(p))}`, wide:true, body:`
     <div class="form-grid">
-      <div><label>Valor de Venda</label><input id="sim-sale" type="number" value="${p.saleValue}"></div>
+      <div><label>Valor de Venda</label><input id="sim-sale" type="number" value="${U.esc(p.saleValue)}"></div>
       <div><label>Custos Previstos (projeção, sem imposto/adm)</label><input id="sim-cost" type="number" value="${Math.round(s.projectedPurchases)}"></div>
-      <div><label>Impostos (%)</label><input id="sim-tax" type="number" step="0.1" value="${b.tax}"></div>
-      <div><label>Custo Administrativo (%)</label><input id="sim-admin" type="number" step="0.1" value="${b.admin}"></div>
-      <div><label>Taxas (%)</label><input id="sim-fees" type="number" step="0.1" value="${b.fees}"></div>
-      <div><label>Outros (%)</label><input id="sim-other" type="number" step="0.1" value="${b.other}"></div>
+      <div><label>Impostos (%)</label><input id="sim-tax" type="number" step="0.1" value="${U.esc(b.tax)}"></div>
+      <div><label>Custo Administrativo (%)</label><input id="sim-admin" type="number" step="0.1" value="${U.esc(b.admin)}"></div>
+      <div><label>Taxas (%)</label><input id="sim-fees" type="number" step="0.1" value="${U.esc(b.fees)}"></div>
+      <div><label>Outros (%)</label><input id="sim-other" type="number" step="0.1" value="${U.esc(b.other)}"></div>
     </div>
     <div class="kpi-grid" style="margin-top:16px" id="sim-out"></div>
     <small style="color:var(--text3)">Simulação não altera dados salvos. Valores de referência atuais: lucro ${U.money(s.profit)}, margem ${U.pct(s.marginCurrent)}.</small>`,

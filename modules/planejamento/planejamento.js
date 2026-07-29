@@ -18,7 +18,7 @@
 /* ---------- PLANEJAMENTO ---------- */
 Views.planejamento = {
   title:'Planejamento',
-  mode:'month', refDate:new Date(), projectFilter:'', focusUpcoming:false,
+  mode:(typeof matchMedia==='function' && matchMedia('(max-width: 600px)').matches)?'list':'month', refDate:new Date(), projectFilter:'', focusUpcoming:false,
   render(){
     $c().innerHTML = `
       <div class="toolbar">
@@ -64,10 +64,10 @@ Views.planejamento = {
         <tbody>${rows.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `<tr>
           <td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(Biz.categoryName(x.category))}</td>
           <td>${U.esc(x.desc||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="Views.planejamento.form('${x.id}')"><i data-lucide="pencil"></i>Editar</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="Views.planejamento.form(${U.jsArg(x.id)})"><i data-lucide="pencil"></i>Editar</button></td>
         </tr>`;}).join('')||'<tr><td colspan="5"><div class="empty">Nenhum gasto planejado nesta data.</div></td></tr>'}</tbody>
       </table></div></div>`,
-      footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="UI.closeAll();App.goFiltered('planejamento','${State.filters.project||''}')"><i data-lucide="calendar-days"></i>Abrir planejamento</button>`
+      footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="UI.closeAll();App.goFiltered('planejamento',${U.jsArg(State.filters.project||'')})"><i data-lucide="calendar-days"></i>Abrir planejamento</button>`
     });
   },
   draw(){
@@ -82,7 +82,7 @@ Views.planejamento = {
           <tbody>${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
             <tr><td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.category)}</td>
             <td>${U.esc(x.desc)}</td><td class="num">${U.money2(x.value)}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.form('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+            <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.form(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
             || `<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
       } else {
         body.innerHTML = items.length ? `<div class="card"><div class="timeline">${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
@@ -100,9 +100,9 @@ Views.planejamento = {
         const d = new Date(start); d.setDate(start.getDate()+i);
         const iso = U.isoDate(d);
         const evs = this.items().filter(x=>x.date===iso);
-        html += `<div class="cal-day ${d.getMonth()!==r.getMonth()?'other':''} ${iso===today?'today':''}" onclick="Views.planejamento.form('', '${iso}')" title="Clique para inserir um planejamento nesta data">
+        html += `<div class="cal-day ${d.getMonth()!==r.getMonth()?'other':''} ${iso===today?'today':''}" onclick="Views.planejamento.form('', ${U.jsArg(iso)})" title="Clique para inserir um planejamento nesta data">
           <div class="d">${d.getDate()}</div>
-          ${evs.slice(0,3).map(x=>`<div class="cal-ev" style="${this.eventStyle(x.projectId)}" onclick="event.stopPropagation();Views.planejamento.form('${x.id}')" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
+          ${evs.slice(0,3).map(x=>`<div class="cal-ev" style="${this.eventStyle(x.projectId)}" onclick="event.stopPropagation();Views.planejamento.form(${U.jsArg(x.id)})" title="${U.esc(x.desc)}">${U.money(x.value)} ${U.esc(x.category)}</div>`).join('')}
           ${evs.length>3?`<small>+${evs.length-3}</small>`:''}</div>`;
       }
       body.innerHTML = html + '</div></div>';
@@ -129,14 +129,14 @@ Views.planejamento = {
     const x = id ? State.planning.find(i=>i.id===id) : {projectId:State.filters.project||(State.projects[0]||{}).id||'',category:'',desc:'',value:0,date:presetDate||U.isoDate(new Date()),notes:''};
     UI.modal({ title:id?'Editar Item de Planejamento':'Novo Item de Planejamento', body:`
       <div class="form-grid">
-        <div><label>Projeto *</label><select id="pl-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
+        <div><label>Projeto *</label><select id="pl-proj">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
         <div><label>Categoria *</label><select id="pl-cat"><option value="">Selecione...</option>${Biz.uniqueCategories().map(c=>`<option value="${U.esc(c.name)}" ${Biz.sameCategory(c.name,x.category)?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></div>
-        <div><label>Valor Previsto *</label><input id="pl-value" type="number" step="0.01" value="${x.value||''}"></div>
-        <div><label>Data Prevista *</label><input id="pl-date" type="date" value="${x.date}"></div>
+        <div><label>Valor Previsto *</label><input id="pl-value" type="number" step="0.01" value="${U.esc(x.value||'')}"></div>
+        <div><label>Data Prevista *</label><input id="pl-date" type="date" value="${U.esc(x.date)}"></div>
         <div class="full"><label>Descrição</label><input id="pl-desc" value="${U.esc(x.desc)}"></div>
         <div class="full"><label>Observações</label><textarea id="pl-notes" rows="2">${U.esc(x.notes||'')}</textarea></div>
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.planejamento.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.planejamento.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="pl-save"><i data-lucide="check"></i>Salvar</button>`
     });

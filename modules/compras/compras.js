@@ -64,8 +64,8 @@ Views.financeiro = {
           <span style="width:38px;height:38px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="file-spreadsheet"></i></span>
           <div style="flex:1;min-width:180px"><b>${U.esc(b.file)}</b><br><small style="color:var(--text3)">Importado em ${U.date(b.date)} · ${b.items.length} lançamento(s)</small></div>
           <b>${U.money2(b.total)}</b>
-          <button class="btn btn-ghost btn-sm" onclick="Views.financeiro.viewBatch('${encodeURIComponent(b.key)}')"><i data-lucide="eye"></i>Ver / Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch('${encodeURIComponent(b.key)}')"><i data-lucide="trash-2"></i>Excluir bloco</button>
+          <button class="btn btn-ghost btn-sm" onclick="Views.financeiro.viewBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="eye"></i>Ver / Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="trash-2"></i>Excluir bloco</button>
         </div></div>`).join('')
       : `<div class="empty card"><i data-lucide="layers"></i><br>Nenhuma importação registrada ainda.</div>`;
     U.icons();
@@ -117,7 +117,7 @@ Views.financeiro = {
       <td>${Views.financeiro.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
       <td class="num"><b>${U.money2(x.value)}</b></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+      <td><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
       || '<tr><td colspan="8"><div class="empty">Nenhum lançamento corresponde aos filtros.</div></td></tr>';
     U.icons();
   },
@@ -276,12 +276,12 @@ Views.financeiro = {
     document.getElementById('fin-table').innerHTML = `
       <thead><tr><th>Data</th><th>Projeto</th><th>Origem</th><th>Categoria</th><th>Conta / Fornecedor</th><th>Descrição</th><th>Pedido</th><th class="num">Valor</th><th style="width:50px"></th></tr></thead>
       <tbody>${slice.map(x => { const p = State.projects.find(pr=>pr.id===x.projectId); return `
-        <tr class="clickable" onclick="Dash.showPurchase('${x.id}')">
+        <tr class="clickable" onclick="Dash.showPurchase(${U.jsArg(x.id)})">
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td>
           <td>${this.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
           <td>${U.esc(x.supplier||'—')}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td>${U.esc(x.order||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
-          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm('${x.id}')"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
         || `<tr><td colspan="9"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
       ${rows.length?`<tr><td colspan="8" style="text-align:right"><b>Total (${rows.length} lançamentos)</b></td><td class="num"><b>${U.money2(total)}</b></td></tr>`:''}</tbody>`;
     document.getElementById('fin-pager').innerHTML = pages>1 ? `
@@ -308,8 +308,8 @@ Dash.showPurchase = function(id){
       <b>Valor:</b> <span style="font-size:1.1rem;font-weight:800;color:var(--blue)">${U.money2(x.value)}</span><br>
       ${x.planningOffset?`<b>Planejamento abatido:</b> <span class="tag tag-green">${U.money2(x.planningOffset.amount)}</span><br>`:''}
       <small style="color:var(--text3)">Importado de ${U.esc(x.file||'—')} em ${U.date(x.importedAt)}</small></div>`,
-    footer:`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase('${x.id}')"><i data-lucide="trash-2"></i>Excluir</button>
-            <button class="btn btn-ghost" onclick="Dash.purchaseForm('${x.id}')"><i data-lucide="pencil"></i>Editar</button>
+    footer:`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>
+            <button class="btn btn-ghost" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i>Editar</button>
             <button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
 };
 
@@ -324,13 +324,13 @@ Dash.purchaseForm = function(id){
   if(!x) return;
   UI.modal({ title:isNew?'Novo Lançamento Manual':'Editar Lançamento', wide:true, body:`
     <div class="form-grid">
-      <div><label>Projeto</label><select id="pf-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
+      <div><label>Projeto</label><select id="pf-proj">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Categoria</label><input id="pf-cat" list="cat-list-p" value="${U.esc(x.category)}"><datalist id="cat-list-p">${Biz.uniqueCategories().map(c=>`<option>${U.esc(c.name)}</option>`).join('')}</datalist></div>
       <div><label>Origem do gasto</label><select id="pf-source"><option value="purchase" ${(x.sourceType||'purchase')==='purchase'?'selected':''}>Compra</option><option value="paidAccount" ${x.sourceType==='paidAccount'?'selected':''}>Conta paga</option><option value="labor" ${x.sourceType==='labor'?'selected':''}>Mão de obra</option></select></div>
       <div><label>Fornecedor</label><input id="pf-sup" value="${U.esc(x.supplier)}"></div>
       <div><label>Pedido/Nota</label><input id="pf-order" value="${U.esc(x.order)}"></div>
-      <div><label>Valor</label><input id="pf-value" type="number" step="0.01" value="${x.value}"></div>
-      <div><label>Data</label><input id="pf-date" type="date" value="${x.date}"></div>
+      <div><label>Valor</label><input id="pf-value" type="number" step="0.01" value="${U.esc(x.value)}"></div>
+      <div><label>Data</label><input id="pf-date" type="date" value="${U.esc(x.date)}"></div>
       <div class="full"><label>Descrição</label><input id="pf-desc" value="${U.esc(x.desc)}"></div>
       <div class="full"><label>Observações</label><textarea id="pf-notes" rows="2">${U.esc(x.notes)}</textarea></div>
       ${isNew?`<div class="full planning-offset-box">
@@ -339,7 +339,7 @@ Dash.purchaseForm = function(id){
         <small class="planning-offset-help" id="pf-plan-help">Selecione projeto e categoria para localizar planejamentos compatíveis.</small>
       </div>`:x.planningOffset?`<div class="full planning-offset-box"><b>Este lançamento já abateu ${U.money2(x.planningOffset.amount)} do planejamento.</b><small class="planning-offset-help">Se o lançamento for excluído, o saldo planejado será restaurado automaticamente.</small></div>`:''}
     </div>`,
-    footer:`${isNew?'':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase('${x.id}')"><i data-lucide="trash-2"></i>Excluir</button>`}
+    footer:`${isNew?'':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>`}
             <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
             <button class="btn btn-primary" id="pf-save"><i data-lucide="check"></i>${isNew?'Adicionar':'Salvar'}</button>` });
   if(isNew){

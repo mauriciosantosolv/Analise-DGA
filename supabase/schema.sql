@@ -273,6 +273,81 @@ as $$
     );
 $$;
 
+create or replace function clique_obras_private.current_user_email()
+returns text
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select lower(coalesce(u.email,''))
+  from auth.users u
+  where u.id=(select auth.uid());
+$$;
+
+create or replace function clique_obras_private.valid_permissions(input jsonb)
+returns boolean
+language sql
+immutable
+set search_path = pg_catalog
+as $$
+  select jsonb_typeof(input)='object'
+    and jsonb_typeof(coalesce(input->'view','[]'::jsonb))='array'
+    and jsonb_typeof(coalesce(input->'edit','[]'::jsonb))='array'
+    and coalesce(input->'manage_users','false'::jsonb) in ('true'::jsonb,'false'::jsonb)
+    and not exists (
+      select 1 from jsonb_object_keys(input) as permission_key(value)
+      where value not in ('view','edit','manage_users')
+    )
+    and not exists (
+      select 1 from jsonb_array_elements_text(coalesce(input->'view','[]'::jsonb)) as view_store(value)
+      where value not in (
+        'projects','budgets','purchases','planning','clients',
+        'categories','settings','measurements'
+      )
+    )
+    and not exists (
+      select 1 from jsonb_array_elements_text(coalesce(input->'edit','[]'::jsonb)) as edit_store(value)
+      where value not in (
+        'projects','budgets','purchases','planning','clients',
+        'categories','settings','measurements'
+      )
+      or not (coalesce(input->'view','[]'::jsonb) ? value)
+    );
+$$;
+
+create or replace function clique_obras_private.can_assign_member(
+  target_org uuid,
+  target_role text,
+  target_permissions jsonb
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select clique_obras_private.valid_permissions(target_permissions)
+    and exists (
+      select 1
+      from public.organization_members actor
+      where actor.organization_id=target_org
+        and actor.user_id=(select auth.uid())
+        and (
+          actor.role='owner'
+          or (
+            actor.role in ('admin','editor','viewer')
+            and target_role in ('editor','viewer')
+            and not coalesce((target_permissions->>'manage_users')::boolean,false)
+            and (
+              actor.role='admin'
+              or coalesce((actor.permissions->>'manage_users')::boolean,false)
+            )
+          )
+        )
+    );
+$$;
+
 create or replace function clique_obras_private.can_view_store(target_org uuid, target_store text)
 returns boolean
 language sql
@@ -342,9 +417,28 @@ grant execute on function clique_obras_private.is_org_member(uuid) to authentica
 grant execute on function clique_obras_private.is_org_owner(uuid) to authenticated;
 grant execute on function clique_obras_private.is_org_admin(uuid) to authenticated;
 grant execute on function clique_obras_private.can_manage_users(uuid) to authenticated;
+grant execute on function clique_obras_private.current_user_email() to authenticated;
+grant execute on function clique_obras_private.valid_permissions(jsonb) to authenticated;
+grant execute on function clique_obras_private.can_assign_member(uuid,text,jsonb) to authenticated;
 grant execute on function clique_obras_private.can_view_store(uuid,text) to authenticated;
 grant execute on function clique_obras_private.can_edit_store(uuid,text) to authenticated;
 grant execute on function clique_obras_private.can_view_profile(uuid) to authenticated;
+
+alter table public.organization_members
+  drop constraint if exists organization_members_permissions_valid;
+alter table public.organization_members
+  add constraint organization_members_permissions_valid
+  check (clique_obras_private.valid_permissions(permissions)) not valid;
+alter table public.organization_members
+  validate constraint organization_members_permissions_valid;
+
+alter table public.organization_invitations
+  drop constraint if exists organization_invitations_permissions_valid;
+alter table public.organization_invitations
+  add constraint organization_invitations_permissions_valid
+  check (clique_obras_private.valid_permissions(permissions)) not valid;
+alter table public.organization_invitations
+  validate constraint organization_invitations_permissions_valid;
 
 -- Cria o perfil e a organização de novos usuários. Quando houver convite
 -- pendente, o usuário entra diretamente na organização convidada.
@@ -627,19 +721,22 @@ security definer
 set search_path = pg_catalog, public
 as $$
 begin
-  if clique_obras_private.can_manage_users(old.organization_id) then
+  if lower(old.email)=clique_obras_private.current_user_email()
+    and new.organization_id=old.organization_id
+    and new.email=old.email
+    and new.role=old.role
+    and new.permissions=old.permissions
+    and new.invited_by=old.invited_by
+    and new.status='accepted' then
     return new;
   end if;
-  if lower(old.email) <> lower(coalesce((select auth.jwt())->>'email',''))
-    or new.organization_id <> old.organization_id
-    or new.email <> old.email
-    or new.role <> old.role
-    or new.permissions <> old.permissions
-    or new.invited_by <> old.invited_by
-    or new.status <> 'accepted' then
-    raise exception 'O convite só pode ser aceito pelo destinatário.';
+  if clique_obras_private.can_manage_users(old.organization_id)
+    and clique_obras_private.can_assign_member(
+      new.organization_id,new.role,new.permissions
+    ) then
+    return new;
   end if;
-  return new;
+  raise exception 'O convite só pode ser aceito pelo destinatário ou alterado dentro da autoridade do gestor.';
 end;
 $$;
 
@@ -649,6 +746,58 @@ drop trigger if exists clique_obras_protect_invitation on public.organization_in
 create trigger clique_obras_protect_invitation
 before update on public.organization_invitations
 for each row execute function clique_obras_private.protect_invitation_acceptance();
+
+create or replace function public.accept_organization_invitations()
+returns integer
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  actor_email text;
+  pending record;
+  accepted_count integer := 0;
+begin
+  if actor_id is null then
+    raise exception 'Sessão autenticada obrigatória.';
+  end if;
+
+  actor_email := clique_obras_private.current_user_email();
+  if coalesce(actor_email,'') = '' then
+    raise exception 'A conta autenticada não possui e-mail válido.';
+  end if;
+
+  for pending in
+    select invitation.*
+    from public.organization_invitations invitation
+    where invitation.status='pending'
+      and lower(invitation.email)=actor_email
+    order by invitation.created_at
+    for update
+  loop
+    insert into public.organization_members (
+      organization_id,user_id,role,permissions
+    )
+    values (
+      pending.organization_id,actor_id,pending.role,pending.permissions
+    )
+    on conflict (organization_id,user_id) do nothing;
+
+    update public.organization_invitations
+    set status='accepted',
+        accepted_at=coalesce(accepted_at,now())
+    where id=pending.id;
+
+    accepted_count := accepted_count + 1;
+  end loop;
+
+  return accepted_count;
+end;
+$$;
+
+revoke all on function public.accept_organization_invitations() from public, anon;
+grant execute on function public.accept_organization_invitations() to authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.organizations enable row level security;
@@ -664,6 +813,11 @@ grant select, update on table public.organizations to authenticated;
 grant select, insert, update, delete on table public.organization_members to authenticated;
 grant select, insert, update, delete on table public.organization_invitations to authenticated;
 grant select, insert, update, delete on table public.app_records to authenticated;
+
+-- Nome e e-mail são sincronizados exclusivamente pelo Auth. Pela Data API,
+-- cada conta pode alterar somente sua organização ativa.
+revoke update on table public.profiles from authenticated;
+grant update(active_organization_id) on table public.profiles to authenticated;
 
 drop policy if exists "cliqueobras_profiles_select" on public.profiles;
 create policy "cliqueobras_profiles_select"
@@ -699,14 +853,22 @@ drop policy if exists "cliqueobras_members_insert" on public.organization_member
 create policy "cliqueobras_members_insert"
 on public.organization_members for insert to authenticated
 with check (
-  clique_obras_private.can_manage_users(organization_id)
+  (
+    role<>'owner'
+    and clique_obras_private.can_assign_member(
+      organization_id,role,permissions
+    )
+  )
   or (
     user_id=(select auth.uid())
+    and role in ('admin','editor','viewer')
     and exists (
       select 1 from public.organization_invitations i
       where i.organization_id=organization_members.organization_id
         and i.status='pending'
-        and lower(i.email)=lower(coalesce((select auth.jwt())->>'email',''))
+        and lower(i.email)=clique_obras_private.current_user_email()
+        and i.role=organization_members.role
+        and i.permissions=organization_members.permissions
     )
   )
 );
@@ -715,7 +877,11 @@ drop policy if exists "cliqueobras_members_update" on public.organization_member
 create policy "cliqueobras_members_update"
 on public.organization_members for update to authenticated
 using (clique_obras_private.can_manage_users(organization_id))
-with check (clique_obras_private.can_manage_users(organization_id));
+with check (
+  clique_obras_private.can_assign_member(
+    organization_id,role,permissions
+  )
+);
 
 drop policy if exists "cliqueobras_members_delete" on public.organization_members;
 create policy "cliqueobras_members_delete"
@@ -728,8 +894,8 @@ on public.organization_invitations for select to authenticated
 using (
   clique_obras_private.can_manage_users(organization_id)
   or (
-    status='pending'
-    and lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+    lower(email)=clique_obras_private.current_user_email()
+    and status in ('pending','accepted')
   )
 );
 
@@ -737,8 +903,10 @@ drop policy if exists "cliqueobras_invitations_insert" on public.organization_in
 create policy "cliqueobras_invitations_insert"
 on public.organization_invitations for insert to authenticated
 with check (
-  clique_obras_private.can_manage_users(organization_id)
-  and invited_by=(select auth.uid())
+  invited_by=(select auth.uid())
+  and clique_obras_private.can_assign_member(
+    organization_id,role,permissions
+  )
 );
 
 drop policy if exists "cliqueobras_invitations_update" on public.organization_invitations;
@@ -748,18 +916,31 @@ using (
   clique_obras_private.can_manage_users(organization_id)
   or (
     status='pending'
-    and lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+    and lower(email)=clique_obras_private.current_user_email()
   )
 )
 with check (
-  clique_obras_private.can_manage_users(organization_id)
-  or lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+  (
+    clique_obras_private.can_manage_users(organization_id)
+    and clique_obras_private.can_assign_member(
+      organization_id,role,permissions
+    )
+  )
+  or (
+    status='accepted'
+    and lower(email)=clique_obras_private.current_user_email()
+  )
 );
 
 drop policy if exists "cliqueobras_invitations_delete" on public.organization_invitations;
 create policy "cliqueobras_invitations_delete"
 on public.organization_invitations for delete to authenticated
-using (clique_obras_private.can_manage_users(organization_id));
+using (
+  clique_obras_private.can_manage_users(organization_id)
+  and clique_obras_private.can_assign_member(
+    organization_id,role,permissions
+  )
+);
 
 drop policy if exists "Clique Obras: ler dados próprios" on public.app_records;
 drop policy if exists "Clique Obras: inserir dados próprios" on public.app_records;

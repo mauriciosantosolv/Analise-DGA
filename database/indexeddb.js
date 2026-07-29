@@ -38,24 +38,24 @@ const DB = (() => {
   }
   async function put(store,obj){
     assertCanEdit(store);
+    if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.mirror({type:'put',store,object:obj});
     await localPut(store,obj);
-    if(typeof Cloud!=='undefined') await Cloud.mirror({type:'put',store,object:obj});
     return obj;
   }
   async function bulkPut(store,objs){
     assertCanEdit(store);
+    if(typeof Cloud!=='undefined' && Cloud.active() && objs.length) await Cloud.mirror({type:'bulkPut',store,objects:objs});
     await localBulkPut(store,objs);
-    if(typeof Cloud!=='undefined' && objs.length) await Cloud.mirror({type:'bulkPut',store,objects:objs});
   }
   async function del(store,id){
     assertCanEdit(store);
+    if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.mirror({type:'delete',store,id});
     await localDel(store,id);
-    if(typeof Cloud!=='undefined') await Cloud.mirror({type:'delete',store,id});
   }
   async function clear(store){
     assertCanEdit(store);
+    if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.mirror({type:'clear',store});
     await localClear(store);
-    if(typeof Cloud!=='undefined') await Cloud.mirror({type:'clear',store});
   }
   async function clearLocalCache(){
     for(const store of STORES) await localClear(store);
@@ -75,8 +75,9 @@ const DB = (() => {
     if(typeof Cloud==='undefined' || !Cloud.active()) return {mode:'local',records:0};
     const accountSwitch=Cloud.isAccountSwitch();
     if(accountSwitch) await clearLocalCache();
-    await Cloud.flushQueue();
-    const remote=await Cloud.readAll();
+    const remoteBefore=await Cloud.readAll();
+    const flushed=await Cloud.flushQueue(remoteBefore);
+    const remote=flushed ? await Cloud.readAll() : remoteBefore;
     if(!remote.length){
       if(!accountSwitch && Cloud.canEditAny()) await uploadLocalToCloud();
       else if(!Cloud.canEditAny()) await clearLocalCache();

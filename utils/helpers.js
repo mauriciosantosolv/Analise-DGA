@@ -21,6 +21,23 @@ Object.assign(U, {
 
   icons(){ const raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame : (f)=>setTimeout(f,16); raf(()=>{ try{ lucide.createIcons(); }catch(e){} }); },
 
+  // Valores inseridos em atributos HTML e handlers inline precisam de
+  // codificações diferentes. JSON.stringify protege o contexto JavaScript;
+  // U.esc impede que o atributo HTML seja encerrado antes da execução.
+  jsArg(value){ return U.esc(JSON.stringify(String(value??''))); },
+
+  safeImageSrc(value){
+    const src=String(value||'').trim();
+    if(/^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\r\n]+$/i.test(src)) return src;
+    if(/^assets\/[a-z0-9_./-]+\.(?:png|jpe?g|webp|svg)$/i.test(src) && !src.includes('..')) return src;
+    return '';
+  },
+
+  safeColor(value, fallback='#2563EB'){
+    const color=String(value||'').trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+  },
+
   download(name, content, mime='application/octet-stream'){
     const blob = content instanceof Blob ? content : new Blob([content],{type:mime});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
@@ -30,26 +47,35 @@ Object.assign(U, {
   // Reduz imagens (logos) para no máx. 256px — evita data URLs gigantes no banco,
   // que deixam o carregamento lento ou travam o navegador
   resizeImage(dataUrl, max=256){
-    return new Promise(res => {
-      const t = setTimeout(() => res(dataUrl), 3000); // nunca trava o carregamento
-      const done = v => { clearTimeout(t); res(v); };
+    return new Promise((res,rej) => {
+      if(!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(String(dataUrl||'')))
+        return rej(new Error('Formato de imagem não permitido. Use PNG, JPEG ou WebP.'));
+      if(String(dataUrl).length>7000000)
+        return rej(new Error('A imagem excede o limite de 5 MB.'));
+      let settled=false;
+      const done = v => {
+        if(settled) return;
+        settled=true;
+        clearTimeout(t);
+        if(v) res(v); else rej(new Error('Não foi possível processar a imagem.'));
+      };
+      const t = setTimeout(() => done(''), 5000);
       try{
         const img = new Image();
         img.onload = () => {
           try{
             const sc = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
-            if(sc >= 1 && dataUrl.length < 200000) return res(dataUrl);
             const cv = document.createElement('canvas');
             cv.width = Math.max(1, Math.round((img.width||max) * sc));
             cv.height = Math.max(1, Math.round((img.height||max) * sc));
             cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
             const out = cv.toDataURL('image/png');
-            done(out && out.length > 30 ? out : dataUrl);
-          }catch(e){ done(dataUrl); }
+            done(out && out.length > 30 ? out : '');
+          }catch(e){ done(''); }
         };
-        img.onerror = () => done(dataUrl);
+        img.onerror = () => done('');
         img.src = dataUrl;
-      }catch(e){ done(dataUrl); }
+      }catch(e){ done(''); }
     });
   }
 });
@@ -123,14 +149,15 @@ function searchBox(id, ph){ return `<div style="position:relative;flex:1;max-wid
 
 function bindSearch(id, fn){ const el = document.getElementById(id); if(el) el.oninput = U.debounce(()=>fn(el.value), 180); }
 
-function statusTag(st){ const m = {'Em andamento':'tag-blue','Concluído':'tag-green','Paralisado':'tag-amber','A executar':'tag-gray'}; return `<span class="tag ${m[st]||'tag-gray'}">${st||'—'}</span>`; }
+function statusTag(st){ const m = {'Em andamento':'tag-blue','Concluído':'tag-green','Paralisado':'tag-amber','A executar':'tag-gray'}; return `<span class="tag ${m[st]||'tag-gray'}">${U.esc(st||'—')}</span>`; }
 
 function lightDot(l){ return `<span class="dot dot-${l}" title="${{green:'Saudável',amber:'Atenção',red:'Crítico'}[l]}"></span>`; }
 
 function clientAvatar(name){
   const c = State.clients.find(x=>x.name===name);
-  if(c && c.logo) return `<img class="avatar" src="${c.logo}" alt="">`;
-  return `<span class="avatar-ph">${U.initials(name)}</span>`;
+  const logo=c && U.safeImageSrc(c.logo);
+  if(logo) return `<img class="avatar" src="${U.esc(logo)}" alt="">`;
+  return `<span class="avatar-ph">${U.esc(U.initials(name))}</span>`;
 }
 
 /* Clique fora do modal (ou Esc) NÃO fecha — evita perda de dados em formulários.

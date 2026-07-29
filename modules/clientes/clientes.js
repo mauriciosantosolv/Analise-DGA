@@ -33,9 +33,9 @@ Views.clientes = {
     document.getElementById('cli-grid').innerHTML = list.map(c => {
       const projs = State.projects.filter(p=>p.client===c.name);
       const revenue = projs.reduce((s,p)=>s+(p.saleValue||0),0);
-      return `<div class="card clickable" style="cursor:pointer" onclick="Views.clientes.form('${c.id}')">
+      return `<div class="card clickable" style="cursor:pointer" onclick="Views.clientes.form(${U.jsArg(c.id)})">
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
-          ${c.logo?`<img class="avatar" style="width:44px;height:44px" src="${c.logo}">`:`<span class="avatar-ph" style="width:44px;height:44px;font-size:1rem">${U.initials(c.name)}</span>`}
+          ${U.safeImageSrc(c.logo)?`<img class="avatar" style="width:44px;height:44px" src="${U.esc(U.safeImageSrc(c.logo))}">`:`<span class="avatar-ph" style="width:44px;height:44px;font-size:1rem">${U.esc(U.initials(c.name))}</span>`}
           <div><b>${U.esc(c.name)}</b><br><small style="color:var(--text3)">${U.esc(c.cnpj||'')}</small></div></div>
         <div style="font-size:.82rem;color:var(--text2);line-height:1.7">
           ${c.contact?`<i data-lucide="user" style="width:13px;height:13px"></i> ${U.esc(c.contact)}<br>`:''}
@@ -50,7 +50,7 @@ Views.clientes = {
     UI.modal({ title:id?'Editar Cliente':'Novo Cliente', body:`
       <div class="form-grid">
         <div class="full" style="display:flex;gap:12px;align-items:center">
-          <div id="cli-logo-preview">${c.logo?`<img class="avatar" style="width:52px;height:52px" src="${c.logo}">`:`<span class="avatar-ph" style="width:52px;height:52px">?</span>`}</div>
+          <div id="cli-logo-preview">${U.safeImageSrc(c.logo)?`<img class="avatar" style="width:52px;height:52px" src="${U.esc(U.safeImageSrc(c.logo))}">`:`<span class="avatar-ph" style="width:52px;height:52px">?</span>`}</div>
           <button class="btn btn-ghost btn-sm" id="cli-logo-btn"><i data-lucide="image-plus"></i>Logo (.png)</button></div>
         <div><label>Nome *</label><input id="cl-name" value="${U.esc(c.name)}"></div>
         <div><label>CNPJ</label><input id="cl-cnpj" value="${U.esc(c.cnpj)}"></div>
@@ -59,7 +59,7 @@ Views.clientes = {
         <div class="full"><label>Email</label><input id="cl-email" value="${U.esc(c.email)}"></div>
         <div class="full"><label>Observações</label><textarea id="cl-notes" rows="2">${U.esc(c.notes)}</textarea></div>
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.clientes.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.clientes.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="cl-save"><i data-lucide="check"></i>Salvar</button>`
     });
@@ -68,7 +68,12 @@ Views.clientes = {
       const inp = document.getElementById('img-input');
       inp.onchange = () => { const f = inp.files[0]; inp.value=''; if(!f) return;
         const fr = new FileReader();
-        fr.onload = async e => { logo = await U.resizeImage(e.target.result); document.getElementById('cli-logo-preview').innerHTML = `<img class="avatar" style="width:52px;height:52px" src="${logo}">`; };
+        fr.onload = async e => {
+          try{
+            logo = await U.resizeImage(e.target.result);
+            document.getElementById('cli-logo-preview').innerHTML = `<img class="avatar" style="width:52px;height:52px" src="${U.esc(logo)}">`;
+          }catch(err){ UI.toast(U.esc(err.message),'error',6000); }
+        };
         fr.readAsDataURL(f); };
       inp.click();
     };

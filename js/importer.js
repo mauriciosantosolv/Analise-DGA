@@ -28,6 +28,10 @@
    Mapeamento por sinônimos + validação linha a linha. Sempre SOMA ao banco. */
 const Importer = (() => {
   let lastImportedIds = [];
+  const MAX_FILE_BYTES = 15*1024*1024;
+  const MAX_ROWS = 25000;
+  const MAX_COLUMNS = 80;
+  const MAX_CELL_CHARS = 5000;
 
   // Sinônimos aceitos por campo (comparação normalizada, sem acentos)
   const MAPS = {
@@ -90,12 +94,30 @@ const Importer = (() => {
 
   function readWorkbook(file){
     return new Promise((res, rej) => {
+      if(!file || file.size>MAX_FILE_BYTES)
+        return rej(new Error('A planilha excede o limite de 15 MB.'));
+      if(!/\.(xlsx|xls|csv)$/i.test(String(file.name||'')))
+        return rej(new Error('Formato não permitido. Use XLSX, XLS ou CSV.'));
       const fr = new FileReader();
       fr.onload = e => {
         try{
           const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+          if(!wb.SheetNames.length) throw new Error('A planilha não contém abas.');
           const ws = wb.Sheets[wb.SheetNames[0]];
-          res(XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true}));
+          const range=ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
+          if(range && range.e.r-range.s.r+1>MAX_ROWS)
+            throw new Error(`A planilha excede o limite de ${MAX_ROWS.toLocaleString('pt-BR')} linhas.`);
+          if(range && range.e.c-range.s.c+1>MAX_COLUMNS)
+            throw new Error(`A planilha excede o limite de ${MAX_COLUMNS} colunas.`);
+          const rows=XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+          for(const row of rows){
+            if(row.length>MAX_COLUMNS) throw new Error(`A planilha excede o limite de ${MAX_COLUMNS} colunas.`);
+            for(const cell of row){
+              if(typeof cell==='string' && cell.length>MAX_CELL_CHARS)
+                throw new Error(`Uma célula excede o limite de ${MAX_CELL_CHARS.toLocaleString('pt-BR')} caracteres.`);
+            }
+          }
+          res(rows);
         }catch(err){ rej(err); }
       };
       fr.onerror = () => rej(fr.error);
@@ -141,7 +163,7 @@ const Importer = (() => {
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
     const {cols, missing} = mapHeaders(rows[0], MAPS.budget, 'budget');
-    if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: <b>${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: ${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0, skipped = [], saleUpdates = 0;
     const records = [];
     for(let i=1; i<rows.length; i++){
@@ -166,7 +188,7 @@ const Importer = (() => {
     if(!rows.length) throw new Error('Planilha vazia.');
     const {cols, missing} = mapHeaders(rows[0], MAPS.purchase, 'purchase');
     const critical = missing.filter(f => ['project','value','category'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     // Deduplicação por multiplicidade: reimportar o mesmo arquivo não duplica nada,
     // mas lançamentos legitimamente idênticos (ex.: parcelas iguais) são preservados.
@@ -208,7 +230,7 @@ const Importer = (() => {
     if(!rows.length) throw new Error('Planilha vazia.');
     const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount, 'paidAccount');
     const critical = missing.filter(f => ['project','category','value','date'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     const existingCount = {};
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
@@ -246,7 +268,7 @@ const Importer = (() => {
     if(!rows.length) throw new Error('Planilha vazia.');
     const {cols, missing} = mapHeaders(rows[0], MAPS.labor, 'labor');
     const critical = missing.filter(f => ['project','value','date'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: <b>${critical.join(', ')}</b>. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     const existingCount = {};
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
@@ -335,7 +357,7 @@ const Importer = (() => {
       if(!fn) throw new Error('Tipo de importação não reconhecido.');
       const res = await fn(file);
       UI.loading(false);
-      if(res.error){ UI.modal({title:'⚠ Inconsistência na planilha', body:`<div class="import-log">${res.error}</div>`, footer:`<button class="btn btn-primary" onclick="UI.close()">Entendi</button>`}); return; }
+      if(res.error){ UI.modal({title:'⚠ Inconsistência na planilha', body:`<div class="import-log">${U.esc(res.error)}</div>`, footer:`<button class="btn btn-primary" onclick="UI.close()">Entendi</button>`}); return; }
       lastImportedIds=(res.recordIds||[]).slice();
       const canOffset=lastImportedIds.length && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('planning'));
       UI.modal({title:'Resumo da Importação', body:`${renderSummary(res.summary)}${canOffset?'<p style="margin-top:12px;color:var(--text2);font-size:.84rem">Você pode vincular os novos gastos aos itens planejados de mesmo projeto e categoria.</p>':''}`, footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>${canOffset?'<button class="btn btn-primary" onclick="Importer.reconcileLast()"><i data-lucide="calendar-check"></i>Abater do planejamento</button>':''}`});

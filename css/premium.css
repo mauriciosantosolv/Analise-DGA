@@ -1031,6 +1031,45 @@ tbody tr:last-child td {
   color: var(--text3);
 }
 
+/* Configurações: hierarquia e alinhamento consistentes */
+.settings-page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-card {
+  grid-column: span 6;
+  margin: 0 !important;
+  max-width: none !important;
+}
+
+.settings-card-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-company {
+  grid-column: span 5;
+}
+
+.settings-ticker {
+  grid-column: span 7;
+}
+
+.settings-account .account-summary small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.settings-account .organization-chip {
+  margin: 0;
+}
+
 /* Tablet */
 @media (max-width: 1280px) {
   :root { --rightbar-w: 270px; }
@@ -1175,11 +1214,66 @@ tbody tr:last-child td {
   .cloud-auth-panel {
     padding: 38px 24px;
   }
+
+  .settings-page {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .settings-card {
+    width: 100%;
+  }
+
+  .settings-account > div:first-child {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .settings-account .account-summary {
+    align-items: flex-start;
+  }
+
+  .settings-account .account-summary > svg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .settings-account .account-summary small {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-account > div:first-child > .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .cloud-auth-shell {
+    width: 100%;
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .cloud-auth-hero {
+    display: none;
+  }
+
+  .cloud-auth-panel {
+    padding: calc(28px + env(safe-area-inset-top)) 24px calc(28px + env(safe-area-inset-bottom));
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
   .kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kpi,
@@ -1197,6 +1291,12 @@ tbody tr:last-child td {
 
   .section-title h2 {
     font-size: 1.08rem;
+  }
+}
+
+@media (max-width: 370px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
   }
 }
 

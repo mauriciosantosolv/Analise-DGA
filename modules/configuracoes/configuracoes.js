@@ -15,6 +15,49 @@
 
 /* ===== Backup / Restauração / Exportar banco ===== */
 const Backup = {
+  MAX_FILE_BYTES:20*1024*1024,
+  MAX_ROWS_PER_STORE:100000,
+  cleanValue(value,depth=0){
+    if(depth>8) throw new Error('O backup possui dados aninhados além do limite permitido.');
+    if(value==null || typeof value==='boolean' || typeof value==='number') return value;
+    if(typeof value==='string') return value.slice(0,20000);
+    if(Array.isArray(value)){
+      if(value.length>this.MAX_ROWS_PER_STORE) throw new Error('O backup possui uma lista acima do limite permitido.');
+      return value.map(item=>this.cleanValue(item,depth+1));
+    }
+    if(typeof value==='object'){
+      const out={};
+      const entries=Object.entries(value);
+      if(entries.length>500) throw new Error('Um registro do backup possui campos em excesso.');
+      for(const [key,item] of entries){
+        if(['__proto__','prototype','constructor'].includes(key)) continue;
+        out[String(key).slice(0,120)]=this.cleanValue(item,depth+1);
+      }
+      return out;
+    }
+    return null;
+  },
+  validate(data){
+    if(!data || data.app!=='ccf_obras' || ![1,2].includes(Number(data.version??1)))
+      throw new Error('Arquivo não é um backup válido deste sistema.');
+    const clean={};
+    for(const store of DB.STORES){
+      const rows=data[store]??[];
+      if(!Array.isArray(rows)) throw new Error(`A seção ${store} do backup é inválida.`);
+      if(rows.length>this.MAX_ROWS_PER_STORE) throw new Error(`A seção ${store} excede o limite de registros.`);
+      clean[store]=rows.map(row=>{
+        const item=this.cleanValue(row);
+        if(!item || item.id==null || String(item.id).length>200)
+          throw new Error(`A seção ${store} contém um registro sem identificador válido.`);
+        if(store==='settings' && item.id==='companyLogo')
+          item.value=U.safeImageSrc(item.value);
+        if(store==='clients' && item.logo)
+          item.logo=U.safeImageSrc(item.logo);
+        return item;
+      });
+    }
+    return clean;
+  },
   async export(){
     const data = {app:'ccf_obras', version:1, exportedAt:new Date().toISOString()};
     for(const s of DB.STORES) data[s] = await DB.all(s);
@@ -26,16 +69,25 @@ const Backup = {
     inp.onchange = () => {
       const f = inp.files[0]; inp.value = '';
       if(!f) return;
+      if(f.size>this.MAX_FILE_BYTES)
+        return UI.toast('O backup excede o limite de 20 MB. Divida a restauração ou solicite suporte.','error',7000);
       const fr = new FileReader();
       fr.onload = async e => {
         try{
           const data = JSON.parse(e.target.result);
-          if(data.app !== 'ccf_obras') throw new Error('Arquivo não é um backup válido deste sistema.');
-          UI.confirm('Restaurar backup irá <b>mesclar</b> os dados do arquivo com o banco atual (registros com mesmo ID são atualizados; nada é apagado). Continuar?', async () => {
+          const clean=this.validate(data);
+          const total=DB.STORES.reduce((sum,store)=>sum+clean[store].length,0);
+          UI.confirm(`O arquivo contém <b>${total.toLocaleString('pt-BR')} registro(s)</b>. Antes da mesclagem, o sistema exportará automaticamente uma cópia do estado atual. Continuar?`, async () => {
             UI.loading(true, 'Restaurando backup…');
-            for(const s of DB.STORES) if(Array.isArray(data[s]) && data[s].length) await DB.bulkPut(s, data[s]);
-            await State.reload();
-            UI.loading(false); UI.toast('Backup restaurado', 'success'); App.render();
+            try{
+              await this.export();
+              for(const s of DB.STORES) if(clean[s].length) await DB.bulkPut(s, clean[s]);
+              await State.reload();
+              UI.loading(false); UI.toast('Backup validado e restaurado', 'success'); App.render();
+            }catch(err){
+              UI.loading(false);
+              UI.toast('A restauração foi interrompida: '+U.esc(err.message),'error',8000);
+            }
           }, false);
         }catch(err){ UI.toast('Erro: '+U.esc(err.message), 'error', 6000); }
       };
@@ -73,9 +125,10 @@ Views.configuracoes = {
     const currentUser=cloudConnected?(Cloud.user()||{}):{};
     const currentDisplayName=String((currentUser.user_metadata&&currentUser.user_metadata.full_name)||'').trim();
     $c().innerHTML = `
-      ${cloudConnected?`<div class="card" style="max-width:900px;margin-bottom:14px">
+      <div class="settings-page">
+      ${cloudConnected?`<section class="card settings-card settings-card-wide settings-account">
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <div class="account-summary" style="padding:0;flex:1;min-width:240px"><i data-lucide="circle-user-round"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small>${U.esc(currentUser.email||'')} · <span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span> · ${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</small></div></div>
+          <div class="account-summary" style="padding:0;flex:1;min-width:0"><i data-lucide="circle-user-round"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
           <button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button>
         </div>
         ${Cloud.organizations().length>1?`<div style="margin-top:12px;max-width:420px"><label>Organização ativa</label><select id="cfg-active-org">${Cloud.organizations().map(x=>`<option value="${U.esc(x.id)}" ${x.id===org.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select></div>`:''}
@@ -87,21 +140,21 @@ Views.configuracoes = {
           </div>
           <small>Este nome aparece no perfil e para os demais usuários da organização.</small>
         </div>
-      </div>`:''}
-      <div class="card" style="max-width:560px">
+      </section>`:''}
+      <section class="card settings-card settings-company">
         <h2 style="margin-bottom:14px">Empresa</h2>
         <div class="form-grid">
           <div class="full"><label>Nome da Empresa</label><input id="cfg-name" value="${U.esc(State.settings.companyName||'')}" placeholder="Controle Financeiro"></div>
           <div class="full" style="display:flex;gap:12px;align-items:center">
-            <div id="cfg-logo-preview">${State.settings.companyLogo?`<img class="avatar logo-clean" style="width:48px;height:48px" src="${State.settings.companyLogo}">`:`<span class="avatar-ph" style="width:48px;height:48px"><i data-lucide="zap" style="width:18px;height:18px"></i></span>`}</div>
+            <div id="cfg-logo-preview">${U.safeImageSrc(State.settings.companyLogo)?`<img class="avatar logo-clean" style="width:48px;height:48px" src="${U.esc(U.safeImageSrc(State.settings.companyLogo))}">`:`<span class="avatar-ph" style="width:48px;height:48px"><i data-lucide="zap" style="width:18px;height:18px"></i></span>`}</div>
             <button class="btn btn-ghost btn-sm" id="cfg-logo-btn"><i data-lucide="image-plus"></i>Logo da empresa</button></div>
           <div><label>Tema</label><select id="cfg-theme"><option value="light" ${State.settings.theme!=='dark'?'selected':''}>Claro</option><option value="dark" ${State.settings.theme==='dark'?'selected':''}>Escuro</option></select></div>
           <div><label>Moeda</label><select id="cfg-currency">${['BRL','USD','EUR'].map(c=>`<option ${c===(State.settings.currency||'BRL')?'selected':''}>${c}</option>`).join('')}</select></div>
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button class="btn btn-primary" id="cfg-save"><i data-lucide="check"></i>Salvar</button></div>
-      </div>
-      <div class="card" style="max-width:900px;margin-top:14px">
+      </section>
+      <section class="card settings-card settings-ticker">
         <h2 style="margin-bottom:6px">Projetos no ticker financeiro</h2>
         <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha quais projetos terão saldo passando na faixa superior do sistema.</p>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
@@ -109,39 +162,41 @@ Views.configuracoes = {
           <button class="btn btn-ghost btn-sm" id="ticker-none">Limpar seleção</button>
         </div>
         <div class="check-list" id="ticker-projects">
-          ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${p.id}" ${tickerSelected.has(p.id)?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
+          ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${U.esc(p.id)}" ${tickerSelected.has(p.id)?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
             || '<small style="color:var(--text3)">Cadastre um projeto para configurar o ticker.</small>'}
         </div>
         <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" id="ticker-save"><i data-lucide="check"></i>Salvar ticker</button></div>
-      </div>
-      <div class="card" style="max-width:900px;margin-top:14px">
+      </section>
+      <section class="card settings-card settings-card-wide">
         <h2 style="margin-bottom:6px">Base de dados em nuvem</h2>
         ${cloudConnected?`<p style="font-size:.84rem;color:var(--text2)">Conectado como <b>${U.esc((Cloud.user()||{}).email||'usuário autenticado')}</b>. ${Cloud.pendingCount()?`Há ${Cloud.pendingCount()} alteração(ões) aguardando sincronização.`:'Todos os registros locais estão sincronizados.'}</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="cloud-upload"></i>Sincronizar agora</button><button class="btn btn-ghost btn-sm" onclick="App.logoutCloud()"><i data-lucide="log-out"></i>Sair neste aparelho</button></div>`
           :`<p style="font-size:.84rem;color:var(--text2)">A nuvem ainda não está ativa. Siga o arquivo <b>README-INSTALACAO-NUVEM.md</b> antes de publicar a versão definitiva.</p>`}
-      </div>
-      ${cloudConnected?`<div class="card" style="max-width:1100px;margin-top:14px" id="team-card">
+      </section>
+      ${cloudConnected?`<section class="card settings-card settings-card-wide" id="team-card">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
           <div style="flex:1"><h2>Organização e permissões</h2><p style="font-size:.84rem;color:var(--text2)">Compartilhe a mesma base com outros usuários e defina o que cada pessoa pode visualizar ou editar.</p></div>
           ${Cloud.canManageUsers()?'<button class="btn btn-primary btn-sm" onclick="Views.configuracoes.inviteForm()"><i data-lucide="user-plus"></i>Vincular usuário</button>':''}
         </div>
         <div id="team-content"><div class="empty"><i data-lucide="loader-circle"></i><br>Carregando equipe…</div></div>
-      </div>`:''}
-      <div class="card" style="max-width:900px;margin-top:14px">
+      </section>`:''}
+      <section class="card settings-card settings-card-wide">
         <h2 style="margin-bottom:6px">Modelos das bases financeiras</h2>
         <p style="font-size:.84rem;color:var(--text2);margin-bottom:14px">Cada base mantém seu próprio modelo. A substituição salva apenas os cabeçalhos e o mapeamento; nenhum lançamento já importado é alterado ou apagado.</p>
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
           ${Object.entries(Importer.KIND_LABELS).map(([kind,label])=>{const m=(State.settings.importMappings||{})[kind];return `<div class="card" style="padding:13px;background:var(--surface2)"><b>${label}</b><small style="display:block;color:var(--text3);margin:5px 0 10px">${m?`Modelo: ${U.esc(m.fileName)}<br>Salvo em ${U.date(m.savedAt)}`:'Reconhecimento padrão por cabeçalho'}</small><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="Importer.pickModel('${kind}')"><i data-lucide="upload"></i>${m?'Substituir':'Cadastrar'} modelo</button>${m?`<button class="btn btn-ghost btn-sm" onclick="Importer.clearModel('${kind}')">Remover</button>`:''}</div></div>`;}).join('')}
         </div>
-      </div>
-      <div class="card" style="max-width:560px;margin-top:14px">
+      </section>
+      <section class="card settings-card settings-card-wide">
         <h3 style="margin-bottom:8px">Atalhos rápidos</h3>
         <div style="display:flex;gap:9px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="App.go('categorias')"><i data-lucide="tags"></i>Categorias</button>
           <button class="btn btn-ghost btn-sm" onclick="App.go('basecalculo')"><i data-lucide="percent"></i>Base de Cálculo</button>
           <button class="btn btn-ghost btn-sm" onclick="App.go('backup')"><i data-lucide="database-backup"></i>Backup e Restauração</button>
-        </div></div>`;
-    let logo = State.settings.companyLogo || '';
+        </div>
+      </section>
+      </div>`;
+    let logo = U.safeImageSrc(State.settings.companyLogo);
     if(cloudConnected && Cloud.organizations().length>1)
       document.getElementById('cfg-active-org').onchange=async e=>{
         try{
@@ -162,7 +217,12 @@ Views.configuracoes = {
       const inp = document.getElementById('img-input');
       inp.onchange = () => { const f = inp.files[0]; inp.value=''; if(!f) return;
         const fr = new FileReader();
-        fr.onload = async e => { logo = await U.resizeImage(e.target.result); document.getElementById('cfg-logo-preview').innerHTML = `<img class="avatar logo-clean" style="width:48px;height:48px" src="${logo}">`; };
+        fr.onload = async e => {
+          try{
+            logo = await U.resizeImage(e.target.result);
+            document.getElementById('cfg-logo-preview').innerHTML = `<img class="avatar logo-clean" style="width:48px;height:48px" src="${U.esc(logo)}">`;
+          }catch(err){ UI.toast(U.esc(err.message),'error',6000); }
+        };
         fr.readAsDataURL(f); };
       inp.click();
     };
@@ -223,7 +283,8 @@ Views.configuracoes = {
     const currentId=(Cloud.user()||{}).id;
     const roleLabels={owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'};
     const members=this.teamData.members||[], invitations=this.teamData.invitations||[];
-    const canRename=['owner','admin'].includes(Cloud.role());
+    const currentRole=Cloud.role();
+    const canRename=['owner','admin'].includes(currentRole);
     box.innerHTML=`
       <div style="display:flex;gap:9px;align-items:end;flex-wrap:wrap;margin:14px 0">
         <div style="flex:1;max-width:430px"><label>Nome da organização</label><input id="team-org-name" value="${U.esc((Cloud.organization()||{}).name||'')}" ${canRename?'':'disabled'}></div>
@@ -231,15 +292,15 @@ Views.configuracoes = {
       </div>
       <div class="table-wrap"><div class="table-scroll"><table class="team-table">
         <thead><tr><th>Usuário</th><th>Perfil</th><th>Permissões</th><th style="width:110px"></th></tr></thead>
-        <tbody>${members.map(m=>{const profile=m.profile||{};const locked=m.role==='owner';return `
+        <tbody>${members.map(m=>{const profile=m.profile||{};const locked=m.role==='owner'||(m.role==='admin'&&currentRole!=='owner');return `
           <tr><td><b>${U.esc(profile.full_name||profile.email||'Usuário')}</b><br><small>${U.esc(profile.email||m.user_id)}${m.user_id===currentId?' · você':''}</small></td>
           <td><span class="tag ${locked?'tag-blue':'tag-gray'}">${U.esc(roleLabels[m.role]||m.role)}</span></td>
           <td><small>${locked||m.role==='admin'?'Acesso completo':`${(m.permissions?.view||[]).length} módulo(s) para visualizar · ${(m.permissions?.edit||[]).length} para editar`}</small></td>
-          <td>${locked?'':`<div style="display:flex;gap:5px"><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.memberPermissionForm('${U.esc(m.user_id)}')" title="Editar permissões"><i data-lucide="shield-check"></i></button>${m.user_id!==currentId?`<button class="btn btn-danger btn-sm" onclick="Views.configuracoes.removeMember('${U.esc(m.user_id)}')" title="Remover da organização"><i data-lucide="user-minus"></i></button>`:''}</div>`}</td></tr>`;}).join('')}</tbody>
+          <td>${locked?'':`<div style="display:flex;gap:5px"><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.memberPermissionForm(${U.jsArg(m.user_id)})" title="Editar permissões"><i data-lucide="shield-check"></i></button>${m.user_id!==currentId?`<button class="btn btn-danger btn-sm" onclick="Views.configuracoes.removeMember(${U.jsArg(m.user_id)})" title="Remover da organização"><i data-lucide="user-minus"></i></button>`:''}</div>`}</td></tr>`;}).join('')}</tbody>
       </table></div></div>
       ${invitations.length?`<h3 style="margin:18px 0 8px">Convites pendentes</h3><div class="table-wrap"><div class="table-scroll"><table>
         <thead><tr><th>E-mail</th><th>Perfil</th><th>Enviado em</th><th></th></tr></thead>
-        <tbody>${invitations.map(i=>`<tr><td><b>${U.esc(i.email)}</b></td><td>${U.esc(roleLabels[i.role]||i.role)}</td><td>${U.date(i.created_at)}</td><td><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.cancelInvitation('${U.esc(i.id)}')"><i data-lucide="x"></i>Cancelar</button></td></tr>`).join('')}</tbody>
+        <tbody>${invitations.map(i=>`<tr><td><b>${U.esc(i.email)}</b></td><td>${U.esc(roleLabels[i.role]||i.role)}</td><td>${U.date(i.created_at)}</td><td><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.cancelInvitation(${U.jsArg(i.id)})"><i data-lucide="x"></i>Cancelar</button></td></tr>`).join('')}</tbody>
       </table></div></div>`:''}`;
     if(canRename) document.getElementById('team-org-save').onclick=()=>this.saveOrganizationName();
     U.icons();
@@ -247,6 +308,7 @@ Views.configuracoes = {
   permissionControls(permissions,roleName){
     const p=permissions||this.defaultPermissions(roleName);
     const view=new Set(p.view||[]), edit=new Set(p.edit||[]);
+    const canDelegate=Cloud.role()==='owner';
     return `<div class="permission-grid" id="member-permissions">${this.permissionModules.map(([store,label,help])=>`
       <div class="check-item" style="display:grid;grid-template-columns:18px 1fr 18px;gap:8px">
         <input class="perm-view" data-store="${store}" type="checkbox" ${view.has(store)?'checked':''} title="Pode visualizar">
@@ -254,7 +316,7 @@ Views.configuracoes = {
         <input class="perm-edit" data-store="${store}" type="checkbox" ${edit.has(store)?'checked':''} title="Pode editar">
       </div>`).join('')}</div>
       <div style="display:flex;gap:22px;margin-top:10px;color:var(--text2);font-size:.78rem"><span>1ª caixa: visualizar</span><span>2ª caixa: editar</span></div>
-      <label class="check-item" style="margin-top:10px"><input id="perm-manage-users" type="checkbox" ${p.manage_users?'checked':''}><span><b>Gerenciar usuários</b><small>Permite convidar pessoas e editar permissões, exceto as de proprietários.</small></span></label>`;
+      <label class="check-item" style="margin-top:10px"><input id="perm-manage-users" type="checkbox" ${p.manage_users?'checked':''} ${canDelegate?'':'disabled'}><span><b>Gerenciar usuários</b><small>${canDelegate?'Permite convidar leitores e editores; somente o proprietário pode conceder esta delegação.':'Somente o proprietário pode conceder esta permissão.'}</small></span></label>`;
   },
   bindPermissionRole(){
     const role=document.getElementById('member-role');
@@ -266,7 +328,7 @@ Views.configuracoes = {
       });
       const manage=document.getElementById('perm-manage-users');
       if(full) manage.checked=true;
-      manage.disabled=full;
+      manage.disabled=full || Cloud.role()!=='owner';
     };
     role.onchange=()=>{
       if(role.value==='viewer') document.querySelectorAll('.perm-edit').forEach(x=>x.checked=false);
@@ -287,10 +349,11 @@ Views.configuracoes = {
   },
   inviteForm(){
     const defaults=this.defaultPermissions('viewer');
+    const adminOption=Cloud.role()==='owner'?'<option value="admin">Administrador</option>':'';
     UI.modal({title:'Vincular usuário à organização',wide:true,body:`
       <div class="form-grid" style="margin-bottom:14px">
         <div><label>E-mail do usuário *</label><input id="member-email" type="email" placeholder="usuario@empresa.com.br"></div>
-        <div><label>Perfil</label><select id="member-role"><option value="viewer">Leitor</option><option value="editor">Editor</option><option value="admin">Administrador</option></select></div>
+        <div><label>Perfil</label><select id="member-role"><option value="viewer">Leitor</option><option value="editor">Editor</option>${adminOption}</select></div>
       </div>
       <p style="font-size:.83rem;color:var(--text2);margin-bottom:10px">Se a conta já existir, o vínculo será concluído no próximo acesso. Se ainda não existir, a pessoa deverá se cadastrar com exatamente este e-mail.</p>
       ${this.permissionControls(defaults,'viewer')}`,
@@ -314,9 +377,12 @@ Views.configuracoes = {
   },
   memberPermissionForm(userId){
     const member=(this.teamData?.members||[]).find(x=>x.user_id===userId); if(!member) return;
+    if(member.role==='owner' || (member.role==='admin' && Cloud.role()!=='owner'))
+      return UI.toast('Somente o proprietário pode alterar este perfil.','warn',5500);
     const profile=member.profile||{};
+    const adminOption=Cloud.role()==='owner'?`<option value="admin" ${member.role==='admin'?'selected':''}>Administrador</option>`:'';
     UI.modal({title:`Permissões — ${U.esc(profile.full_name||profile.email||'Usuário')}`,wide:true,body:`
-      <div class="form-grid" style="margin-bottom:14px"><div><label>Perfil</label><select id="member-role"><option value="viewer" ${member.role==='viewer'?'selected':''}>Leitor</option><option value="editor" ${member.role==='editor'?'selected':''}>Editor</option><option value="admin" ${member.role==='admin'?'selected':''}>Administrador</option></select></div><div><label>E-mail</label><input value="${U.esc(profile.email||'')}" disabled></div></div>
+      <div class="form-grid" style="margin-bottom:14px"><div><label>Perfil</label><select id="member-role"><option value="viewer" ${member.role==='viewer'?'selected':''}>Leitor</option><option value="editor" ${member.role==='editor'?'selected':''}>Editor</option>${adminOption}</select></div><div><label>E-mail</label><input value="${U.esc(profile.email||'')}" disabled></div></div>
       ${this.permissionControls(member.permissions,member.role)}`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="member-permission-save"><i data-lucide="check"></i>Salvar permissões</button>',
       onOpen:()=>{
@@ -386,19 +452,22 @@ Views.backup = {
     let snap = null;
     try{ snap = JSON.parse(localStorage.getItem('ccf_snap') || 'null'); }catch(e){}
     if(!snap) return UI.toast('Nenhum snapshot disponível ainda.', 'warn');
+    let clean;
+    try{ clean=Backup.validate(snap); }
+    catch(err){ return UI.toast('Snapshot inválido: '+U.esc(err.message),'error',7000); }
     UI.confirm(`Restaurar o snapshot de <b>${U.esc(snap.exportedAt ? U.date(snap.exportedAt) : '—')}</b>? Os dados serão mesclados ao banco atual (nada é apagado).`, async () => {
       UI.loading(true, 'Restaurando snapshot…');
       for(const st of ['projects','budgets','purchases','planning','clients','categories','measurements','settings'])
-        if(Array.isArray(snap[st]) && snap[st].length) await DB.bulkPut(st, snap[st]);
+        if(clean[st].length) await DB.bulkPut(st, clean[st]);
       await State.reload(); UI.loading(false); UI.toast('Snapshot restaurado', 'success'); App.render();
     }, false);
   },
   fullExcel(){
     const wb = XLSX.utils.book_new();
-    ['projects','budgets','purchases'].forEach(s => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.rows(s)), s));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(State.planning), 'planning');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(State.measurements), 'measurements');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(State.clients.map(({logo,...c})=>c)), 'clients');
+    ['projects','budgets','purchases'].forEach(s => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(Exports.rows(s))), s));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.planning)), 'planning');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.measurements)), 'measurements');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.clients.map(({logo,...c})=>c))), 'clients');
     XLSX.writeFile(wb, `banco-completo-${U.isoDate(new Date())}.xlsx`);
     UI.toast('Banco exportado em Excel', 'success');
   }

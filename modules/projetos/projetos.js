@@ -40,19 +40,19 @@ Views.projetos = {
       <thead><tr><th></th><th>Proposta</th><th>Nome</th><th>Cliente</th><th>Tipo</th><th>Status</th>
       <th class="num">Venda</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Margem Atual</th><th>Consumo</th><th></th></tr></thead>
       <tbody>${rows.map(p => { const s = Biz.projectStats(p); return `
-        <tr class="clickable" onclick="Views.projetos.detail('${p.id}')">
+        <tr class="clickable" onclick="Views.projetos.detail(${U.jsArg(p.id)})">
           <td>${lightDot(s.light)}</td>
           <td><b>${U.esc(p.proposal)}</b></td>
           <td>${U.esc(p.name||'—')}</td>
           <td style="display:flex;align-items:center;gap:8px">${clientAvatar(p.client)}${U.esc(p.client||'—')}</td>
-          <td><span class="tag tag-gray">${p.type||'—'}</span></td>
+          <td><span class="tag tag-gray">${U.esc(p.type||'—')}</span></td>
           <td>${statusTag(p.status)}</td>
           <td class="num">${U.money(p.saleValue)}</td>
           <td class="num">${U.money(s.budgetTotal)}</td>
           <td class="num">${U.money(s.spent)}</td>
           <td class="num" style="color:${s.marginCurrent!=null && s.marginCurrent<0?'var(--red)':'var(--green)'}">${U.pct(s.marginCurrent)}</td>
           <td style="min-width:110px"><div class="progress ${s.consumed>100?'crit':s.consumed>85?'warn':''}"><div style="width:${Math.min(100,s.consumed)}%"></div></div><small style="color:var(--text3)">${U.pct(s.consumed)}</small></td>
-          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Views.projetos.form('${p.id}')"><i data-lucide="pencil"></i></button></td>
+          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Views.projetos.form(${U.jsArg(p.id)})"><i data-lucide="pencil"></i></button></td>
         </tr>`;}).join('') || `<tr><td colspan="12"><div class="empty"><i data-lucide="folder-open"></i><br>Nenhum projeto. Importe uma planilha ou cadastre manualmente.</div></td></tr>`}</tbody>`;
     U.icons();
   },
@@ -65,18 +65,18 @@ Views.projetos = {
         <div><label>Número da Proposta *</label><input id="f-proposal" value="${U.esc(p.proposal)}"></div>
         <div><label>Nome</label><input id="f-name" value="${U.esc(p.name)}"></div>
         <div><label>Cliente</label><input id="f-client" list="client-list" value="${U.esc(p.client)}"><datalist id="client-list">${clientOpts}</datalist></div>
-        <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${p.saleValue||''}"></div>
+        <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${U.esc(p.saleValue||'')}"></div>
         <div><label>Tipo</label><select id="f-type">${['HH','Obra','Fornecimento','Painel'].map(t=>`<option ${t===p.type?'selected':''}>${t}</option>`).join('')}</select></div>
         <div><label>Status</label><select id="f-status">${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
-        <div><label>Data de Início</label><input id="f-start" type="date" value="${p.start}"></div>
-        <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${p.deadline}"></div>
-        <div><label>Término Previsto</label><input id="f-expected" type="date" value="${p.expectedEnd}"></div>
-        <div><label>Encerramento Real</label><input id="f-real" type="date" value="${p.realEnd}"></div>
+        <div><label>Data de Início</label><input id="f-start" type="date" value="${U.esc(p.start)}"></div>
+        <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${U.esc(p.deadline)}"></div>
+        <div><label>Término Previsto</label><input id="f-expected" type="date" value="${U.esc(p.expectedEnd)}"></div>
+        <div><label>Encerramento Real</label><input id="f-real" type="date" value="${U.esc(p.realEnd)}"></div>
         <div class="full"><label>Observações</label><textarea id="f-notes" rows="2">${U.esc(p.notes)}</textarea></div>
         ${id?`<div class="full import-log" style="margin-top:0"><b>Medição do contrato:</b> ${U.money(measurement.measured)} de ${U.money(measurement.target)} (${U.pct(measurement.pct)}).
           ${measurement.complete?'<span class="tag tag-green">Projeto liberado para conclusão</span>':`<span class="tag tag-amber">Falta medir ${U.money(measurement.remaining)}</span>`}</div>`:''}
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.projetos.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.projetos.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="f-save"><i data-lucide="check"></i>Salvar</button>`
     });
@@ -153,15 +153,15 @@ Views.projetos = {
       <h3 style="margin-bottom:8px">Categorias</h3>
       <div class="table-wrap"><div class="table-scroll" style="max-height:300px"><table>
         <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tend.</th><th></th></tr></thead>
-        <tbody>${cats.map(c=>`<tr class="clickable" onclick="Dash.drill({category:'${U.esc(c.name)}',projectId:'${p.id}'})">
+        <tbody>${cats.map(c=>`<tr class="clickable" onclick="Dash.drill({category:${U.jsArg(c.name)},projectId:${U.jsArg(p.id)}})">
           <td>${U.esc(c.name)}</td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td><td class="num">${U.money(c.projected)}</td>
           <td class="num" style="color:${c.balance<0?'var(--red)':'inherit'}">${U.money(c.balance)}</td>
           <td class="num">${U.pct(c.committedPct)}</td><td class="num">${U.pct(c.weight)}</td>
           <td>${Dash.trendIcon(c.trend)}</td><td>${lightDot(c.status)}</td></tr>`).join('')}</tbody>
       </table></div></div>`,
-      footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification('${p.id}')"><i data-lucide="message-square-check"></i>Salvar justificativa</button>`:''}
-              <button class="btn btn-ghost" onclick="Dash.simulator('${p.id}')"><i data-lucide="sliders-horizontal"></i>Simulador</button>
-              <button class="btn btn-ghost" onclick="Exports.projectPDF('${p.id}')"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
+      footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification(${U.jsArg(p.id)})"><i data-lucide="message-square-check"></i>Salvar justificativa</button>`:''}
+              <button class="btn btn-ghost" onclick="Dash.simulator(${U.jsArg(p.id)})"><i data-lucide="sliders-horizontal"></i>Simulador</button>
+              <button class="btn btn-ghost" onclick="Exports.projectPDF(${U.jsArg(p.id)})"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
               <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`
     });
   },
@@ -186,7 +186,7 @@ Views.projetos = {
     App.renderTicker();
   },
   compare(){
-    const opts = State.projects.map(p=>`<option value="${p.id}">${U.esc(U.projLabel(p))}</option>`).join('');
+    const opts = State.projects.map(p=>`<option value="${U.esc(p.id)}">${U.esc(U.projLabel(p))}</option>`).join('');
     UI.modal({ title:'Comparação entre Obras', wide:true, body:`
       <div class="form-grid" style="margin-bottom:14px">
         <div><label>Obra A</label><select id="cmp-a">${opts}</select></div>

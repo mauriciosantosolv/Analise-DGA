@@ -59,7 +59,7 @@ Views.medicoes = {
               <td>${U.date(m.date)}</td><td>${U.esc(m.ref||'—')}</td>
               <td><span class="tag ${{'Faturada':'tag-green','Aprovada':'tag-blue','Aguardando aprovação':'tag-amber'}[m.status]||'tag-gray'}">${U.esc(m.status||'—')}</span></td>
               <td class="num"><b>${U.money2(m.value)}</b></td>
-              <td><button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form('${m.id}')"><i data-lucide="pencil"></i></button></td></tr>`).join('')}</tbody>
+              <td><button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})"><i data-lucide="pencil"></i></button></td></tr>`).join('')}</tbody>
           </table></div></div>`;
       }).join('') : `<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição registrada.<br><small>As medições registram quanto da receita contratada já foi faturada conforme o avanço do cronograma e a aprovação do cliente.</small></div>`}`;
     U.icons();
@@ -69,14 +69,14 @@ Views.medicoes = {
     if(!State.projects.length) return UI.toast('Cadastre um projeto antes de lançar medições', 'warn');
     UI.modal({ title:id?'Editar Medição':'Nova Medição', body:`
       <div class="form-grid">
-        <div class="full"><label>Projeto *</label><select id="md-proj">${State.projects.map(p=>`<option value="${p.id}" ${p.id===m.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
-        <div><label>Data *</label><input id="md-date" type="date" value="${m.date}"></div>
-        <div><label>Valor Medido *</label><input id="md-value" type="number" step="0.01" value="${m.value||''}"></div>
+        <div class="full"><label>Projeto *</label><select id="md-proj">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${p.id===m.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
+        <div><label>Data *</label><input id="md-date" type="date" value="${U.esc(m.date)}"></div>
+        <div><label>Valor Medido *</label><input id="md-value" type="number" step="0.01" value="${U.esc(m.value||'')}"></div>
         <div><label>Referência (nº da medição)</label><input id="md-ref" value="${U.esc(m.ref)}"></div>
         <div><label>Status</label><select id="md-status">${['Aguardando aprovação','Aprovada','Faturada'].map(s=>`<option ${s===m.status?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="full"><label>Observações</label><textarea id="md-notes" rows="2">${U.esc(m.notes||'')}</textarea></div>
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="md-save"><i data-lucide="check"></i>Salvar</button>` });
     document.getElementById('md-save').onclick = async () => {

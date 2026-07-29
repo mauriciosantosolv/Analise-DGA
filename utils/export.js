@@ -16,6 +16,16 @@
 
 /* ---------- RELATÓRIOS / EXPORTAÇÕES ---------- */
 const Exports = {
+  spreadsheetCell(value){
+    if(typeof value !== 'string') return value;
+    // Evita que Excel/LibreOffice interpretem dados importados como fórmulas.
+    return /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value;
+  },
+  spreadsheetRows(rows){
+    return rows.map(row => Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [key, this.spreadsheetCell(value)])
+    ));
+  },
   rows(store){
     if(store==='purchases') return State.purchases.map(x=>{ const p=State.projects.find(pr=>pr.id===x.projectId);
       return {Projeto:p?U.projLabel(p):'', Origem:({labor:'Mão de obra',paidAccount:'Conta paga',purchase:'Compra'}[x.sourceType]||'Compra'), Pedido:x.order, Fornecedor:x.supplier, Categoria:x.category, Descricao:x.desc, Observacoes:x.notes, Valor:x.value, Data:x.date}; });
@@ -29,13 +39,13 @@ const Exports = {
     return [];
   },
   toXLSX(store){
-    const ws = XLSX.utils.json_to_sheet(this.rows(store));
+    const ws = XLSX.utils.json_to_sheet(this.spreadsheetRows(this.rows(store)));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, store);
     XLSX.writeFile(wb, `${store}-${U.isoDate(new Date())}.xlsx`);
     UI.toast('Excel exportado', 'success');
   },
   toCSV(store){
-    const ws = XLSX.utils.json_to_sheet(this.rows(store));
+    const ws = XLSX.utils.json_to_sheet(this.spreadsheetRows(this.rows(store)));
     U.download(`${store}-${U.isoDate(new Date())}.csv`, XLSX.utils.sheet_to_csv(ws), 'text/csv');
     UI.toast('CSV exportado', 'success');
   },

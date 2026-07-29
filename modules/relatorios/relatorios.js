@@ -48,7 +48,7 @@ Views.relatorios = {
     UI.modal({title:'Relatório de Desvios Negativos', wide:true, body:`
       <p style="color:var(--text2);margin-bottom:12px">Selecione os projetos que serão analisados. O arquivo mostrará apenas categorias com saldo inferior a zero.</p>
       <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.neg-proj').forEach(x=>x.checked=true)">Marcar todos</button><button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.neg-proj').forEach(x=>x.checked=false)">Limpar</button></div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:420px;overflow:auto">${projects.map(p=>`<label class="card" style="padding:10px;display:flex;align-items:center;gap:9px;cursor:pointer"><input class="neg-proj" type="checkbox" value="${p.id}" ${State.filters.project===p.id?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||'')}</small></span></label>`).join('')}</div>`,
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:420px;overflow:auto">${projects.map(p=>`<label class="card" style="padding:10px;display:flex;align-items:center;gap:9px;cursor:pointer"><input class="neg-proj" type="checkbox" value="${U.esc(p.id)}" ${State.filters.project===p.id?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||'')}</small></span></label>`).join('')}</div>`,
       footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" onclick="Views.relatorios.exportNegativeDeviations()"><i data-lucide="download"></i>Exportar análise</button>`});
   },
   exportNegativeDeviations(){
@@ -65,7 +65,7 @@ Views.relatorios = {
       }));
     });
     if(!rows.length) return UI.toast('Os projetos selecionados não possuem desvios negativos', 'success', 5000);
-    const ws=XLSX.utils.json_to_sheet(rows);
+    const ws=XLSX.utils.json_to_sheet(Exports.spreadsheetRows(rows));
     ws['!cols']=[{wch:12},{wch:30},{wch:28},{wch:16},{wch:16},{wch:16},{wch:16},{wch:18},{wch:18}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Desvios Negativos');
     XLSX.writeFile(wb,`desvios-negativos-${U.isoDate(new Date())}.xlsx`);

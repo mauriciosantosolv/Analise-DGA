@@ -31,9 +31,11 @@ Views.categorias = {
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
         ${cards.sort((a,b)=>a.name.localeCompare(b.name)).map(c => {
           const total=stats.find(s=>Biz.sameCategory(s.name,c.name)) || {spent:0,budget:0,projected:0};
-          return `<div class="card ${c.id?'clickable':''}" style="${c.id?'cursor:pointer':''}" ${c.id?`onclick="Views.categorias.form('${c.id}')"`:''}>
+          const color=U.safeColor(c.color,'#64748B');
+          const icon=['tag','wrench','truck','home','utensils','shirt','fuel','hard-hat','cable','zap','package','shield','plane','car','coffee','briefcase','calculator'].includes(c.icon)?c.icon:'tag';
+          return `<div class="card ${c.id?'clickable':''}" style="${c.id?'cursor:pointer':''}" ${c.id?`onclick="Views.categorias.form(${U.jsArg(c.id)})"`:''}>
             <div style="display:flex;gap:10px;align-items:center">
-              <span style="width:34px;height:34px;border-radius:9px;background:${c.color}22;color:${c.color};display:flex;align-items:center;justify-content:center"><i data-lucide="${c.icon||'tag'}" style="width:16px;height:16px"></i></span>
+              <span style="width:34px;height:34px;border-radius:9px;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center"><i data-lucide="${icon}" style="width:16px;height:16px"></i></span>
               <div style="flex:1;min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(c.name)}</b>
               <small style="color:var(--text3)">${U.money(total.spent)} realizado · ${U.money(total.projected)} projetado</small>
               ${c.calculated?'<span class="tag tag-gray" style="margin-top:5px">Calculada pela base</span>':''}</div></div></div>`;
@@ -46,10 +48,10 @@ Views.categorias = {
     UI.modal({ title:id?'Editar Categoria':'Nova Categoria', body:`
       <div class="form-grid">
         <div class="full"><label>Nome *</label><input id="ct-name" value="${U.esc(c.name)}"></div>
-        <div><label>Cor</label><input id="ct-color" type="color" value="${c.color}" style="height:40px;padding:4px"></div>
+        <div><label>Cor</label><input id="ct-color" type="color" value="${U.safeColor(c.color)}" style="height:40px;padding:4px"></div>
         <div><label>Ícone</label><select id="ct-icon">${icons.map(i=>`<option ${i===c.icon?'selected':''}>${i}</option>`).join('')}</select></div>
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.categorias.remove('${id}')"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.categorias.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="ct-save"><i data-lucide="check"></i>Salvar</button>`
     });

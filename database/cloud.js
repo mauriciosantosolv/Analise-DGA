@@ -27,6 +27,7 @@ const Cloud = (() => {
   let realtimeStatus = 'CLOSED';
   let warnedOffline = false;
   let accessDeniedMessage = '';
+  const recordVersions = new Map();
 
   function configured(){
     return cfg.enabled === true && cfg.provider === 'supabase' &&
@@ -186,6 +187,15 @@ const Cloud = (() => {
   async function acceptPendingInvitations(){
     const email=String((user()||{}).email||'').trim().toLowerCase();
     if(!email) return 0;
+    try{
+      const result=await request('/rest/v1/rpc/accept_organization_invitations', {
+        method:'POST',headers:authHeaders(true),body:'{}'
+      });
+      return Number(result)||0;
+    }catch(err){
+      // Compatibilidade temporária com instalações anteriores à migração v2.3.
+      if(err.status!==404) throw err;
+    }
     const invites=await request(`/rest/v1/organization_invitations?select=id,organization_id,role,permissions&status=eq.pending&email=eq.${encodeURIComponent(email)}`, {
       headers:authHeaders(false)
     }) || [];
@@ -280,9 +290,10 @@ const Cloud = (() => {
     }
     return active();
   }
-  async function signOut(){
+  async function signOut({preserveQueue=false}={}){
     const accessToken=session&&session.access_token;
     stopRealtime();
+    if(!preserveQueue) clearCurrentQueue();
     saveSession(null);
     if(!accessToken) return;
     const controller=typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -412,6 +423,7 @@ const Cloud = (() => {
     }
   }
   function queueStorageKey(){ return scopeId() ? QUEUE_PREFIX+scopeId() : ''; }
+  function recordVersionKey(store,id){ return `${store}:${String(id)}`; }
   function queue(){
     const key=queueStorageKey();
     if(!key) return [];
@@ -431,10 +443,31 @@ const Cloud = (() => {
   }
   function saveQueue(q){
     const key=queueStorageKey();
-    if(key) localStorage.setItem(key, JSON.stringify(q.slice(-5000)));
+    if(!key) return;
+    if(q.length>5000) throw new Error('A fila offline atingiu o limite de segurança. Conecte este aparelho antes de continuar alterando dados.');
+    localStorage.setItem(key, JSON.stringify(q));
+  }
+  function clearCurrentQueue(){
+    const key=queueStorageKey();
+    if(key) localStorage.removeItem(key);
+    warnedOffline=false;
+  }
+  function queueMetadata(op){
+    const queuedAt=Date.now();
+    const targets=op.type==='put' ? [op.object] :
+      op.type==='bulkPut' ? (op.objects||[]) :
+      op.type==='delete' ? [{id:op.id}] : [];
+    const baseVersions={};
+    targets.filter(x=>x&&x.id!=null).forEach(x=>{
+      const key=recordVersionKey(op.store,x.id);
+      baseVersions[String(x.id)]=recordVersions.get(key)||null;
+    });
+    return {...op,queuedAt,baseVersions};
   }
   function enqueue(op){
-    const q=queue(); q.push({...op,queuedAt:Date.now()}); saveQueue(q);
+    if(op.type==='clear')
+      throw new Error('Por segurança, uma limpeza completa não pode ser enfileirada offline. Reconecte-se e tente novamente.');
+    const q=queue(); q.push(queueMetadata(op)); saveQueue(q);
     if(!warnedOffline && typeof UI!=='undefined'){
       warnedOffline=true;
       UI.toast('Sem conexão com a nuvem. A alteração ficou salva neste aparelho e será sincronizada automaticamente.', 'warn', 7000);
@@ -461,51 +494,88 @@ const Cloud = (() => {
         headers:{...authHeaders(true),Prefer:'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(body)
       });
+      body.forEach(item=>recordVersions.set(recordVersionKey(store,item.record_id),item.updated_at));
     }
   }
   async function deleteRaw(store,id){
     await ensureFresh(); assertCanEdit(store);
     const q=`organization_id=eq.${encodeURIComponent(organization().id)}&store=eq.${encodeURIComponent(store)}&record_id=eq.${encodeURIComponent(String(id))}`;
     await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
+    recordVersions.delete(recordVersionKey(store,id));
   }
   async function clearRaw(store){
     await ensureFresh(); assertCanEdit(store);
     const q=`organization_id=eq.${encodeURIComponent(organization().id)}&store=eq.${encodeURIComponent(store)}`;
     await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
+    for(const key of [...recordVersions.keys()]) if(key.startsWith(`${store}:`)) recordVersions.delete(key);
+  }
+  function retryable(err){
+    const status=Number(err&&err.status)||0;
+    return !status || [408,425,429].includes(status) || status>=500;
+  }
+  async function applyOperation(op){
+    if(op.type==='put') await upsertRaw(op.store,[op.object]);
+    else if(op.type==='bulkPut') await upsertRaw(op.store,op.objects);
+    else if(op.type==='delete') await deleteRaw(op.store,op.id);
+    else if(op.type==='clear') await clearRaw(op.store);
   }
   async function mirror(op){
     if(!active()) return;
     assertCanEdit(op.store);
     try{
-      if(op.type==='put') await upsertRaw(op.store,[op.object]);
-      else if(op.type==='bulkPut') await upsertRaw(op.store,op.objects);
-      else if(op.type==='delete') await deleteRaw(op.store,op.id);
-      else if(op.type==='clear') await clearRaw(op.store);
+      await applyOperation(op);
     }catch(e){
-      if(e.status===401 || e.status===403) throw e;
+      if(!retryable(e)) throw e;
       enqueue(op);
     }
   }
-  async function flushQueue(){
+  function conflictFor(op,remoteVersions){
+    if(op.type==='clear') return true;
+    const targets=op.type==='put' ? [op.object] :
+      op.type==='bulkPut' ? (op.objects||[]) :
+      op.type==='delete' ? [{id:op.id}] : [];
+    return targets.some(item=>{
+      if(!item || item.id==null) return false;
+      const id=String(item.id);
+      const current=remoteVersions.get(recordVersionKey(op.store,id))||null;
+      const base=Object.prototype.hasOwnProperty.call(op.baseVersions||{},id)
+        ? op.baseVersions[id] : null;
+      return current!==base;
+    });
+  }
+  async function flushQueue(remoteRows=[]){
     if(!active()) return 0;
     const pending=queue(); if(!pending.length) return 0;
-    const remaining=[]; let done=0;
+    const remoteVersions=new Map();
+    (remoteRows||[]).forEach(row=>{
+      if(row&&row.store&&row.record_id!=null)
+        remoteVersions.set(recordVersionKey(row.store,row.record_id),row.updated_at||null);
+    });
+    let done=0;
     for(let i=0;i<pending.length;i++){
       const op=pending[i];
       try{
         assertCanEdit(op.store);
-        if(op.type==='put') await upsertRaw(op.store,[op.object]);
-        else if(op.type==='bulkPut') await upsertRaw(op.store,op.objects);
-        else if(op.type==='delete') await deleteRaw(op.store,op.id);
-        else if(op.type==='clear') await clearRaw(op.store);
+        if(conflictFor(op,remoteVersions)){
+          const err=new Error('Conflito de sincronização detectado. A versão da nuvem mudou enquanto este aparelho estava offline; nenhuma alteração foi sobrescrita.');
+          err.code='SYNC_CONFLICT';
+          throw err;
+        }
+        await applyOperation(op);
+        if(op.type==='put' && op.object)
+          remoteVersions.set(recordVersionKey(op.store,op.object.id),recordVersions.get(recordVersionKey(op.store,op.object.id)));
+        if(op.type==='bulkPut') (op.objects||[]).forEach(item=>{
+          if(item&&item.id!=null) remoteVersions.set(recordVersionKey(op.store,item.id),recordVersions.get(recordVersionKey(op.store,item.id)));
+        });
+        if(op.type==='delete') remoteVersions.delete(recordVersionKey(op.store,op.id));
         done++;
       }catch(e){
-        if(e.status===401 || e.status===403){ done++; continue; }
-        remaining.push(...pending.slice(i)); break;
+        saveQueue(pending.slice(i));
+        throw e;
       }
     }
-    saveQueue(remaining);
-    if(!remaining.length) warnedOffline=false;
+    saveQueue([]);
+    warnedOffline=false;
     return done;
   }
   async function readAll(){
@@ -521,6 +591,11 @@ const Cloud = (() => {
       const rows=await res.json(); out.push(...rows);
       if(rows.length<size) break;
     }
+    recordVersions.clear();
+    out.forEach(row=>{
+      if(row&&row.store&&row.record_id!=null)
+        recordVersions.set(recordVersionKey(row.store,row.record_id),row.updated_at||null);
+    });
     return out;
   }
 
@@ -528,6 +603,15 @@ const Cloud = (() => {
     const view=[...new Set((input.view||[]).filter(x=>ALL_STORES.includes(x)))];
     const edit=[...new Set((input.edit||[]).filter(x=>view.includes(x)))];
     return {view,edit,manage_users:input.manage_users===true};
+  }
+  function assertAssignable(roleName,permissions){
+    const actorRole=role();
+    if(roleName==='admin' && actorRole!=='owner')
+      throw new Error('Somente o proprietário pode conceder perfil de administrador.');
+    if(permissions.manage_users && actorRole!=='owner')
+      throw new Error('Somente o proprietário pode delegar a gestão de usuários.');
+    if(!['owner','admin'].includes(actorRole) && !['editor','viewer'].includes(roleName))
+      throw new Error('Este perfil não pode conceder o nível de acesso solicitado.');
   }
   async function listTeam(){
     await ensureFresh();
@@ -552,11 +636,14 @@ const Cloud = (() => {
   async function inviteMember(email, roleName, permissions){
     await ensureFresh();
     if(!canManageUsers()) throw new Error('Você não possui permissão para convidar usuários.');
+    const normalized=normalizedPermissions(permissions);
+    const requestedRole=['admin','editor','viewer'].includes(roleName)?roleName:'viewer';
+    assertAssignable(requestedRole,normalized);
     const body={
       organization_id:organization().id,
       email:String(email||'').trim().toLowerCase(),
-      role:['admin','editor','viewer'].includes(roleName)?roleName:'viewer',
-      permissions:normalizedPermissions(permissions),
+      role:requestedRole,
+      permissions:normalized,
       invited_by:user().id
     };
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) throw new Error('Informe um e-mail válido.');
@@ -567,10 +654,10 @@ const Cloud = (() => {
   async function updateMember(userId, roleName, permissions){
     await ensureFresh();
     if(!canManageUsers()) throw new Error('Você não possui permissão para editar usuários.');
-    const body={
-      role:['admin','editor','viewer'].includes(roleName)?roleName:'viewer',
-      permissions:normalizedPermissions(permissions)
-    };
+    const requestedRole=['admin','editor','viewer'].includes(roleName)?roleName:'viewer';
+    const normalized=normalizedPermissions(permissions);
+    assertAssignable(requestedRole,normalized);
+    const body={role:requestedRole,permissions:normalized};
     await request(`/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(organization().id)}&user_id=eq.${encodeURIComponent(userId)}`, {
       method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify(body)
     });
@@ -608,6 +695,7 @@ const Cloud = (() => {
     refreshOrganizationContext,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
+    clearCurrentQueue,
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,

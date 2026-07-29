@@ -113,7 +113,7 @@ const App = {
     if(!projects.length){ el.innerHTML = `<div class="ticker-empty">${State.projects.length?'Nenhum projeto selecionado para o ticker financeiro':'Desempenho financeiro: nenhum projeto cadastrado'}</div>`; return; }
     const items = projects.map(p=>{
       const st = Biz.projectStats(p), positive = st.balance >= 0;
-      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail('${p.id}')" title="Abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(st.balance)}</span></button>`;
+      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="Abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(st.balance)}</span></button>`;
     }).join('');
     el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div></div>`;
     requestAnimationFrame(() => {
@@ -177,7 +177,7 @@ const App = {
     const block = (title, items) => `
       <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
       ${items.length ? items.slice(0,6).map(x => { const p = State.projects.find(pr=>pr.id===x.projectId); return `
-        <button type="button" class="rb-item rb-item-action" onclick="Views.planejamento.form('${U.esc(x.id)}')" title="Editar ou excluir este gasto previsto">
+        <button type="button" class="rb-item rb-item-action" onclick="Views.planejamento.form(${U.jsArg(x.id)})" title="Editar ou excluir este gasto previsto">
           <span class="rb-item-info"><b>${U.esc(x.category)}</b><small>${U.esc(p?p.proposal:'?')} · ${U.date(x.date)}</small></span>
           <span class="rb-item-value">${U.money(x.value)}</span><i data-lucide="pencil"></i></button>`; }).join('') : '<small style="color:var(--text3)">Nenhum item</small>'}</div>`;
     document.getElementById('rightbar-content').innerHTML =
@@ -193,7 +193,7 @@ const App = {
       body:`<div class="future-mobile-list">${sections.map(([title,items])=>`
         <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
           ${items.length ? items.map(x=>{ const p=State.projects.find(pr=>pr.id===x.projectId); return `
-            <button type="button" class="rb-item rb-item-action" onclick="UI.close();Views.planejamento.form('${U.esc(x.id)}')">
+            <button type="button" class="rb-item rb-item-action" onclick="UI.close();Views.planejamento.form(${U.jsArg(x.id)})">
               <span class="rb-item-info"><b>${U.esc(x.category)}</b><small>${U.esc(p?p.proposal:'?')} · ${U.date(x.date)}</small></span>
               <span class="rb-item-value">${U.money(x.value)}</span><i data-lucide="pencil"></i></button>`;}).join('')
             : '<small style="color:var(--text3)">Nenhum item</small>'}
@@ -213,23 +213,31 @@ const App = {
       if(q.length < 2){ box.classList.remove('open'); return; }
       const out = [];
       State.projects.forEach(p => { if(U.norm(`${p.proposal} ${p.name} ${p.client}`).includes(q))
-        out.push({icon:'hard-hat', label:U.projLabel(p), tag:'Projeto', fn:`Views.projetos.detail('${p.id}')`}); });
+        out.push({icon:'hard-hat', label:U.projLabel(p), tag:'Projeto', action:()=>Views.projetos.detail(p.id)}); });
       State.clients.forEach(c => { if(U.norm(c.name).includes(q))
-        out.push({icon:'users', label:c.name, tag:'Cliente', fn:`Views.clientes.form('${c.id}')`}); });
+        out.push({icon:'users', label:c.name, tag:'Cliente', action:()=>Views.clientes.form(c.id)}); });
       const sups = new Set(), catsSeen = new Set();
       State.purchases.forEach(x => {
         if(x.supplier && !sups.has(x.supplier) && U.norm(x.supplier).includes(q)){ sups.add(x.supplier);
-          out.push({icon:'truck', label:x.supplier, tag:'Fornecedor', fn:`Dash.drill({supplier:${JSON.stringify(x.supplier)}})`}); }
+          out.push({icon:'truck', label:x.supplier, tag:'Fornecedor', action:()=>Dash.drill({supplier:x.supplier})}); }
         const categoryKey=Biz.categoryKey(x.category);
         if(categoryKey && !catsSeen.has(categoryKey) && (U.norm(x.category).includes(q) || categoryKey.includes(Biz.categoryKey(q)))){ catsSeen.add(categoryKey);
-          out.push({icon:'tag', label:Biz.categoryName(x.category), tag:'Categoria', fn:`Dash.drill({category:${JSON.stringify(x.category)}})`}); }
+          out.push({icon:'tag', label:Biz.categoryName(x.category), tag:'Categoria', action:()=>Dash.drill({category:x.category})}); }
       });
       State.purchases.slice(0,4000).forEach(x => { if(out.length<40 && x.desc && U.norm(x.desc).includes(q))
-        out.push({icon:'receipt', label:`${x.desc.slice(0,50)} · ${U.money(x.value)}`, tag:'Lançamento', fn:`Dash.showPurchase('${x.id}')`}); });
-      box.innerHTML = out.slice(0,20).map(r =>
-        `<div class="sr-item" onclick="document.getElementById('search-results').classList.remove('open');${U.esc(r.fn)}">
-         <i data-lucide="${r.icon}" style="width:15px;height:15px;color:var(--text3)"></i>${U.esc(r.label)}<span class="tag tag-gray">${r.tag}</span></div>`).join('')
+        out.push({icon:'receipt', label:`${x.desc.slice(0,50)} · ${U.money(x.value)}`, tag:'Lançamento', action:()=>Dash.showPurchase(x.id)}); });
+      const visible=out.slice(0,20);
+      box.innerHTML = visible.map((r,index) =>
+        `<button type="button" class="sr-item" data-search-result="${index}">
+         <i data-lucide="${r.icon}" style="width:15px;height:15px;color:var(--text3)"></i>${U.esc(r.label)}<span class="tag tag-gray">${r.tag}</span></button>`).join('')
         || '<div class="sr-item">Nenhum resultado</div>';
+      box.querySelectorAll('[data-search-result]').forEach(button=>{
+        button.onclick=()=>{
+          box.classList.remove('open');
+          const item=visible[Number(button.dataset.searchResult)];
+          if(item) item.action();
+        };
+      });
       box.classList.add('open');
       U.icons();
     };
@@ -282,11 +290,12 @@ const App = {
       if(userName) userName.textContent='CliqueObras';
       if(orgName) orgName.textContent=State.settings.companyName || 'Gestão de obras';
     }
-    if(State.settings.companyLogo){
+    const safeLogo=U.safeImageSrc(State.settings.companyLogo);
+    if(safeLogo){
       const box = document.getElementById('company-logo-box');
       if(box){
         box.style.background = 'transparent'; // remove fundo/borda quando há logo própria
-        box.innerHTML = `<img src="${State.settings.companyLogo}" class="logo-clean" style="width:100%;height:100%;object-fit:contain">`;
+        box.innerHTML = `<img src="${U.esc(safeLogo)}" class="logo-clean" style="width:100%;height:100%;object-fit:contain">`;
       }
     }
   },
@@ -295,8 +304,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.5 · dados locais';
+      el.textContent=`v2.6 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.6 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -378,7 +387,19 @@ const App = {
   },
   logoutCloud(){
     UI.confirm('Sair da conta da nuvem neste aparelho?',async()=>{
-      await Cloud.signOut(); location.reload();
+      UI.loading(true,'Conferindo alterações pendentes…');
+      try{
+        if(Cloud.pendingCount()){
+          await DB.syncFromCloud();
+          if(Cloud.pendingCount()) throw new Error('Ainda existem alterações aguardando sincronização.');
+        }
+        await DB.clearLocalCache();
+        await Cloud.signOut();
+        location.reload();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Saída interrompida para proteger seus dados: '+U.esc(err.message),'error',8000);
+      }
     },false);
   },
 
@@ -526,10 +547,10 @@ const App = {
     }, 500);
     this._booted = true;
     window.addEventListener('online',()=>{
-      if(Cloud.active()) Cloud.flushQueue()
-        .then(()=>this.syncCloudNow(false))
+      if(Cloud.active()) this.syncCloudNow(false)
         .then(()=>Cloud.startRealtime(change=>this.scheduleRealtimeSync(change)))
-        .then(()=>this.applyStorageStatus());
+        .then(()=>this.applyStorageStatus())
+        .catch(()=>{});
     });
     document.addEventListener('visibilitychange',()=>{
       if(!document.hidden && Cloud.active() && Date.now()-this.lastCloudRefresh>120000 && !UI.isModalOpen())

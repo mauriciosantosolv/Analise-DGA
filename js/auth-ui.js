@@ -22,7 +22,10 @@ const AuthUI = (() => {
         <p>Orçamento, realizado, planejamento e medições em uma base segura, acessível de qualquer aparelho.</p>
         <ul><li><i data-lucide="shield-check"></i>Dados separados por conta</li><li><i data-lucide="cloud"></i>Sincronização automática</li><li><i data-lucide="smartphone"></i>Acesso no computador e celular</li></ul>
       </section>
-      <section class="cloud-auth-panel">${content}</section>
+      <section class="cloud-auth-panel">
+        <div class="cloud-auth-mobile-brand"><span><i data-lucide="hard-hat"></i></span><div><b>CliqueObras</b><small>Gestão segura de obras</small></div></div>
+        ${content}
+      </section>
     </div>`;
   }
   function login(message='',messageType='error'){
@@ -82,6 +85,26 @@ const AuthUI = (() => {
     el.innerHTML=(views[mode]||login)(message,messageType);
     document.body.appendChild(el);
     el.querySelectorAll('[data-mode]').forEach(btn=>btn.onclick=()=>show(btn.dataset.mode));
+    el.querySelectorAll('input[type="email"]').forEach(input=>{
+      input.autocapitalize='none';
+      input.spellcheck=false;
+    });
+    el.querySelectorAll('input[type="password"]').forEach(input=>{
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='cloud-password-toggle';
+      button.setAttribute('aria-label','Mostrar senha');
+      button.innerHTML='<i data-lucide="eye"></i>';
+      button.onclick=()=>{
+        const showing=input.type==='text';
+        input.type=showing?'password':'text';
+        button.setAttribute('aria-label',showing?'Mostrar senha':'Ocultar senha');
+        button.innerHTML=`<i data-lucide="${showing?'eye':'eye-off'}"></i>`;
+        U.icons();
+      };
+      input.parentElement.classList.add('cloud-password-field');
+      input.insertAdjacentElement('afterend',button);
+    });
     const form=el.querySelector('#cloud-auth-form');
     if(form) form.onsubmit=async e=>{
       e.preventDefault();

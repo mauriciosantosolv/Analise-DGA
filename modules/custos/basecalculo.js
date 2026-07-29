@@ -24,10 +24,10 @@ Views.basecalculo = {
         <h2 style="margin-bottom:6px">Percentuais Globais</h2>
         <p style="color:var(--text2);font-size:.86rem;margin-bottom:16px">Aplicados automaticamente sobre o valor de venda de todos os projetos no cálculo de margem e lucro.</p>
         <div class="form-grid">
-          <div><label>Impostos (%)</label><input id="bc-tax" type="number" step="0.01" value="${b.tax||''}"></div>
-          <div><label>Custo Administrativo (%)</label><input id="bc-admin" type="number" step="0.01" value="${b.admin||''}"></div>
-          <div><label>Taxas (%)</label><input id="bc-fees" type="number" step="0.01" value="${b.fees||''}"></div>
-          <div><label>Outros Custos (%)</label><input id="bc-other" type="number" step="0.01" value="${b.other||''}"></div>
+          <div><label>Impostos (%)</label><input id="bc-tax" type="number" step="0.01" value="${U.esc(b.tax||'')}"></div>
+          <div><label>Custo Administrativo (%)</label><input id="bc-admin" type="number" step="0.01" value="${U.esc(b.admin||'')}"></div>
+          <div><label>Taxas (%)</label><input id="bc-fees" type="number" step="0.01" value="${U.esc(b.fees||'')}"></div>
+          <div><label>Outros Custos (%)</label><input id="bc-other" type="number" step="0.01" value="${U.esc(b.other||'')}"></div>
           <div class="full"><label>Meta de Margem Mínima (%)</label><input id="bc-target" type="number" step="0.5" value="${target}"></div>
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">

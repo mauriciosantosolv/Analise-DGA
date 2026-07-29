@@ -82,22 +82,22 @@ Views.dashboard = {
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, `App.goFiltered('medicoes','${selectedProject}')`)}
+        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, `App.goFiltered('medicoes',${U.jsArg(selectedProject)})`)}
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
-        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos','${selectedProject}')`)}
-        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro','${selectedProject}')`)}
-        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento','${selectedProject}')`)}
+        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos',${U.jsArg(selectedProject)})`)}
+        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro',${U.jsArg(selectedProject)})`)}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento',${U.jsArg(selectedProject)})`)}
         ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
         ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
-        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', `App.goFiltered('planejamento','${selectedProject}',{upcoming7:true})`)}
+        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', `App.goFiltered('planejamento',${U.jsArg(selectedProject)},{upcoming7:true})`)}
       </div>
 
       <div class="toolbar" style="margin-bottom:10px">
         <small style="color:var(--text3);font-weight:700;letter-spacing:.05em">GRÁFICOS:</small>
-        ${this.chartDefs.map(d=>`<button class="tab ${vis[d.id]?'active':''}" style="border:1px solid var(--border2)" onclick="Views.dashboard.toggleChart('${d.id}')" title="Mostrar/ocultar ${d.title}">${d.short}</button>`).join('')}
+        ${this.chartDefs.map(d=>`<button class="tab ${vis[d.id]?'active':''}" style="border:1px solid var(--border2)" onclick="Views.dashboard.toggleChart(${U.jsArg(d.id)})" title="Mostrar/ocultar ${U.esc(d.title)}">${U.esc(d.short)}</button>`).join('')}
       </div>
       <div class="two-col">
         ${this.chartDefs.filter(d=>vis[d.id]).map(d=>`<div class="card chart-card"><h3 style="margin-bottom:10px">${d.title}${d.hint||''}</h3><div class="chart-box ${d.sm?'sm':''}"><canvas id="ch-${d.id}"></canvas></div></div>`).join('')
@@ -109,7 +109,7 @@ Views.dashboard = {
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
         <thead><tr><th></th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo</th><th class="num">Margem</th><th class="num">Saúde</th><th>Consumo</th></tr></thead>
         <tbody>${stats.sort((a,b)=>a.s.health-b.s.health).map(({p,s})=>`
-          <tr class="clickable" onclick="Views.projetos.detail('${p.id}')">
+          <tr class="clickable" onclick="Views.projetos.detail(${U.jsArg(p.id)})">
             <td>${lightDot(s.light)}</td><td><b>${U.esc(U.projLabel(p))}</b></td><td>${statusTag(p.status)}</td>
             <td class="num">${U.money(s.budgetTotal)}</td><td class="num">${U.money(s.spent)}</td>
             <td class="num">${U.money(s.projected)}</td>
@@ -122,7 +122,7 @@ Views.dashboard = {
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
         <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
         <tbody>${cats.map(c=>`
-          <tr class="clickable" onclick="Dash.drill({category:'${U.esc(c.name)}'})">
+          <tr class="clickable" onclick="Dash.drill({category:${U.jsArg(c.name)}})">
             <td><b>${U.esc(c.name)}</b></td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td>
             <td class="num">${U.money(c.projected)}</td>
             <td class="num" style="color:${c.balance<0?'var(--red)':'inherit'}">${U.money(c.balance)}</td>
@@ -140,10 +140,13 @@ Views.dashboard = {
   charts(projects, purchases, stats, cats, fut){
     if(typeof Chart === 'undefined') return; // CDN indisponível: KPIs e tabelas continuam funcionando
     const money = v => U.money(v);
+    const mobile=typeof matchMedia==='function' && matchMedia('(max-width: 600px)').matches;
+    const itemLimit=mobile?6:12;
+    const compactTicks={autoSkip:true,maxTicksLimit:mobile?5:9,font:{size:mobile?9:11}};
     const tt = { callbacks:{ label: ctx => ` ${ctx.dataset.label||ctx.label}: ${U.money2(ctx.parsed.y ?? ctx.parsed)}` } };
 
     // Orçado x Realizado x Projeção x Saldo por projeto
-    const top = stats.filter(x=>x.s.budgetTotal>0 || x.s.spent>0).sort((a,b)=>b.s.spent-a.s.spent).slice(0,12);
+    const top = stats.filter(x=>x.s.budgetTotal>0 || x.s.spent>0).sort((a,b)=>b.s.spent-a.s.spent).slice(0,itemLimit);
     if(document.getElementById('ch-main')) Dash.charts.main = new Chart(document.getElementById('ch-main'), {
       type:'bar',
       data:{ labels: top.map(x=>x.p.proposal),
@@ -154,7 +157,7 @@ Views.dashboard = {
           {label:'Saldo', data:top.map(x=>x.s.balance), backgroundColor:'#94A3B8'}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{position:'bottom'}},
         onClick:(e,els)=>{ if(els.length){ const p = top[els[0].index].p; Views.projetos.detail(p.id); } },
-        scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
+        scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
     });
 
     // Série mensal (Curva S foi removida a pedido do usuário em 07/2026)
@@ -166,17 +169,17 @@ Views.dashboard = {
       data:{ labels:series.labels, datasets:[{label:'Gastos no mês', data:series.values, backgroundColor:'#2563EB', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
         onClick:(e,els)=>{ if(els.length) Dash.drill({month:series.labels[els[0].index]}); },
-        scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
+        scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
     });
 
     // Distribuição por categoria: realizado + planejamento comprometido. Assim,
     // categorias que existem apenas no Planejamento também aparecem no gráfico.
-    const catTop = cats.filter(c=>c.committed>0).slice(0,10);
+    const catTop = cats.filter(c=>c.committed>0).slice(0,mobile?6:10);
     if(document.getElementById('ch-cat')) Dash.charts.cat = new Chart(document.getElementById('ch-cat'), {
       type:'doughnut',
       data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.committed), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0}]},
       options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
-        plugins:{ legend:{position:'right', labels:{boxWidth:12, font:{size:11}}},
+        plugins:{ legend:{position:mobile?'bottom':'right', labels:{boxWidth:12, font:{size:mobile?9:11},padding:mobile?8:10}},
           tooltip:{ callbacks:{ label: ctx => { const c=catTop[ctx.dataIndex]; return ` ${ctx.label}: ${U.money2(ctx.parsed)} (realizado ${U.money2(c.spent)} + projetado ${U.money2(c.projected)})`; } } } },
         onClick:(e,els)=>{ if(els.length) Dash.drill({category:catTop[els[0].index].name}); } }
     });
@@ -191,30 +194,31 @@ Views.dashboard = {
       data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:'#7C3AED', borderRadius:6}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
         onClick:(e,els)=>{ if(els.length) Views.planejamento.showDay(futKeys[els[0].index],futAll); },
-        scales:{ y:{ ticks:{ callback:v=>U.money(v) } } } }
+        scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
     });
 
     // Margem por projeto
-    const withMargin = stats.filter(x=>x.s.marginCurrent!=null).sort((a,b)=>a.s.marginCurrent-b.s.marginCurrent).slice(0,12);
+    const withMargin = stats.filter(x=>x.s.marginCurrent!=null).sort((a,b)=>a.s.marginCurrent-b.s.marginCurrent).slice(0,itemLimit);
     if(document.getElementById('ch-margin')) Dash.charts.margin = new Chart(document.getElementById('ch-margin'), {
       type:'bar',
       data:{ labels:withMargin.map(x=>x.p.proposal),
         datasets:[{label:'Margem %', data:withMargin.map(x=>x.s.marginCurrent), backgroundColor:withMargin.map(x=>x.s.marginCurrent<0?'#DC2626':x.s.marginCurrent<10?'#D97706':'#16A34A'), borderRadius:6}]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>` ${U.pct(ctx.parsed.x)}` } } },
-        onClick:(e,els)=>{ if(els.length) Views.projetos.detail(withMargin[els[0].index].p.id); } }
+        onClick:(e,els)=>{ if(els.length) Views.projetos.detail(withMargin[els[0].index].p.id); },
+        scales:{x:{ticks:{...compactTicks,callback:v=>U.pct(v)}},y:{ticks:compactTicks}} }
     });
 
     // Top fornecedores
     const supMap = {};
     purchases.forEach(x=>{ const k = x.supplier||'(sem fornecedor)'; supMap[k]=(supMap[k]||0)+x.value; });
-    const sups = Object.entries(supMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const sups = Object.entries(supMap).sort((a,b)=>b[1]-a[1]).slice(0,mobile?6:10);
     if(document.getElementById('ch-top')) Dash.charts.top = new Chart(document.getElementById('ch-top'), {
       type:'bar',
-      data:{ labels:sups.map(s=>s[0].length>26?s[0].slice(0,25)+'…':s[0]), datasets:[{label:'Total', data:sups.map(s=>s[1]), backgroundColor:'#0891B2', borderRadius:6}]},
+      data:{ labels:sups.map(s=>s[0].length>(mobile?18:26)?s[0].slice(0,mobile?17:25)+'…':s[0]), datasets:[{label:'Total', data:sups.map(s=>s[1]), backgroundColor:'#0891B2', borderRadius:6}]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${U.money2(ctx.parsed.x)}`}}},
         onClick:(e,els)=>{ if(els.length) Dash.drill({supplier:sups[els[0].index][0]}); },
-        scales:{ x:{ ticks:{ callback:v=>U.money(v) } } } }
+        scales:{ x:{ ticks:{...compactTicks,callback:v=>U.money(v)} },y:{ticks:compactTicks} } }
     });
 
     // (Ranking de Clientes foi removido a pedido do usuário em 07/2026)
