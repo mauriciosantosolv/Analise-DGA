@@ -6,10 +6,16 @@ const source = fs.readFileSync(new URL("../modules/rdo/rdo.js", import.meta.url)
 const state = {
   projects:[{id:"p-hh",proposal:"798",name:"Caramuru",type:"HH"}],
   crew:[{id:"e-1",name:"João",internalRole:"Instrumentista",active:true}],
-  laborRates:[{
-    id:"p-hh:e-1",projectId:"p-hh",employeeId:"e-1",commercialRole:"Técnico em Elétrica",
-    costRegular:60,cost50:90,cost100:120,saleRegular:120,sale50:180,sale100:240,active:true
-  }],
+  laborRates:[
+    {
+      id:"base:e-1",projectId:"__base__",employeeId:"e-1",isBaseCost:true,
+      costRegular:60,cost50:90,cost100:120,saleRegular:0,sale50:0,sale100:0,active:true
+    },
+    {
+      id:"p-hh:e-1",projectId:"p-hh",employeeId:"e-1",commercialRole:"Técnico em Elétrica",
+      costRegular:5,cost50:7.5,cost100:10,saleRegular:120,sale50:180,sale100:240,active:true
+    }
+  ],
   measurements:[],
   rdos:[]
 };
@@ -50,6 +56,7 @@ assert.equal(result.hours,9);
 assert.equal(result.costTotal,570);
 assert.equal(result.saleTotal,1140);
 assert.equal(result.missingRates.length,0);
+assert.equal(RDO.rateFor("p-hh","e-1").costRegular,60);
 
 const missing = RDO.calculate({
   projectId:"p-hh",

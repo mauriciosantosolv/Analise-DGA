@@ -17,13 +17,13 @@ const AuthUI = (() => {
   function shell(content){
     return `<div class="cloud-auth-shell">
       <section class="cloud-auth-hero">
-        <div class="cloud-auth-logo"><i data-lucide="hard-hat"></i></div>
+        <div class="cloud-auth-logo"><img src="assets/logo-clique.png" alt="Clique Obras"></div>
         <div><span class="cloud-auth-kicker">GESTÃO FINANCEIRA DE OBRAS</span><h1>Clique Obras</h1></div>
         <p>Orçamento, realizado, planejamento e medições em uma base segura, acessível de qualquer aparelho.</p>
         <ul><li><i data-lucide="shield-check"></i>Dados separados por conta</li><li><i data-lucide="cloud"></i>Sincronização automática</li><li><i data-lucide="smartphone"></i>Acesso no computador e celular</li></ul>
       </section>
       <section class="cloud-auth-panel">
-        <div class="cloud-auth-mobile-brand"><span><i data-lucide="hard-hat"></i></span><div><b>CliqueObras</b><small>Gestão segura de obras</small></div></div>
+        <div class="cloud-auth-mobile-brand"><span><img src="assets/logo-clique.png" alt=""></span><div><b>CliqueObras</b><small>Gestão segura de obras</small></div></div>
         ${content}
       </section>
     </div>`;

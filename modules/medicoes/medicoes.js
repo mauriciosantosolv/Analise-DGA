@@ -236,6 +236,8 @@ Views.medicoes = {
   },
 
   hhStatusForm(measurement){
+    const canDelete=(typeof Cloud==='undefined'||!Cloud.active()||RDO.fullAccess())
+      && measurement.status!=='Faturada';
     UI.modal({
       title:'Medição HH',
       body:`<div class="rdo-detail-head">
@@ -249,7 +251,8 @@ Views.medicoes = {
         <div><label>Referência</label><input id="hh-status-ref" value="${U.esc(measurement.ref||'')}"></div>
         <div class="full"><label>Observações</label><textarea id="hh-status-notes" rows="2">${U.esc(measurement.notes||'')}</textarea></div>
       </div>`,
-      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>'
+      footer:`${canDelete?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove(${U.jsArg(measurement.id)})"><i data-lucide="trash-2"></i>Excluir medição</button>`:''}
+        <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
     });
     document.getElementById('hh-status-save').onclick=async()=>{
       await DB.put('measurements',{
@@ -265,9 +268,31 @@ Views.medicoes = {
 
   remove(id){
     const measurement=State.measurements.find(x=>String(x.id)===String(id));
-    if(!measurement||measurement.source==='rdo-hh') return;
-    UI.confirm('Excluir esta medição?',async()=>{
-      await DB.del('measurements',id); await State.reload(); UI.toast('Medição excluída','warn'); App.render();
+    if(!measurement) return;
+    if(measurement.source==='rdo-hh' && measurement.status==='Faturada')
+      return UI.toast('Uma medição HH faturada não pode ser excluída.','warn',6500);
+    if(measurement.source==='rdo-hh' && typeof Cloud!=='undefined' && Cloud.active() && !RDO.fullAccess())
+      return UI.toast('Somente proprietário ou administrador pode excluir uma medição HH.','warn',6500);
+    const message=measurement.source==='rdo-hh'
+      ? `Excluir esta medição e liberar seus <b>${(measurement.rdoIds||[]).length} RDO(s)</b> para uma nova medição?`
+      : 'Excluir esta medição?';
+    UI.confirm(message,async()=>{
+      try{
+        UI.loading(true,'Excluindo medição…');
+        if(measurement.source==='rdo-hh' && typeof Cloud!=='undefined' && Cloud.active()){
+          await Cloud.deleteRdoMeasurement(id);
+          await DB.syncFromCloud();
+        }else{
+          await DB.del('measurements',id);
+        }
+        await State.reload();
+        UI.loading(false);
+        UI.toast(measurement.source==='rdo-hh'?'Medição excluída e RDOs liberados.':'Medição excluída.','warn',6000);
+        App.render();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível excluir a medição: '+U.esc(err.message||err),'error',8000);
+      }
     });
   }
 };

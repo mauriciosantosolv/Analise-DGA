@@ -939,9 +939,17 @@ tbody tr:last-child td {
   width: 54px;
   height: 54px;
   border-radius: 15px;
-  background: var(--blue);
-  color: #fff;
+  background: transparent;
   box-shadow: none;
+  overflow: hidden;
+}
+
+.cloud-auth-logo img,
+.cloud-auth-mobile-brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cloud-auth-kicker {

@@ -1,4 +1,4 @@
-CLIQUEOBRAS v2.8 — INSTALAÇÃO SEGURA
+CLIQUEOBRAS v2.9 — INSTALAÇÃO SEGURA
 
 Este é o pacote completo do sistema. Não misture arquivos de versões anteriores.
 
@@ -18,14 +18,25 @@ SUPABASE
   1. supabase/ATUALIZACAO-SEGURANCA-v2.7.sql
   2. supabase/ATUALIZACAO-v2.7-RDO-HH.sql
   3. supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql
-- Para instalação nova, execute supabase/schema.sql e as três atualizações
+  4. supabase/ATUALIZACAO-v2.9-RDO-REVISAO-MEDICAO.sql
+- Para instalação nova, execute supabase/schema.sql e as quatro atualizações
   acima, na mesma ordem.
 - Ela preserva app_records e adiciona organizações, membros, convites, perfis
   e RLS por organização/permissão.
 - Nunca coloque service_role, Secret Key ou senha do banco no navegador.
 - Ative a proteção contra senhas comprometidas no painel de Authentication.
 
-PRINCIPAIS MUDANÇAS v2.8
+PRINCIPAIS MUDANÇAS v2.9
+- Nova identidade visual no favicon, login, menu e atalho instalado no celular.
+- Ícones PWA próprios para Android e iPhone, incluindo máscara segura.
+- Exclusão de RDO em rascunho ou reprovado, com remoção dos anexos.
+- Reprovação de RDO com comentário obrigatório e histórico de revisão.
+- Custo por hora centralizado no cadastro do colaborador; a venda varia por obra.
+- Exclusão controlada de medição HH não faturada, liberando os RDOs vinculados.
+- PDF de RDO em A4 vertical com logo e nome do cliente.
+- PDF do dashboard com logo do cliente e justificativa do desvio.
+
+REGRAS PRESERVADAS DA v2.8
 - Hierarquia de equipe protegida no RLS contra elevação de privilégios.
 - Escrita remota validada antes de alterar o cache local.
 - Conflitos offline preservam a fila e não sobrescrevem a nuvem.

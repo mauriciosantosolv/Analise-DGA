@@ -108,6 +108,10 @@ const RDO = {
   fullAccess(){
     return typeof Cloud==='undefined' || !Cloud.active() || ['owner','admin'].includes(Cloud.role());
   },
+  canReview(){
+    return this.fullAccess()
+      && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos'));
+  },
   canApprove(){
     return this.fullAccess()
       && (typeof Cloud==='undefined' || !Cloud.active() || (
@@ -126,6 +130,18 @@ const RDO = {
     const project=State.projects.find(p=>String(p.id)===String(projectId));
     if(project) return U.projLabel(project);
     return this.allowedProjects().find(p=>p.id===String(projectId))?.label || 'Projeto';
+  },
+  projectClient(projectId){
+    const project=State.projects.find(p=>String(p.id)===String(projectId))||null;
+    const client=project
+      ? State.clients.find(item=>U.norm(item.name)===U.norm(project.client))||null
+      : null;
+    return {
+      project,
+      client,
+      name:String((client&&client.name)||(project&&project.client)||'Cliente não informado'),
+      logo:U.safeImageSrc((client&&client.logo)||(project&&project.clientLogo)||'')
+    };
   },
   activeCrew(){
     return State.crew.filter(x=>x.active!==false).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
@@ -147,12 +163,35 @@ const RDO = {
     const regular=Math.min(8,total);
     return {total,regular,overtime50:Math.max(0,total-regular),overtime100:0};
   },
-  rateFor(projectId,employeeId){
-    return State.laborRates.find(rate=>
-      String(rate.projectId)===String(projectId)
-      && String(rate.employeeId)===String(employeeId)
+  baseCostFor(employeeId,legacyRate=null){
+    const base=State.laborRates.find(rate=>
+      String(rate.employeeId)===String(employeeId)
+      && (rate.isBaseCost===true || String(rate.projectId)==='__base__')
       && rate.active!==false
+    );
+    const regular=Number(base?.costRegular);
+    if(base && Number.isFinite(regular) && regular>=0){
+      return {
+        costRegular:regular,
+        cost50:Number.isFinite(Number(base.cost50))?Number(base.cost50):regular*1.5,
+        cost100:Number.isFinite(Number(base.cost100))?Number(base.cost100):regular*2
+      };
+    }
+    return {
+      costRegular:Number(legacyRate?.costRegular)||0,
+      cost50:Number(legacyRate?.cost50)||0,
+      cost100:Number(legacyRate?.cost100)||0
+    };
+  },
+  rateFor(projectId,employeeId){
+    const rate=State.laborRates.find(item=>
+      String(item.projectId)===String(projectId)
+      && String(item.employeeId)===String(employeeId)
+      && item.isBaseCost!==true
+      && item.active!==false
     ) || null;
+    if(!rate) return null;
+    return {...rate,...this.baseCostFor(employeeId,rate)};
   },
   entryTotals(entry,rate){
     const regular=Number(entry.regular)||0;
@@ -192,7 +231,7 @@ const RDO = {
   },
   statusTag(status){
     const tone={Aprovado:'tag-green',Enviado:'tag-amber',Devolvido:'tag-red',Rascunho:'tag-gray'}[status]||'tag-gray';
-    const label={Enviado:'Aguardando aprovação'}[status]||status||'Rascunho';
+    const label={Enviado:'Aguardando aprovação',Devolvido:'Reprovado'}[status]||status||'Rascunho';
     return `<span class="tag ${tone}">${U.esc(label)}</span>`;
   },
   authorName(){
@@ -202,6 +241,12 @@ const RDO = {
   canEdit(rdo){
     if(!rdo || !['Rascunho','Devolvido'].includes(rdo.status||'Rascunho')) return false;
     return typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos');
+  },
+  canDelete(rdo){
+    return !!rdo
+      && ['Rascunho','Devolvido'].includes(rdo.status||'Rascunho')
+      && !this.linkedRdoIds().has(String(rdo.id))
+      && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos'));
   },
 
   async save(rdo,status){
@@ -306,6 +351,73 @@ const RDO = {
     App.render();
   },
 
+  reject(id){
+    const rdo=State.rdos.find(x=>String(x.id)===String(id));
+    if(!rdo || rdo.status!=='Enviado' || !this.canReview()) return;
+    UI.modal({
+      title:'Reprovar diário',
+      body:`<div class="form-grid">
+        <div class="full"><label>Comentário da reprovação *</label><textarea id="rdo-rejection-comment" rows="5" maxlength="1200" placeholder="Explique o que precisa ser corrigido antes de um novo envio."></textarea></div>
+      </div>
+      <div class="import-log">O diário voltará para edição e o comentário ficará visível ao responsável pelo preenchimento.</div>`,
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-danger" id="rdo-reject-confirm"><i data-lucide="message-square-x"></i>Reprovar diário</button>'
+    });
+    document.getElementById('rdo-reject-confirm').onclick=async()=>{
+      const comment=document.getElementById('rdo-rejection-comment').value.trim();
+      if(!comment) return UI.toast('Informe o motivo da reprovação.','warn');
+      try{
+        UI.loading(true,'Reprovando diário…');
+        const rejectedAt=new Date().toISOString();
+        await DB.put('rdos',{
+          ...rdo,
+          status:'Devolvido',
+          rejectionComment:comment,
+          rejectedAt,
+          rejectedBy:this.authorName(),
+          rejectionHistory:[
+            ...(Array.isArray(rdo.rejectionHistory)?rdo.rejectionHistory:[]),
+            {comment,rejectedAt,rejectedBy:this.authorName()}
+          ].slice(-20),
+          updatedAt:rejectedAt
+        });
+        await State.reload();
+        UI.loading(false);
+        UI.closeAll();
+        UI.toast('RDO reprovado com comentário.','success',6000);
+        App.render();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível reprovar o RDO: '+U.esc(err.message||err),'error',7500);
+      }
+    };
+  },
+
+  remove(id){
+    const rdo=State.rdos.find(x=>String(x.id)===String(id));
+    if(!rdo) return;
+    if(!this.canDelete(rdo))
+      return UI.toast('Somente RDOs em rascunho ou reprovados, ainda não medidos, podem ser excluídos.','warn',7000);
+    UI.confirm(`Excluir definitivamente <b>${U.esc(rdo.number||'este RDO')}</b> e seus anexos?`,async()=>{
+      try{
+        UI.loading(true,'Excluindo diário e anexos…');
+        const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
+        for(const attachment of attachments){
+          if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.removeRdoAttachment(attachment);
+          else await DB.attachmentDel(attachment.id);
+        }
+        await DB.del('rdos',rdo.id);
+        this.attachmentCache.delete(String(rdo.id));
+        await State.reload();
+        UI.loading(false);
+        UI.toast('RDO excluído.','warn');
+        App.render();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível excluir o RDO: '+U.esc(err.message||err),'error',8000);
+      }
+    });
+  },
+
   form(id=''){
     const existing=id?State.rdos.find(x=>String(x.id)===String(id)):null;
     if(existing && !this.canEdit(existing)) return this.detail(id);
@@ -352,6 +464,7 @@ const RDO = {
         </aside>
         <div class="rdo-composer-main">
           <section class="rdo-step" data-rdo-step="1">
+            ${existing?.status==='Devolvido'&&existing.rejectionComment?`<div class="rdo-rejection-banner"><i data-lucide="message-square-warning"></i><div><b>Correção solicitada</b><p>${U.esc(existing.rejectionComment)}</p></div></div>`:''}
             <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3><p>Defina o projeto, a data e a frente de serviço.</p></div></div>
             <div class="form-grid">
               <div><label>Projeto *</label><select id="rdo-project" ${existing?'disabled':''}>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
@@ -625,7 +738,9 @@ const RDO = {
           });
           byId('rdo-back').querySelector('span').textContent=currentStep===1?'Cancelar':'Voltar';
           byId('rdo-next').hidden=currentStep===4;
+          byId('rdo-next').style.display=currentStep===4?'none':'';
           byId('rdo-submit').hidden=currentStep!==4;
+          byId('rdo-submit').style.display=currentStep===4?'':'none';
           if(currentStep===4) updateReview();
           modal.querySelector('.modal-body').scrollTop=0;
         };
@@ -792,13 +907,23 @@ const RDO = {
       if(old) old.remove();
       const report=document.createElement('section');
       report.id='rdo-print-report';
-      const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/favicon.svg';
+      const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+      const customer=this.projectClient(rdo.projectId);
       const total=(rdo.entries||[]).reduce(
         (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
       );
-      const status=rdo.status==='Enviado'?'Aguardando aprovação':rdo.status;
+      const status={
+        Enviado:'Aguardando aprovação',
+        Devolvido:'Reprovado'
+      }[rdo.status]||rdo.status;
       report.innerHTML=`<header>
-        <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra</small></span></div>
+        <div class="rdo-print-identities">
+          <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra</small></span></div>
+          <div class="rdo-print-client">
+            ${customer.logo?`<img src="${U.esc(customer.logo)}" alt="">`:`<span>${U.esc(U.initials(customer.name))}</span>`}
+            <div><small>Cliente</small><b>${U.esc(customer.name)}</b></div>
+          </div>
+        </div>
         <div class="rdo-print-number"><small>RDO</small><b>${U.esc(rdo.number||rdo.id)}</b><span>${U.esc(status||'Rascunho')}</span></div>
       </header>
       <div class="rdo-print-facts">
@@ -813,7 +938,8 @@ const RDO = {
         <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(row.internalRole||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
-      <section class="rdo-print-section"><h2>Evidências fotográficas</h2>
+      ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
+      <section class="rdo-print-section rdo-print-evidence-section"><h2>Evidências fotográficas</h2>
         ${images.length?`<div class="rdo-print-photos">${images.map((image,index)=>`<figure><img src="${U.esc(image.url)}" alt=""><figcaption>Foto ${String(index+1).padStart(2,'0')} · ${U.esc(image.fileName)}</figcaption></figure>`).join('')}</div>`:'<p>Nenhuma foto anexada.</p>'}
         ${attachments.some(item=>!this.isImage(item))?`<div class="rdo-print-files"><b>Documentos anexados:</b> ${attachments.filter(item=>!this.isImage(item)).map(item=>U.esc(item.fileName)).join(' · ')}</div>`:''}
       </section>
@@ -868,10 +994,14 @@ const RDO = {
         <div class="kpi accent-blue"><div class="k-label">Venda apurada</div><div class="k-value">${U.money(financial.saleTotal)}</div></div>
       </div>`:''}
       ${rdo.notes?`<div class="import-log"><b>Observações:</b> ${U.esc(rdo.notes)}</div>`:''}
+      ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<div class="import-log rdo-rejection-comment"><b>Motivo da reprovação:</b> ${U.esc(rdo.rejectionComment)}
+        <small>${rdo.rejectedAt?`Registrado em ${U.date(rdo.rejectedAt)}`:''}${rdo.rejectedBy?` por ${U.esc(rdo.rejectedBy)}`:''}</small></div>`:''}
       <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
       footer:`${this.canEdit(rdo)?`<button class="btn btn-ghost" onclick="UI.close();RDO.form(${U.jsArg(rdo.id)})"><i data-lucide="pencil"></i>Editar</button>`:''}
-        ${rdo.status==='Enviado'&&typeof Cloud!=='undefined'&&Cloud.canEditStore('rdos')?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}
+        ${rdo.status==='Enviado'&&!this.canReview()&&(typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos'))?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}
+        ${rdo.status==='Enviado'&&this.canReview()?`<button class="btn btn-danger" onclick="RDO.reject(${U.jsArg(rdo.id)})"><i data-lucide="message-square-x"></i>Reprovar</button>`:''}
         ${rdo.status==='Enviado'&&this.canApprove()?`<button class="btn btn-primary" onclick="RDO.approve(${U.jsArg(rdo.id)})"><i data-lucide="badge-check"></i>Aprovar diário</button>`:''}
+        ${this.canDelete(rdo)?`<button class="btn btn-danger" onclick="RDO.remove(${U.jsArg(rdo.id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
         <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`,
       onOpen:()=>this.renderDetailAttachments(rdo.id)
@@ -922,7 +1052,7 @@ Views.rdos={
           ['Enviado',pending],
           ['Aprovado',approved],
           ['Devolvido',returned]
-        ].map(([status,count])=>`<button type="button" class="${this.status===status?'active':''}" data-rdo-status="${status}">${status==='Enviado'?'Aguardando':status}<span>${count}</span></button>`).join('')}
+        ].map(([status,count])=>`<button type="button" class="${this.status===status?'active':''}" data-rdo-status="${status}">${status==='Enviado'?'Aguardando':status==='Devolvido'?'Reprovado':status}<span>${count}</span></button>`).join('')}
       </div>
     </div>
     <div class="rdo-list">${rows.map(rdo=>{
@@ -956,11 +1086,12 @@ Views.colaboradores={
   title:'Colaboradores',
   render(){
     const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('crew');
+    const canViewCost=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
     $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2><small>Colaboradores disponíveis para os diários.</small></div><div class="spacer"></div>
       ${canEdit?'<button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button>':''}</div>
       <div class="crew-directory">${State.crew.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
         <span class="avatar-ph">${U.initials(employee.name||'CO')}</span>
-        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}</small></span>
+        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
         <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?'Inativo':'Ativo'}</span>
         ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
       </div>`).join('')||'<div class="empty card"><i data-lucide="users-round"></i><br>Nenhum colaborador cadastrado.</div>'}</div>`;
@@ -968,17 +1099,64 @@ Views.colaboradores={
   },
   form(id=''){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
-    const employee=id?State.crew.find(x=>String(x.id)===String(id)):{name:'',internalRole:'',active:true};
+    const employee=id?State.crew.find(x=>String(x.id)===String(id)):{id:U.id(),name:'',internalRole:'',active:true};
+    if(!employee) return;
+    const canEditCost=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('labor_rates');
+    const baseRecord=State.laborRates.find(rate=>
+      String(rate.employeeId)===String(employee.id)
+      && (rate.isBaseCost===true||String(rate.projectId)==='__base__')
+    );
+    const legacyRate=State.laborRates.find(rate=>
+      String(rate.employeeId)===String(employee.id)
+      && rate.isBaseCost!==true
+      && String(rate.projectId)!=='__base__'
+    );
+    const hourlyCost=RDO.baseCostFor(employee.id,baseRecord||legacyRate).costRegular;
+    const hasRegisteredCost=!!(baseRecord||legacyRate);
     UI.modal({title:id?'Editar colaborador':'Novo colaborador',body:`<div class="form-grid">
       <div class="full"><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}"></div>
       <div><label>Função interna</label><input id="crew-role" maxlength="120" value="${U.esc(employee.internalRole||'')}"></div>
+      <div><label>Custo por hora *</label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'O custo é único para todas as obras. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
       <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
     document.getElementById('crew-save').onclick=async()=>{
       const name=document.getElementById('crew-name').value.trim();
       if(!name) return UI.toast('Informe o nome do colaborador','warn');
-      await DB.put('crew',{...(id?employee:{id:U.id(),createdAt:new Date().toISOString()}),name,internalRole:document.getElementById('crew-role').value.trim(),active:document.getElementById('crew-active').value==='true',updatedAt:new Date().toISOString()});
-      await State.reload(); UI.close(); UI.toast('Colaborador salvo','success'); App.render();
+      const rawCost=canEditCost?document.getElementById('crew-hourly-cost').value:'';
+      if(canEditCost && (rawCost===''||U.num(rawCost)<0)) return UI.toast('Informe o custo por hora do colaborador.','warn');
+      try{
+        UI.loading(true,'Salvando colaborador…');
+        await DB.put('crew',{
+          ...employee,
+          createdAt:employee.createdAt||new Date().toISOString(),
+          name,
+          internalRole:document.getElementById('crew-role').value.trim(),
+          active:document.getElementById('crew-active').value==='true',
+          updatedAt:new Date().toISOString()
+        });
+        if(canEditCost){
+          const cost=U.num(rawCost);
+          await DB.put('labor_rates',{
+            ...(baseRecord||{id:`base:${employee.id}`,projectId:'__base__',employeeId:String(employee.id),createdAt:new Date().toISOString()}),
+            isBaseCost:true,
+            commercialRole:'',
+            costRegular:cost,
+            cost50:Math.round(cost*1.5*100)/100,
+            cost100:Math.round(cost*2*100)/100,
+            saleRegular:0,sale50:0,sale100:0,
+            active:true,
+            updatedAt:new Date().toISOString()
+          });
+        }
+        await State.reload();
+        UI.loading(false);
+        UI.close();
+        UI.toast(canEditCost?'Colaborador e custo salvos':'Colaborador salvo','success');
+        App.render();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível salvar o colaborador: '+U.esc(err.message||err),'error',7500);
+      }
     };
   }
 };
@@ -987,14 +1165,15 @@ Views.valoreshh={
   title:'Valores HH',
   render(){
     const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('labor_rates');
-    const rows=State.laborRates.slice().sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
-    $c().innerHTML=`<div class="toolbar"><div><h2>Custos e valores por projeto</h2><small>As tarifas são congeladas no momento da aprovação do RDO.</small></div><div class="spacer"></div>
+    const rows=State.laborRates.filter(rate=>rate.isBaseCost!==true&&String(rate.projectId)!=='__base__').sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
+    $c().innerHTML=`<div class="toolbar"><div><h2>Valores de venda por projeto</h2><small>O custo vem do cadastro do colaborador; somente o valor de venda varia por obra.</small></div><div class="spacer"></div>
       ${canEdit?'<button class="btn btn-primary" onclick="Views.valoreshh.form()"><i data-lucide="plus"></i>Configurar valor</button>':''}</div>
       <div class="rate-list">${rows.map(rate=>{
         const employee=State.crew.find(x=>String(x.id)===String(rate.employeeId))||{};
+        const costs=RDO.baseCostFor(rate.employeeId,rate);
         return `<${canEdit?'button':'div'} class="rate-card"${canEdit?` onclick="Views.valoreshh.form(${U.jsArg(rate.id)})"`:''}>
           <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(RDO.projectLabel(rate.projectId))} · ${U.esc(rate.commercialRole||employee.internalRole||'')}</small></span>
-          <span><small>Custo normal</small><b>${U.money(rate.costRegular)}/h</b></span>
+          <span><small>Custo padrão</small><b>${U.money(costs.costRegular)}/h</b></span>
           <span><small>Venda normal</small><b>${U.money(rate.saleRegular)}/h</b></span>
           <i data-lucide="chevron-right"></i>
         </${canEdit?'button':'div'}>`;
@@ -1009,27 +1188,34 @@ Views.valoreshh={
     };
     if(!State.projects.length||!State.crew.length) return UI.toast('Cadastre um projeto e um colaborador antes de configurar valores.','warn',6500);
     const field=(label,key)=>`<div><label>${label}</label><input id="rate-${key}" type="number" min="0" step="0.01" value="${Number(rate[key])||''}"></div>`;
+    const costs=RDO.baseCostFor(rate.employeeId,rate);
     UI.modal({title:id?'Editar valores':'Configurar valores',wide:true,body:`<div class="form-grid">
       <div><label>Projeto *</label><select id="rate-project">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Colaborador *</label><select id="rate-employee">${State.crew.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
       <div class="full"><label>Função apresentada ao cliente</label><input id="rate-role" maxlength="140" value="${U.esc(rate.commercialRole||'')}"></div>
-      ${field('Custo · hora normal','costRegular')}${field('Venda · hora normal','saleRegular')}
-      ${field('Custo · HE 50%','cost50')}${field('Venda · HE 50%','sale50')}
-      ${field('Custo · HE 100%','cost100')}${field('Venda · HE 100%','sale100')}
+      <div class="full import-log" id="rate-cost-summary">Custo padrão do colaborador: <b>${U.money(costs.costRegular)}/h</b> · HE 50%: <b>${U.money(costs.cost50)}/h</b> · HE 100%: <b>${U.money(costs.cost100)}/h</b>.</div>
+      ${field('Venda · hora normal','saleRegular')}
+      ${field('Venda · HE 50%','sale50')}
+      ${field('Venda · HE 100%','sale100')}
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="rate-save"><i data-lucide="check"></i>Salvar</button>'});
+    document.getElementById('rate-employee').onchange=event=>{
+      const selectedCosts=RDO.baseCostFor(event.target.value);
+      document.getElementById('rate-cost-summary').innerHTML=`Custo padrão do colaborador: <b>${U.money(selectedCosts.costRegular)}/h</b> · HE 50%: <b>${U.money(selectedCosts.cost50)}/h</b> · HE 100%: <b>${U.money(selectedCosts.cost100)}/h</b>.`;
+    };
     document.getElementById('rate-save').onclick=async()=>{
       const projectId=document.getElementById('rate-project').value;
       const employeeId=document.getElementById('rate-employee').value;
       const existing=State.laborRates.find(x=>String(x.projectId)===String(projectId)&&String(x.employeeId)===String(employeeId)&&String(x.id)!==String(id));
       if(existing) return UI.toast('Já existe uma configuração para este colaborador no projeto.','warn');
+      const employeeCosts=RDO.baseCostFor(employeeId,rate);
       const obj={
         ...(id?rate:{id:`${projectId}:${employeeId}`,createdAt:new Date().toISOString()}),
         projectId,employeeId,commercialRole:document.getElementById('rate-role').value.trim(),
-        costRegular:U.num(document.getElementById('rate-costRegular').value),
+        costRegular:employeeCosts.costRegular,
         saleRegular:U.num(document.getElementById('rate-saleRegular').value),
-        cost50:U.num(document.getElementById('rate-cost50').value),
+        cost50:employeeCosts.cost50,
         sale50:U.num(document.getElementById('rate-sale50').value),
-        cost100:U.num(document.getElementById('rate-cost100').value),
+        cost100:employeeCosts.cost100,
         sale100:U.num(document.getElementById('rate-sale100').value),
         active:true,updatedAt:new Date().toISOString()
       };

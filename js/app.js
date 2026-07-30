@@ -305,14 +305,14 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.8 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.8 · dados locais';
+      el.textContent=`v2.9 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v2.9 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
     const el=document.createElement('div'); el.id='cloud-login'; el.className='cloud-login';
     el.innerHTML=`<div class="cloud-login-card">
-      <div class="cloud-login-brand"><div class="brand-logo"><i data-lucide="cloud"></i></div><div><h2>Entrar no Clique Obras</h2><p>Seus dados serão carregados da base segura na nuvem.</p></div></div>
+      <div class="cloud-login-brand"><div class="brand-logo"><img src="assets/logo-clique.png" alt="Clique Obras"></div><div><h2>Entrar no Clique Obras</h2><p>Seus dados serão carregados da base segura na nuvem.</p></div></div>
       <form id="cloud-login-form">
         <div><label>E-mail</label><input id="cloud-email" type="email" autocomplete="username" required></div>
         <div><label>Senha</label><input id="cloud-password" type="password" autocomplete="current-password" required></div>

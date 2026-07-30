@@ -1,0 +1,31 @@
+CLIQUEOBRAS v2.9
+
+Esta versão parte integralmente da v2.8 e preserva as correções de segurança,
+sincronização, RDO, fotos e PDF das versões anteriores.
+
+ATUALIZAÇÃO DO BANCO
+
+Instalação existente:
+1. Exporte um backup no Supabase.
+2. Confirme que as atualizações da v2.7 e v2.8 já foram executadas.
+3. Execute supabase/ATUALIZACAO-v2.9-RDO-REVISAO-MEDICAO.sql.
+4. Somente depois publique todos os arquivos da v2.9 juntos.
+
+Instalação nova:
+1. Execute supabase/schema.sql.
+2. Execute supabase/ATUALIZACAO-SEGURANCA-v2.7.sql.
+3. Execute supabase/ATUALIZACAO-v2.7-RDO-HH.sql.
+4. Execute supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql.
+5. Execute supabase/ATUALIZACAO-v2.9-RDO-REVISAO-MEDICAO.sql.
+
+REGRAS IMPORTANTES
+
+- RDO aprovado não pode ser excluído, preservando o histórico financeiro.
+- RDO em rascunho ou reprovado pode ser excluído com seus anexos.
+- Reprovação exige comentário e devolve o diário para correção.
+- Medição HH faturada não pode ser excluída.
+- Ao excluir uma medição HH não faturada, seus RDOs são liberados para medir novamente.
+- O custo do colaborador é único e fica protegido no módulo financeiro.
+- O valor de venda continua configurado por colaborador e projeto.
+- O PDF do RDO usa A4 vertical e identifica cliente e contratada.
+- O PDF do dashboard inclui a logo do cliente e a justificativa do desvio.

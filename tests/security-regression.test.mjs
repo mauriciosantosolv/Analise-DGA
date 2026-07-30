@@ -13,10 +13,10 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="2\.8\.0"/);
+assert.match(html, /name="application-version" content="2\.9\.0"/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=2\.8\.0/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=2\.9\.0/);
 
 const integrity = read("assets/vendor/INTEGRITY-SHA256.txt");
 for (const relative of [
@@ -41,6 +41,7 @@ const cloud = read("database/cloud.js");
 assert.match(cloud, /rdo_projects:\[\]/);
 assert.match(cloud, /uploadRdoAttachment/);
 assert.match(cloud, /downloadRdoAttachment/);
+assert.match(cloud, /clique_obras_delete_rdo_measurement/);
 assert.doesNotMatch(cloud, /service_role|sb_secret/i);
 
 const configuration = read("modules/configuracoes/configuracoes.js");
@@ -53,6 +54,8 @@ assert.match(rdo, /U\.jsArg\(rdo\.id\)/);
 assert.match(rdo, /Diário enviado para aprovação/);
 assert.match(rdo, /capture="environment"/);
 assert.match(rdo, /window\.print\(\)/);
+assert.match(rdo, /Comentário da reprovação/);
+assert.match(rdo, /baseCostFor/);
 assert.doesNotMatch(rdo, /RDO\.detail\('\\?\$\{U\.esc/);
 
 const measurements = read("modules/medicoes/medicoes.js");
@@ -79,5 +82,18 @@ assert.match(attachmentSql, /bucket_id='rdo-evidencias'/);
 assert.match(attachmentSql, /rdo_is_attachment_editable/);
 assert.match(attachmentSql, /grant select,insert,delete on table public\.rdo_attachments/);
 assert.doesNotMatch(attachmentSql, /auth\.role\(\)/);
+
+const v29Sql = read("supabase/ATUALIZACAO-v2.9-RDO-REVISAO-MEDICAO.sql");
+assert.match(v29Sql, /create or replace function public\.clique_obras_delete_rdo_measurement/);
+assert.match(v29Sql, /create or replace function clique_obras_private\.delete_rdo_measurement[\s\S]*security definer[\s\S]*set search_path=''/i);
+assert.match(v29Sql, /create or replace function public\.clique_obras_delete_rdo_measurement[\s\S]*security invoker[\s\S]*set search_path=''/i);
+assert.match(v29Sql, /Somente administrador pode excluir medição HH/);
+assert.match(v29Sql, /Medição HH faturada não pode ser excluída/);
+assert.match(v29Sql, /delete from public\.rdo_measurement_links/);
+assert.match(v29Sql, /grant execute on function public\.clique_obras_delete_rdo_measurement/);
+assert.match(v29Sql, /Somente RDO em rascunho ou reprovado pode ser excluído/);
+assert.match(v29Sql, /Somente administrador pode reprovar o RDO/);
+assert.match(v29Sql, /Informe o comentário da reprovação/);
+assert.doesNotMatch(v29Sql, /auth\.role\(\)/);
 
 console.log("Security regression tests passed");

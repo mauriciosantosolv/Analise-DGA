@@ -54,6 +54,7 @@ const Exports = {
     UI.toast('JSON exportado', 'success');
   },
   toPDF(){
+    if(State.filters.project) return this.projectPDF(State.filters.project);
     document.body.classList.remove('printing-project');
     document.body.classList.add('printing-dashboard');
     const cleanup = () => document.body.classList.remove('printing-dashboard');
@@ -62,8 +63,10 @@ const Exports = {
     setTimeout(()=>window.print(), 400);
   },
   projectPDF(projectId){
-    const p = State.projects.find(x=>x.id===projectId); if(!p) return;
+    const p = State.projects.find(x=>String(x.id)===String(projectId)); if(!p) return;
     const s = Biz.projectStats(p), cats = Biz.categoryStats([p]);
+    const client=State.clients.find(item=>U.norm(item.name)===U.norm(p.client))||null;
+    const clientLogo=U.safeImageSrc((client&&client.logo)||p.clientLogo||'');
     const existing = document.getElementById('project-print-report');
     if(existing) existing.remove();
     const report = document.createElement('section');
@@ -72,7 +75,10 @@ const Exports = {
     const metric = (label, value, cls='') => `<div class="print-kpi ${cls}"><small>${label}</small><b>${value}</b></div>`;
     report.innerHTML = `
       <div class="print-head">
-        <div><small>DASHBOARD DO PROJETO</small><h1>${U.esc(U.projLabel(p))}</h1><p>${U.esc(p.client||'Cliente não informado')} · ${U.esc(p.type||'Tipo não informado')} · ${U.esc(p.status||'Status não informado')}</p></div>
+        <div class="print-project-identity">
+          ${clientLogo?`<img src="${U.esc(clientLogo)}" alt="">`:`<span>${U.esc(U.initials(p.client||p.name||p.proposal))}</span>`}
+          <div><small>DASHBOARD DO PROJETO</small><h1>${U.esc(U.projLabel(p))}</h1><p>${U.esc(p.client||'Cliente não informado')} · ${U.esc(p.type||'Tipo não informado')} · ${U.esc(p.status||'Status não informado')}</p></div>
+        </div>
         <div class="print-health ${s.light}"><span>Saúde</span><b>${healthLabel}</b><small>Saldo ${U.money(s.balance)}</small></div>
       </div>
       <div class="print-dates">
@@ -90,6 +96,10 @@ const Exports = {
         ${metric('Saldo',U.money(s.balance),s.balance<0?'red':'green')}
         ${metric('Margem atual',U.pct(s.marginCurrent))}
       </div>
+      <section class="print-justification">
+        <div><small>JUSTIFICATIVA DO DESVIO</small>${p.deviationJustifiedAt?`<span>Atualizada em ${U.date(p.deviationJustifiedAt)}${p.deviationJustifiedBy?` por ${U.esc(p.deviationJustifiedBy)}`:''}</span>`:''}</div>
+        <p>${U.esc(p.deviationJustification||'Nenhuma justificativa de desvio foi registrada para este projeto.')}</p>
+      </section>
       <h2>Custos por categoria</h2>
       <table class="print-table"><thead><tr><th>Categoria</th><th>Orçado</th><th>Realizado</th><th>Projetado</th><th>Saldo</th><th>% comprometido</th></tr></thead>
         <tbody>${cats.map(c=>`<tr><td>${U.esc(c.name)}</td><td>${U.money(c.budget)}</td><td>${U.money(c.spent)}</td><td>${U.money(c.projected)}</td><td class="${c.balance<0?'negative':''}">${U.money(c.balance)}</td><td>${U.pct(c.committedPct)}</td></tr>`).join('') || '<tr><td colspan="6">Sem dados de categorias</td></tr>'}</tbody>

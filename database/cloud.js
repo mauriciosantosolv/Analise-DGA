@@ -664,6 +664,20 @@ const Cloud = (() => {
     return true;
   }
 
+  async function deleteRdoMeasurement(measurementId){
+    await ensureFresh();
+    if(!organization() || !fullAccess() || !canEditStore('measurements'))
+      throw new Error('Exclusão de medição HH indisponível.');
+    return request('/rest/v1/rpc/clique_obras_delete_rdo_measurement',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        target_organization_id:organization().id,
+        target_measurement_id:String(measurementId)
+      })
+    });
+  }
+
   async function ensureRdoCostPosting(rdoId,projectId,purchaseRecordId,amount){
     await ensureFresh();
     if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
@@ -919,7 +933,7 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
-    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, ensureRdoCostPosting,
+    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, ensureRdoCostPosting,
     listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };
