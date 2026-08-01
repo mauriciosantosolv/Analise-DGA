@@ -13,10 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="2\.9\.0"/);
+assert.match(html, /name="application-version" content="3\.0\.1"/);
+assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=2\.9\.0/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.1/);
 
 const integrity = read("assets/vendor/INTEGRITY-SHA256.txt");
 for (const relative of [
@@ -42,6 +43,9 @@ assert.match(cloud, /rdo_projects:\[\]/);
 assert.match(cloud, /uploadRdoAttachment/);
 assert.match(cloud, /downloadRdoAttachment/);
 assert.match(cloud, /clique_obras_delete_rdo_measurement/);
+assert.match(cloud, /functions\/v1\/delete-rdo/);
+assert.match(cloud, /send-organization-invite/);
+assert.match(cloud, /pendingWriteEchoes/);
 assert.doesNotMatch(cloud, /service_role|sb_secret/i);
 
 const configuration = read("modules/configuracoes/configuracoes.js");
@@ -56,6 +60,7 @@ assert.match(rdo, /capture="environment"/);
 assert.match(rdo, /window\.print\(\)/);
 assert.match(rdo, /Comentário da reprovação/);
 assert.match(rdo, /baseCostFor/);
+assert.match(rdo, /RDO aprovado excluído e custo estornado/);
 assert.doesNotMatch(rdo, /RDO\.detail\('\\?\$\{U\.esc/);
 
 const measurements = read("modules/medicoes/medicoes.js");
@@ -95,5 +100,27 @@ assert.match(v29Sql, /Somente RDO em rascunho ou reprovado pode ser excluído/);
 assert.match(v29Sql, /Somente administrador pode reprovar o RDO/);
 assert.match(v29Sql, /Informe o comentário da reprovação/);
 assert.doesNotMatch(v29Sql, /auth\.role\(\)/);
+
+const v30Sql = read("supabase/ATUALIZACAO-v3.0-REPAROS.sql");
+assert.match(v30Sql, /create or replace function public\.clique_obras_delete_rdo_measurement/);
+assert.match(v30Sql, /create or replace function public\.clique_obras_delete_rdo\(/);
+assert.match(v30Sql, /notify pgrst, 'reload schema'/);
+assert.match(v30Sql, /Somente proprietário ou administrador pode alterar as configurações da empresa/);
+assert.match(v30Sql, /O orçamento possui cadastro financeiro vinculado/);
+assert.match(v30Sql, /O cliente possui cadastro financeiro vinculado/);
+assert.match(v30Sql, /handle_new_user[\s\S]*linked_count[\s\S]*organization_members/);
+assert.match(v30Sql, /object_paths/);
+assert.doesNotMatch(v30Sql, /delete from storage\.objects/i);
+assert.doesNotMatch(v30Sql, /auth\.role\(\)/);
+
+const inviteFunction = read("supabase/functions/send-organization-invite/index.ts");
+assert.match(inviteFunction, /auth\.admin\.inviteUserByEmail/);
+assert.match(inviteFunction, /\["owner", "admin"\]\.includes\(membership\.role\)/);
+assert.match(inviteFunction, /SUPABASE_SERVICE_ROLE_KEY/);
+
+const deleteRdoFunction = read("supabase/functions/delete-rdo/index.ts");
+assert.match(deleteRdoFunction, /clique_obras_delete_rdo/);
+assert.match(deleteRdoFunction, /storage[\s\S]*remove\(objectPaths\)/);
+assert.match(deleteRdoFunction, /\["owner", "admin"\]\.includes\(membership\.role\)/);
 
 console.log("Security regression tests passed");

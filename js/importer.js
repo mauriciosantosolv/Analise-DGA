@@ -24,7 +24,8 @@
      Descrição do Produto | Observações | Valor Total | Data de Inclusão
    • Modelo contas pagas: Projeto | Categoria | Valor da Conta | Conta Corrente |
      Observação da Conta | Data de Pagto ou Recbto (completa)
-   • Modelo mão de obra: PROJETO | CUSTO | DATA
+   • Modelo mão de obra: PROJETO | CUSTO | DATA, com fornecedor, pedido/nota,
+     categoria, descrição e observações opcionais
    Mapeamento por sinônimos + validação linha a linha. Sempre SOMA ao banco. */
 const Importer = (() => {
   let lastImportedIds = [];
@@ -42,7 +43,7 @@ const Importer = (() => {
     },
     purchase: {
       project:  ['projeto','obra','proposta','numero da proposta'],
-      order:    ['pedido de compra','pedido','n pedido','numero do pedido','nota','nf'],
+      order:    ['pedido de compra','pedido/nota','pedido nota','pedido','n pedido','numero do pedido','nota','nf'],
       supplier: ['fornecedor (nome fantasia)','fornecedor','nome fantasia','fornecedor nome fantasia'],
       category: ['categoria','classe','classificacao','centro de custo categoria'],
       desc:     ['descricao do produto','descricao','produto','item','descricao do item'],
@@ -55,13 +56,20 @@ const Importer = (() => {
       category: ['categoria','classe','classificacao','centro de custo categoria'],
       value:    ['valor da conta','valor pago','valor do pagamento','valor','total'],
       account:  ['conta corrente','conta','banco','conta bancaria'],
+      supplier: ['fornecedor','favorecido','beneficiario','razao social','nome fantasia'],
+      order:    ['pedido/nota','pedido nota','pedido','nota','nota fiscal','nf','documento'],
       desc:     ['observacao da conta','observacoes da conta','observacao','observacoes','descricao'],
       date:     ['data de pagto ou recbto (completa)','data de pagto ou recbto','data de pagamento','data do pagamento','data']
     },
     labor: {
       project:  ['projeto','obra','proposta','numero da proposta'],
       value:    ['custo','valor da mao de obra','valor','total'],
-      date:     ['data','data do custo','data de lancamento']
+      date:     ['data','data do custo','data de lancamento'],
+      category: ['categoria','classe','classificacao'],
+      supplier: ['fornecedor','colaborador','funcionario','prestador','nome'],
+      order:    ['pedido/nota','pedido nota','pedido','nota','nota fiscal','nf','documento'],
+      desc:     ['descricao','servico','atividade','funcao','cargo'],
+      notes:    ['observacoes','observacao','obs','detalhes']
     }
   };
 
@@ -90,6 +98,20 @@ const Importer = (() => {
       if(idx === -1) missing.push(field); else cols[field] = idx;
     }
     return {cols, missing};
+  }
+
+  // Alguns relatórios trazem título ou filtros antes do cabeçalho. Procura a
+  // linha com mais campos reconhecidos nas primeiras 20 linhas e começa a
+  // importação logo abaixo dela.
+  function findHeader(rows,map,kind){
+    let best={headerIndex:0,headerRow:rows[0]||[],cols:{},missing:Object.keys(map),score:-1};
+    rows.slice(0,20).forEach((row,index)=>{
+      if(!Array.isArray(row)) return;
+      const detected=mapHeaders(row,map,kind);
+      const score=Object.keys(detected.cols).length;
+      if(score>best.score) best={headerIndex:index,headerRow:row,score,...detected};
+    });
+    return best;
   }
 
   function readWorkbook(file){
@@ -162,11 +184,11 @@ const Importer = (() => {
   async function importBudget(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.budget, 'budget');
-    if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: ${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    const {cols, missing, headerIndex, headerRow} = findHeader(rows, MAPS.budget, 'budget');
+    if(missing.length) return {error:`Colunas não reconhecidas no modelo de orçamentos: ${missing.map(f=>({project:'PROJETO',category:'DESCRIÇÃO',value:'VALOR ORÇADO'}[f])).join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0, skipped = [], saleUpdates = 0;
     const records = [];
-    for(let i=1; i<rows.length; i++){
+    for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], cat = r[cols.category], val = U.num(r[cols.value]);
       if(rawProj==null || !String(cat??'').trim()){ skipped.push(i+1); continue; }
@@ -186,9 +208,9 @@ const Importer = (() => {
   async function importPurchases(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.purchase, 'purchase');
+    const {cols, missing, headerIndex, headerRow} = findHeader(rows, MAPS.purchase, 'purchase');
     const critical = missing.filter(f => ['project','value','category'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     // Deduplicação por multiplicidade: reimportar o mesmo arquivo não duplica nada,
     // mas lançamentos legitimamente idênticos (ex.: parcelas iguais) são preservados.
@@ -196,7 +218,7 @@ const Importer = (() => {
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
     const seenCount = {};
     const records = [];
-    for(let i=1; i<rows.length; i++){
+    for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], val = U.num(r[cols.value]);
       const cat = String(r[cols.category]??'').trim();
@@ -228,25 +250,27 @@ const Importer = (() => {
   async function importPaidAccounts(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.paidAccount, 'paidAccount');
+    const {cols, missing, headerIndex, headerRow} = findHeader(rows, MAPS.paidAccount, 'paidAccount');
     const critical = missing.filter(f => ['project','category','value','date'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     const existingCount = {};
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
     const seenCount = {}, records = [];
-    for(let i=1; i<rows.length; i++){
+    for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], cat = String(r[cols.category]??'').trim(), val = U.num(r[cols.value]);
       if(rawProj==null || !cat || !(val>0 || val<0)){ skipped.push(i+1); continue; }
       const p = await ensureProject(rawProj, created);
       const date = U.parseDate(r[cols.date]);
       const account = cols.account!=null ? String(r[cols.account]??'').trim() : '';
+      const supplier = cols.supplier!=null ? String(r[cols.supplier]??'').trim() : '';
       const desc = cols.desc!=null ? String(r[cols.desc]??'').trim() : '';
       const category=await ensureCategory(cat);
       const rec = {
-        id:U.id(), projectId:p.id, category, supplier:account,
-        desc:desc || 'Conta paga', notes:'', order:'', value:val,
+        id:U.id(), projectId:p.id, category, supplier:supplier||account,
+        desc:desc || 'Conta paga', notes:account&&supplier?`Conta: ${account}`:'',
+        order:cols.order!=null ? String(r[cols.order]??'').trim() : '', value:val,
         date:date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'paidAccount'
       };
@@ -260,34 +284,37 @@ const Importer = (() => {
     return {summary:{projects:created, added, skipped, type:'Contas pagas'},recordIds:records.map(x=>x.id)};
   }
 
-  // O modelo de mão de obra não possui categoria. Todos os registros são
-  // classificados como "Mão de Obra" para aparecerem corretamente no
-  // realizado do Dashboard das Categorias.
+  // Na ausência de uma categoria no modelo, os registros continuam sendo
+  // classificados como "Mão de Obra". Campos administrativos opcionais são
+  // preservados quando existirem na planilha.
   async function importLabor(file){
     const rows = await readWorkbook(file);
     if(!rows.length) throw new Error('Planilha vazia.');
-    const {cols, missing} = mapHeaders(rows[0], MAPS.labor, 'labor');
+    const {cols, missing, headerIndex, headerRow} = findHeader(rows, MAPS.labor, 'labor');
     const critical = missing.filter(f => ['project','value','date'].includes(f));
-    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: ${critical.join(', ')}. Cabeçalho encontrado: ${rows[0].filter(Boolean).join(' | ')}`};
+    if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
     const existingCount = {};
     State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
     const seenCount = {}, records = [];
     const laborCategory = 'Mão de Obra';
-    const canonicalLaborCategory=await ensureCategory(laborCategory);
-    for(let i=1; i<rows.length; i++){
+    for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], val = U.num(r[cols.value]);
       if(rawProj==null || !(val>0 || val<0)){ skipped.push(i+1); continue; }
       const p = await ensureProject(rawProj, created);
       const date = U.parseDate(r[cols.date]);
+      const category=await ensureCategory(cols.category!=null ? r[cols.category] : laborCategory);
       const rec = {
-        id:U.id(), projectId:p.id, category:canonicalLaborCategory, supplier:'',
-        desc:'Custo de mão de obra', notes:'', order:'', value:val,
-        date:date ? U.isoDate(date) : '', costCenter:canonicalLaborCategory,
+        id:U.id(), projectId:p.id, category,
+        supplier:cols.supplier!=null ? String(r[cols.supplier]??'').trim() : '',
+        desc:cols.desc!=null ? String(r[cols.desc]??'').trim() || 'Custo de mão de obra' : 'Custo de mão de obra',
+        notes:cols.notes!=null ? String(r[cols.notes]??'').trim() : '',
+        order:cols.order!=null ? String(r[cols.order]??'').trim() : '', value:val,
+        date:date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'labor'
       };
-      rec.dedupe = ['labor', p.proposal, rec.value, rec.date].join('|');
+      rec.dedupe = ['labor', p.proposal, rec.supplier, rec.order, rec.desc, rec.value, rec.date].join('|');
       seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
       if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
       records.push(rec); added++;
@@ -301,15 +328,15 @@ const Importer = (() => {
 
   async function saveModel(file, kind){
     const rows = await readWorkbook(file);
-    if(!rows.length || !rows[0].some(Boolean)) throw new Error('O modelo não possui cabeçalho válido.');
+    if(!rows.length || !rows.some(row=>Array.isArray(row)&&row.some(Boolean))) throw new Error('O modelo não possui cabeçalho válido.');
     const map = MAPS[kind];
     if(!map) throw new Error('Base de dados não reconhecida.');
-    const detected = mapHeaders(rows[0], map, null);
+    const detected = findHeader(rows, map, null);
     const criticalByKind = {budget:['project','category','value'], purchase:['project','category','value'], paidAccount:['project','category','value','date'], labor:['project','value','date']};
     const missingCritical = (criticalByKind[kind]||[]).filter(f=>detected.cols[f] == null);
     if(missingCritical.length) throw new Error('Não foi possível identificar no modelo: '+missingCritical.join(', ')+'.');
     const fields = {};
-    Object.entries(detected.cols).forEach(([field, idx]) => fields[field] = String(rows[0][idx]??'').trim());
+    Object.entries(detected.cols).forEach(([field, idx]) => fields[field] = String(detected.headerRow[idx]??'').trim());
     const mappings = {...(State.settings.importMappings||{})};
     mappings[kind] = {fileName:file.name, savedAt:Date.now(), fields};
     await State.setSetting('importMappings', mappings);

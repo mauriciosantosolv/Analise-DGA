@@ -89,6 +89,16 @@ Views.clientes = {
     };
   },
   remove(id){
+    const c=State.clients.find(x=>x.id===id); if(!c) return;
+    const projectIds=new Set(State.projects
+      .filter(project=>U.norm(project.client)===U.norm(c.name))
+      .map(project=>project.id));
+    const hasFinancial=State.budgets.some(x=>projectIds.has(x.projectId))
+      || State.purchases.some(x=>projectIds.has(x.projectId))
+      || State.planning.some(x=>projectIds.has(x.projectId))
+      || State.measurements.some(x=>projectIds.has(x.projectId));
+    if(hasFinancial)
+      return UI.toast('Este cliente não pode ser excluído porque possui projeto com orçamento, lançamento financeiro, planejamento ou medição.','warn',8500);
     UI.confirm('Excluir este cliente? Os projetos vinculados não serão apagados.', async () => {
       await DB.del('clients', id); await State.reload(); UI.toast('Cliente excluído', 'warn'); App.render();
     });

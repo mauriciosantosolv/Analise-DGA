@@ -49,6 +49,19 @@ const measurements = fs.readFileSync(path.join(root, "modules/medicoes/medicoes.
 assert.match(measurements, /Excluir medição/);
 assert.match(measurements, /deleteRdoMeasurement/);
 
+const importer = fs.readFileSync(path.join(root, "js/importer.js"), "utf8");
+assert.match(importer, /labor:[\s\S]*supplier:[\s\S]*order:[\s\S]*notes:/);
+assert.match(importer, /findHeader\(rows, MAPS\.labor, 'labor'\)/);
+assert.match(importer, /sourceType:'labor'/);
+
+const app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+assert.match(app, /previousScroll/);
+assert.doesNotMatch(app, /document\.getElementById\('content'\)\.scrollTop = 0/);
+
+const costs = fs.readFileSync(path.join(root, "modules/custos/custos.js"), "utf8");
+assert.match(costs, /baseCalcHistory/);
+assert.match(costs, /baseRatesForProject/);
+
 const exports = fs.readFileSync(path.join(root, "utils/export.js"), "utf8");
 assert.match(exports, /deviationJustification/);
 assert.match(exports, /clientLogo/);

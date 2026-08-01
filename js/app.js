@@ -140,9 +140,11 @@ const App = {
     if(typeof UI!=='undefined') UI.closeAll();
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     this.closeMobileMenu();
-    this.render();
+    this.render({resetScroll:changed || options.resetScroll===true});
   },
-  render(){
+  render(options={}){
+    const content=document.getElementById('content');
+    const previousScroll=content ? content.scrollTop : 0;
     const v = Views[State.view] || Views.dashboard;
     document.getElementById('page-title').textContent = v.title;
     Dash.destroyCharts();
@@ -150,7 +152,7 @@ const App = {
     this.addReadOnlyBanner();
     this.renderTicker();
     this.renderRightbar();
-    document.getElementById('content').scrollTop = 0;
+    if(content) content.scrollTop = options.resetScroll ? 0 : previousScroll;
   },
   clearFilters(){
     State.filters = { project:'', client:'', category:'', status:'', type:'' };
@@ -305,8 +307,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v2.9 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v2.9 · dados locais';
+      el.textContent=`v3.0.1 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v3.0.1 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();

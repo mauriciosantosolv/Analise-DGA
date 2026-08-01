@@ -76,7 +76,7 @@ const Biz = {
       if(f.client && p.client !== f.client) return false;
       if(f.category){
         const matches = row => row.projectId === p.id && this.sameCategory(row.category,f.category);
-        const calculatedOverhead = this.baseRateForCategory(f.category)>0 && (+p.saleValue||0)>0;
+        const calculatedOverhead = this.baseRateForCategory(f.category,p)>0 && (+p.saleValue||0)>0;
         if(!calculatedOverhead && !State.budgets.some(matches) && !State.purchases.some(matches) && !State.planning.some(matches)) return false;
       }
       if(f.status && p.status !== f.status) return false;
@@ -92,11 +92,65 @@ const Biz = {
              total: (+b.tax||0)+(+b.admin||0)+(+b.fees||0)+(+b.other||0) };
   },
 
+  normalizedRates(input={}){
+    const rates={tax:+input.tax||0,admin:+input.admin||0,fees:+input.fees||0,other:+input.other||0};
+    return {...rates,total:rates.tax+rates.admin+rates.fees+rates.other};
+  },
+
+  baseHistory(){
+    return (Array.isArray(State.settings.baseCalcHistory)?State.settings.baseCalcHistory:[])
+      .filter(item=>/^\d{4}-\d{2}-01$/.test(String(item&&item.effectiveFrom||'')))
+      .map(item=>({effectiveFrom:item.effectiveFrom,rates:this.normalizedRates(item.rates||item)}))
+      .sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
+  },
+
+  baseRatesAt(date){
+    const month=String(date||'').slice(0,7);
+    const history=this.baseHistory();
+    if(!/^\d{4}-\d{2}$/.test(month)||!history.length) return this.baseRates();
+    const effective=`${month}-01`;
+    const found=history.filter(item=>item.effectiveFrom<=effective).pop()||history[0];
+    return found?found.rates:this.baseRates();
+  },
+
+  // Média ponderada pelos dias em que a obra esteve ativa. A configuração é
+  // versionada por competência mensal; meses futuros nunca entram no cálculo.
+  periodBaseRates(start,end){
+    const valid=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value||''));
+    if(!valid(start)||!valid(end)||end<start) return this.baseRatesAt(end||start);
+    const from=new Date(`${start}T00:00:00Z`), to=new Date(`${end}T00:00:00Z`);
+    const sums={tax:0,admin:0,fees:0,other:0};
+    let days=0;
+    let cursor=new Date(Date.UTC(from.getUTCFullYear(),from.getUTCMonth(),1));
+    const lastMonth=Date.UTC(to.getUTCFullYear(),to.getUTCMonth(),1);
+    while(cursor.getTime()<=lastMonth){
+      const next=new Date(Date.UTC(cursor.getUTCFullYear(),cursor.getUTCMonth()+1,1));
+      const segmentStart=Math.max(from.getTime(),cursor.getTime());
+      const segmentEnd=Math.min(to.getTime(),next.getTime()-86400000);
+      const weight=Math.max(0,Math.floor((segmentEnd-segmentStart)/86400000)+1);
+      const rates=this.baseRatesAt(cursor.toISOString().slice(0,10));
+      for(const key of Object.keys(sums)) sums[key]+=rates[key]*weight;
+      days+=weight;
+      cursor=next;
+    }
+    if(!days) return this.baseRatesAt(end);
+    return this.normalizedRates(Object.fromEntries(Object.entries(sums).map(([key,value])=>[key,value/days])));
+  },
+
+  baseRatesForProject(project){
+    if(!project||project.status!=='Concluído') return this.baseRates();
+    const snapshot=project.baseCalcSnapshot;
+    if(snapshot&&snapshot.rates) return this.normalizedRates(snapshot.rates);
+    const end=project.realEnd||project.expectedEnd||project.deadline||String(project.updatedAt||'').slice(0,10);
+    const start=project.start||String(project.createdAt||'').slice(0,10)||end;
+    return this.periodBaseRates(start,end);
+  },
+
   // Identifica a parcela da base de cálculo correspondente a uma categoria.
   // Quando o Dashboard está filtrado, isso impede que todos os encargos sejam
   // lançados dentro de uma única categoria.
-  baseRateForCategory(category){
-    const n = this.categoryKey(category), rates = this.baseRates();
+  baseRateForCategory(category,project=null){
+    const n = this.categoryKey(category), rates = project?this.baseRatesForProject(project):this.baseRates();
     if(!n) return rates.total;
     if(n==='impostos' || n.includes('imposto')) return rates.tax;
     if(n==='custo administrativo') return rates.admin;
@@ -131,8 +185,8 @@ const Biz = {
     const awaitingApproval = measurements.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((s,m)=>s+m.value,0);
     const measuredPct = p.saleValue > 0 ? measured / p.saleValue * 100 : null;
     const invoicedPct = p.saleValue > 0 ? invoiced / p.saleValue * 100 : null;
-    const rates = this.baseRates();
-    const overheadRate = categoryNorm ? this.baseRateForCategory(category) : rates.total;
+    const rates = this.baseRatesForProject(p);
+    const overheadRate = categoryNorm ? this.baseRateForCategory(category,p) : rates.total;
     const overhead = p.saleValue * overheadRate / 100; // custos calculados sobre a venda
     const spent = spentPurchases + overhead;          // REALIZADO = compras + imposto/adm
     // Previsão por ritmo de gastos (burn rate) — média diária desde o 1º lançamento
@@ -215,8 +269,6 @@ const Biz = {
       ensure(x.category).projected += x.value;
     });
     // Encargos da base de cálculo → realizado da categoria correspondente
-    const rates = this.baseRates();
-    const revenue = projects.reduce((s,p)=>s+(p.saleValue||0),0);
     const OVERHEAD_MATCH = {
       tax:   {label:'Impostos'},
       admin: {label:'Custo Administrativo'},
@@ -224,7 +276,7 @@ const Biz = {
       other: {label:'Outros Encargos'}
     };
     for(const [k, cfg] of Object.entries(OVERHEAD_MATCH)){
-      const val = revenue * rates[k] / 100;
+      const val = projects.reduce((sum,project)=>sum+(Number(project.saleValue)||0)*this.baseRatesForProject(project)[k]/100,0);
       if(val <= 0) continue;
       const cat = ensure(cfg.label);
       cat.spent += val;

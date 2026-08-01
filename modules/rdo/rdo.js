@@ -243,10 +243,11 @@ const RDO = {
     return typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos');
   },
   canDelete(rdo){
-    return !!rdo
-      && ['Rascunho','Devolvido'].includes(rdo.status||'Rascunho')
-      && !this.linkedRdoIds().has(String(rdo.id))
-      && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos'));
+    if(!rdo || this.linkedRdoIds().has(String(rdo.id))) return false;
+    const canEdit=typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos');
+    const editable=['Rascunho','Devolvido'].includes(rdo.status||'Rascunho') && canEdit;
+    const approvedByAdmin=rdo.status==='Aprovado' && this.fullAccess() && canEdit;
+    return editable || approvedByAdmin;
   },
 
   async save(rdo,status){
@@ -396,20 +397,32 @@ const RDO = {
     const rdo=State.rdos.find(x=>String(x.id)===String(id));
     if(!rdo) return;
     if(!this.canDelete(rdo))
-      return UI.toast('Somente RDOs em rascunho ou reprovados, ainda não medidos, podem ser excluídos.','warn',7000);
-    UI.confirm(`Excluir definitivamente <b>${U.esc(rdo.number||'este RDO')}</b> e seus anexos?`,async()=>{
+      return UI.toast('O RDO precisa estar fora de uma medição. RDO aprovado só pode ser excluído por proprietário ou administrador.','warn',7500);
+    const approved=rdo.status==='Aprovado';
+    UI.confirm(`Excluir definitivamente <b>${U.esc(rdo.number||'este RDO')}</b>${approved?' e estornar o custo realizado, o snapshot financeiro':''}? Os anexos também serão removidos.`,async()=>{
       try{
         UI.loading(true,'Excluindo diário e anexos…');
-        const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
-        for(const attachment of attachments){
-          if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.removeRdoAttachment(attachment);
-          else await DB.attachmentDel(attachment.id);
+        if(approved && typeof Cloud!=='undefined' && Cloud.active()){
+          await Cloud.deleteRdo(rdo.id);
+          await DB.syncFromCloud();
+        }else{
+          const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
+          for(const attachment of attachments){
+            if(typeof Cloud!=='undefined' && Cloud.active()) await Cloud.removeRdoAttachment(attachment);
+            else await DB.attachmentDel(attachment.id);
+          }
+          if(approved){
+            const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
+            const purchase=State.purchases.find(item=>String(item.sourceRdoId||'')===String(rdo.id));
+            if(financial) await DB.del('rdo_financial',financial.id);
+            if(purchase) await DB.del('purchases',purchase.id);
+          }
+          await DB.del('rdos',rdo.id);
         }
-        await DB.del('rdos',rdo.id);
         this.attachmentCache.delete(String(rdo.id));
         await State.reload();
         UI.loading(false);
-        UI.toast('RDO excluído.','warn');
+        UI.toast(approved?'RDO aprovado excluído e custo estornado.':'RDO excluído.','warn',6500);
         App.render();
       }catch(err){
         UI.loading(false);

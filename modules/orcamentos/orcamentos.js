@@ -90,6 +90,11 @@ Views.orcamentos = {
   },
   removeItem(id){
     const b = State.budgets.find(x=>x.id===id); if(!b) return;
+    const hasFinancial=State.purchases.some(x=>x.projectId===b.projectId)
+      || State.planning.some(x=>x.projectId===b.projectId)
+      || State.measurements.some(x=>x.projectId===b.projectId);
+    if(hasFinancial)
+      return UI.toast('Este orçamento não pode ser alterado porque o projeto já possui lançamentos financeiros, planejamento ou medição.','warn',8000);
     UI.confirm(`Excluir a linha <b>${U.esc(b.category)}</b> (${U.money2(b.value)}) do orçamento?`, async () => {
       await DB.del('budgets', id); await State.reload(); UI.toast('Linha excluída', 'warn'); App.render();
     });
@@ -97,6 +102,11 @@ Views.orcamentos = {
   removeProject(pid){
     const p = State.projects.find(x=>x.id===pid);
     const items = State.budgets.filter(b=>b.projectId===pid);
+    const hasFinancial=State.purchases.some(x=>x.projectId===pid)
+      || State.planning.some(x=>x.projectId===pid)
+      || State.measurements.some(x=>x.projectId===pid);
+    if(hasFinancial)
+      return UI.toast('O orçamento não pode ser excluído porque este projeto já possui cadastro financeiro vinculado.','warn',8000);
     UI.confirm(`Excluir TODO o orçamento de <b>${U.esc(U.projLabel(p))}</b> (${items.length} categoria(s))? Os lançamentos financeiros não serão afetados.`, async () => {
       for(const b of items) await DB.del('budgets', b.id);
       await State.reload(); UI.toast('Orçamento excluído', 'warn'); App.render();

@@ -1,67 +1,74 @@
-CLIQUEOBRAS v2.9 — INSTALAÇÃO SEGURA
+CLIQUEOBRAS v3.0.1 — INSTALAÇÃO SEGURA
 
-Este é o pacote completo do sistema. Não misture arquivos de versões anteriores.
+Este pacote foi construído sobre a v2.9 e preserva os endurecimentos de
+segurança da v2.6/v2.7. Publique todos os arquivos juntos.
+
+ORDEM OBRIGATÓRIA
+1. Exporte um backup do banco no Supabase e mantenha a v2.9 publicada até o
+   término dos testes.
+2. No SQL Editor do Supabase, execute:
+   supabase/ATUALIZACAO-v3.0-REPAROS.sql
+   Em seguida, execute:
+   supabase/ATUALIZACAO-v3.0.1-STORAGE-RDO.sql
+3. Implante as duas Edge Functions:
+   supabase/functions/send-organization-invite/index.ts
+   Nome da função: send-organization-invite
+   supabase/functions/delete-rdo/index.ts
+   Nome da função: delete-rdo
+   Verificação JWT: ativada (padrão).
+4. Somente depois substitua no GitHub/Hostinger todos os arquivos do site pela
+   pasta CliqueObras-v3.0.1.
+5. Preserve config/cloud-config.js com a URL e a Publishable Key atuais.
+
+COMO IMPLANTAR AS EDGE FUNCTIONS
+- Pelo Supabase CLI, dentro deste pacote:
+  supabase functions deploy send-organization-invite
+  supabase functions deploy delete-rdo
+- O Supabase fornece automaticamente SUPABASE_URL, SUPABASE_ANON_KEY e
+  SUPABASE_SERVICE_ROLE_KEY para a função. Nunca copie a service_role para
+  config/cloud-config.js, GitHub, Hostinger ou qualquer arquivo do navegador.
+- Em Authentication > URL Configuration, confirme cliqueobras.com entre as
+  URLs de redirecionamento permitidas.
 
 PUBLICAÇÃO NO GITHUB / HOSTINGER
-1. Faça um backup da versão publicada.
-2. No repositório mauriciosantosolv/Analise-DGA, substitua o conteúdo da branch
-   de publicação pelo conteúdo da pasta CliqueObras deste pacote.
-3. Preserve config/cloud-config.js com a URL e a Publishable Key atuais.
-4. Não remova o arquivo .htaccess nem o manifest.webmanifest.
-5. Faça o commit e aguarde a implantação automática da Hostinger.
-6. Depois da publicação, abra cliqueobras.com em uma janela anônima e teste:
-   login, Dashboard, RDO, Medições, Financeiro, Configurações e logout.
+1. No repositório mauriciosantosolv/Analise-DGA, substitua o conteúdo da branch
+   publicada pelo conteúdo da pasta CliqueObras-v3.0.1.
+2. Não remova .htaccess nem manifest.webmanifest.
+3. Faça o commit e aguarde a implantação automática da Hostinger.
+4. Abra cliqueobras.com em janela anônima e confira se o rodapé mostra v3.0.1.
 
-SUPABASE
-- Antes de publicar, exporte um backup da base.
-- Para instalação existente, execute nesta ordem:
-  1. supabase/ATUALIZACAO-SEGURANCA-v2.7.sql
-  2. supabase/ATUALIZACAO-v2.7-RDO-HH.sql
-  3. supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql
-  4. supabase/ATUALIZACAO-v2.9-RDO-REVISAO-MEDICAO.sql
-- Para instalação nova, execute supabase/schema.sql e as quatro atualizações
-  acima, na mesma ordem.
-- Ela preserva app_records e adiciona organizações, membros, convites, perfis
-  e RLS por organização/permissão.
-- Nunca coloque service_role, Secret Key ou senha do banco no navegador.
-- Ative a proteção contra senhas comprometidas no painel de Authentication.
+TESTE DE HOMOLOGAÇÃO
+1. Role uma tela longa, altere um registro e confirme que a página não volta ao
+   topo.
+2. Cadastre um modelo e importe compras, contas pagas e mão de obra com as
+   colunas Fornecedor e Pedido/Nota.
+3. Convide um novo e-mail e abra o link recebido.
+4. Exclua uma medição HH não faturada e confirme que os RDOs foram liberados.
+5. Exclua, como administrador, um RDO aprovado que não esteja medido e confirme
+   o estorno do custo realizado.
+6. Tente excluir orçamento/cliente com cadastro financeiro e confirme o bloqueio.
+7. Cadastre duas competências em Base de Cálculo e confirme que uma obra
+   concluída mantém o percentual histórico.
 
-PRINCIPAIS MUDANÇAS v2.9
-- Nova identidade visual no favicon, login, menu e atalho instalado no celular.
-- Ícones PWA próprios para Android e iPhone, incluindo máscara segura.
-- Exclusão de RDO em rascunho ou reprovado, com remoção dos anexos.
-- Reprovação de RDO com comentário obrigatório e histórico de revisão.
-- Custo por hora centralizado no cadastro do colaborador; a venda varia por obra.
-- Exclusão controlada de medição HH não faturada, liberando os RDOs vinculados.
-- PDF de RDO em A4 vertical com logo e nome do cliente.
-- PDF do dashboard com logo do cliente e justificativa do desvio.
+PRINCIPAIS REPAROS v3.0.1
+- Rolagem preservada e eco da própria sincronização ignorado.
+- Modelos procuram o cabeçalho nas primeiras 20 linhas e preservam campos
+  opcionais de fornecedor, pedido/nota, categoria, descrição e observações.
+- Empresa, logo, funcionários e permissões reunidos em uma única seção; somente
+  proprietário e administrador podem alterá-los.
+- Convite por e-mail implementado e falha de aceite durante o cadastro corrigida.
+- RPC de exclusão da medição recriada e cache do PostgREST recarregado.
+- Administrador pode excluir RDO aprovado fora de medição, com estorno de custo,
+  remoção do snapshot e limpeza das fotos pela API oficial do Storage.
+- Título da página reduzido para CliqueObras.
+- Orçamento e cliente com cadastro financeiro vinculado não podem ser excluídos.
+- Base de cálculo versionada por competência, com snapshot histórico ao concluir
+  a obra.
 
-REGRAS PRESERVADAS DA v2.8
-- Hierarquia de equipe protegida no RLS contra elevação de privilégios.
-- Escrita remota validada antes de alterar o cache local.
-- Conflitos offline preservam a fila e não sobrescrevem a nuvem.
-- Planilhas, backups e imagens possuem validação e limites.
-- SheetJS 0.20.3 e Chart.js 4.5.1.
-- Configurações e login reorganizados para celular.
-- Manifesto instalável e cabeçalhos de segurança para HTTPS.
-- RDO disponível para todos os projetos, com seleção por usuário.
-- Medição automática por RDO apenas para contratos HH.
-- RDO medido não pode entrar em outra medição.
-- Aprovação lança somente o custo da mão de obra no realizado.
-- Custos, valores comerciais e snapshots possuem permissões separadas.
-- RDO guiado em quatro etapas, alinhado ao modelo operacional aprovado.
-- Fotos e PDFs anexados em bucket privado, com RLS por organização e projeto.
-- Confirmação visual após o envio para aprovação.
-- PDF individual do RDO com equipe, horas, serviço, ocorrências e fotos.
-- Formulário do RDO reconstruído para uso em smartphone sem rolagem horizontal.
-
-COMO VINCULAR OUTRO USUÁRIO
-1. Entre como proprietário, administrador ou gestor delegado.
-2. Abra Configurações > Organização e permissões.
-3. Clique em Vincular usuário.
-4. Informe o e-mail exato e defina perfil/permissões.
-5. O usuário entra na organização no próximo login. Se ainda não tiver conta,
-   deverá se cadastrar usando exatamente o e-mail convidado.
-6. Apenas o proprietário pode conceder perfil de administrador ou delegar a
-   gestão de usuários.
-7. Selecione também os projetos que aparecerão na lista de RDO daquele usuário.
+REGRAS PRESERVADAS
+- RLS por organização e permissões, sem service_role no navegador.
+- RDO aprovado permanece bloqueado para edição.
+- Medição faturada não pode ser excluída.
+- RDO medido não pode ser excluído antes da medição correspondente.
+- Fotos e documentos continuam no bucket privado rdo-evidencias.
+- A aprovação do RDO lança somente o custo da mão de obra no realizado.

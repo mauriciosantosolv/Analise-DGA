@@ -33,6 +33,8 @@ const Cloud = (() => {
   let warnedOffline = false;
   let accessDeniedMessage = '';
   const recordVersions = new Map();
+  const pendingWriteEchoes = new Map();
+  const pendingDeleteEchoes = new Map();
 
   function configured(){
     return cfg.enabled === true && cfg.provider === 'supabase' &&
@@ -331,7 +333,7 @@ const Cloud = (() => {
   }
   function canManageUsers(){
     if(!configured()) return true;
-    return fullAccess() || (membership()||{}).permissions?.manage_users===true;
+    return fullAccess();
   }
   function rdoProjects(){
     if(fullAccess()) return State.projects.map(p=>({id:String(p.id),label:U.projLabel(p)}));
@@ -395,13 +397,31 @@ const Cloud = (() => {
     const emit=(kind,payload)=>{
       if(typeof onChange==='function') onChange({kind,payload,organizationId:orgId});
     };
+    const isLocalRecordEcho=payload=>{
+      const eventType=String(payload&&payload.eventType||'').toUpperCase();
+      const row=eventType==='DELETE' ? payload&&payload.old : payload&&payload.new;
+      if(!row || !row.store || row.record_id==null) return false;
+      const key=recordVersionKey(row.store,row.record_id);
+      const now=Date.now();
+      const recentDelete=pendingDeleteEchoes.get(key);
+      if(eventType==='DELETE' && recentDelete && now-recentDelete<8000){
+        pendingDeleteEchoes.delete(key);
+        return true;
+      }
+      const pending=pendingWriteEchoes.get(key);
+      if(eventType!=='DELETE' && pending && now-pending.at<8000 && pending.updatedAt===row.updated_at){
+        pendingWriteEchoes.delete(key);
+        return true;
+      }
+      return false;
+    };
     let subscribedOnce=false;
     realtimeChannel=realtimeClient
       .channel(`clique-obras-${orgId}-${user().id}`)
       .on('postgres_changes',{
         event:'*',schema:'public',table:'app_records',
         filter:`organization_id=eq.${orgId}`
-      },payload=>emit('records',payload))
+      },payload=>{ if(!isLocalRecordEcho(payload)) emit('records',payload); })
       .on('postgres_changes',{
         event:'*',schema:'public',table:'organization_members'
       },payload=>emit('membership',payload))
@@ -504,19 +524,40 @@ const Cloud = (() => {
     const list=(objects||[]).filter(x=>x && x.id!=null);
     for(let i=0;i<list.length;i+=200){
       const body=list.slice(i,i+200).map(x=>record(store,x));
-      await request('/rest/v1/app_records?on_conflict=organization_id%2Cstore%2Crecord_id', {
-        method:'POST',
-        headers:{...authHeaders(true),Prefer:'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify(body)
+      body.forEach(item=>{
+        const key=recordVersionKey(store,item.record_id);
+        pendingWriteEchoes.set(key,{updatedAt:item.updated_at,at:Date.now()});
+        setTimeout(()=>{
+          const pending=pendingWriteEchoes.get(key);
+          if(pending&&pending.updatedAt===item.updated_at) pendingWriteEchoes.delete(key);
+        },10000);
       });
-      body.forEach(item=>recordVersions.set(recordVersionKey(store,item.record_id),item.updated_at));
+      try{
+        await request('/rest/v1/app_records?on_conflict=organization_id%2Cstore%2Crecord_id', {
+          method:'POST',
+          headers:{...authHeaders(true),Prefer:'resolution=merge-duplicates,return=minimal'},
+          body:JSON.stringify(body)
+        });
+        body.forEach(item=>recordVersions.set(recordVersionKey(store,item.record_id),item.updated_at));
+      }catch(err){
+        body.forEach(item=>pendingWriteEchoes.delete(recordVersionKey(store,item.record_id)));
+        throw err;
+      }
     }
   }
   async function deleteRaw(store,id){
     await ensureFresh(); assertCanEdit(store);
+    const key=recordVersionKey(store,id);
+    pendingDeleteEchoes.set(key,Date.now());
+    setTimeout(()=>pendingDeleteEchoes.delete(key),10000);
     const q=`organization_id=eq.${encodeURIComponent(organization().id)}&store=eq.${encodeURIComponent(store)}&record_id=eq.${encodeURIComponent(String(id))}`;
-    await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
-    recordVersions.delete(recordVersionKey(store,id));
+    try{
+      await request('/rest/v1/app_records?'+q,{method:'DELETE',headers:authHeaders(false)});
+      recordVersions.delete(key);
+    }catch(err){
+      pendingDeleteEchoes.delete(key);
+      throw err;
+    }
   }
   async function clearRaw(store){
     await ensureFresh(); assertCanEdit(store);
@@ -674,6 +715,20 @@ const Cloud = (() => {
       body:JSON.stringify({
         target_organization_id:organization().id,
         target_measurement_id:String(measurementId)
+      })
+    });
+  }
+
+  async function deleteRdo(rdoId){
+    await ensureFresh();
+    if(!organization() || !fullAccess() || !canEditStore('rdos'))
+      throw new Error('Exclusão administrativa de RDO indisponível.');
+    return request('/functions/v1/delete-rdo',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        organizationId:organization().id,
+        rdoId:String(rdoId)
       })
     });
   }
@@ -880,8 +935,22 @@ const Cloud = (() => {
       invited_by:user().id
     };
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) throw new Error('Informe um e-mail válido.');
-    await request('/rest/v1/organization_invitations', {
-      method:'POST',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify(body)
+    const existing=await request(`/rest/v1/organization_invitations?select=id&organization_id=eq.${encodeURIComponent(body.organization_id)}&email=eq.${encodeURIComponent(body.email)}&status=eq.pending&limit=1`,{
+      headers:authHeaders(false)
+    }) || [];
+    if(existing.length){
+      await request(`/rest/v1/organization_invitations?id=eq.${encodeURIComponent(existing[0].id)}`,{
+        method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},
+        body:JSON.stringify({role:body.role,permissions:body.permissions,invited_by:body.invited_by})
+      });
+    }else{
+      await request('/rest/v1/organization_invitations', {
+        method:'POST',headers:{...authHeaders(true),Prefer:'return=minimal'},body:JSON.stringify(body)
+      });
+    }
+    return request('/functions/v1/send-organization-invite',{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({organizationId:body.organization_id,email:body.email,redirectTo:redirectUrl()})
     });
   }
   async function updateMember(userId, roleName, permissions){
@@ -933,7 +1002,7 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
-    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, ensureRdoCostPosting,
+    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
     listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };

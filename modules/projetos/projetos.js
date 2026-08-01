@@ -99,6 +99,21 @@ Views.projetos = {
         const check=Biz.measurementCompletion(obj);
         if(!check.complete)
           return UI.toast(`Não é possível concluir: o projeto precisa estar 100% medido. Medido ${U.money(check.measured)} de ${U.money(check.target)}; falta ${U.money(check.remaining)}.`, 'warn', 9000);
+        const end=obj.realEnd||U.isoDate(new Date());
+        const createdStart=p.createdAt?U.isoDate(new Date(p.createdAt)):end;
+        const start=obj.start||createdStart||end;
+        const samePeriod=p.status==='Concluído'&&p.baseCalcSnapshot
+          && p.baseCalcSnapshot.from===start&&p.baseCalcSnapshot.to===end;
+        if(!samePeriod){
+          const rates=Biz.periodBaseRates(start,end);
+          obj.baseCalcSnapshot={
+            from:start,to:end,
+            rates:{tax:rates.tax,admin:rates.admin,fees:rates.fees,other:rates.other},
+            capturedAt:new Date().toISOString()
+          };
+        }
+      }else if(obj.baseCalcSnapshot){
+        delete obj.baseCalcSnapshot;
       }
       await DB.put('projects', obj); await State.reload();
       UI.close(); UI.toast('Projeto salvo', 'success'); App.render();
