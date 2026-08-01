@@ -22,8 +22,17 @@
   border:1px solid color-mix(in srgb,var(--blue) 24%,var(--border));border-radius:var(--r);
   background:color-mix(in srgb,var(--blue) 5%,var(--surface))
 }
-.rdo-team-template label,.rdo-worker-fields label{color:var(--text2);font-size:.7rem;font-weight:650}
-.rdo-team-template input,.rdo-worker-fields input{margin-top:5px}
+.rdo-team-template label,.rdo-worker-fields label{min-width:0;color:var(--text2);font-size:.7rem;font-weight:650}
+.rdo-team-template input,.rdo-worker-fields input{display:block;min-width:0;max-width:100%;margin-top:5px}
+.rdo-team-template input[type="time"],.rdo-worker-fields input[type="time"]{width:100%;appearance:none;-webkit-appearance:none}
+.rdo-team-search{position:relative;display:flex;align-items:center;margin-top:10px}
+.rdo-team-search>svg{position:absolute;z-index:1;left:13px;width:17px;height:17px;color:var(--text3);pointer-events:none}
+.rdo-team-search input{height:42px;padding:0 42px;background:var(--surface2)}
+.rdo-team-search button{position:absolute;right:7px;display:none;width:30px;height:30px;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--text3)}
+.rdo-team-search button.visible{display:grid}.rdo-team-search button:hover{background:var(--surface);color:var(--text)}
+.rdo-team-search button svg{width:15px;height:15px}
+.rdo-team-search-empty{display:flex;min-height:76px;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding:14px;border:1px dashed var(--border);border-radius:var(--r);color:var(--text3);font-size:.78rem}
+.rdo-team-search-empty[hidden]{display:none}.rdo-team-search-empty svg{width:18px;height:18px}
 .rdo-worker-list{display:grid;gap:8px;margin-top:10px}
 .rdo-worker-card{padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);opacity:.58}
 .rdo-worker-card.selected{background:var(--surface);opacity:1}
@@ -182,6 +191,7 @@
   .rdo-page-toolbar>.toolbar-actions .btn{width:100%;justify-content:center}
   .rdo-team-template{grid-template-columns:1fr 1fr}
   .rdo-worker-fields{grid-template-columns:1fr 1fr}
+  .rdo-team-template input[type="time"],.rdo-worker-fields input[type="time"]{font-variant-numeric:tabular-nums;text-align:left}
   .rdo-detail-head{grid-template-columns:1fr}
   .crew-card{grid-template-columns:38px minmax(0,1fr) 34px}.crew-card>.tag{display:none}
   .rate-card{grid-template-columns:minmax(0,1fr) 20px}.rate-card>span:not(:first-child){display:none}

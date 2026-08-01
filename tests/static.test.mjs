@@ -18,6 +18,8 @@ for (const reference of references) {
 for (const view of ["rdos", "colaboradores", "valoreshh", "medicoes"]) {
   assert.match(html, new RegExp(`data-view="${view}"`));
 }
+assert.match(html, /<div class="nav-sep">Execução<\/div>[\s\S]*data-view="rdos"[\s\S]*data-view="colaboradores"[\s\S]*data-view="medicoes"[\s\S]*data-view="valoreshh"/);
+assert.match(html, /data-view="colaboradores"><i data-lucide="users"><\/i>/);
 
 const css = fs.readFileSync(path.join(root, "css/rdo.css"), "utf8");
 assert.match(css, /@media\(max-width:860px\)/);
@@ -28,6 +30,9 @@ assert.match(css, /body\.printing-rdo/);
 assert.match(css, /@page rdo-report/);
 assert.match(css, /size:A4 portrait/);
 assert.match(css, /#rdo-next\[hidden\]/);
+assert.match(css, /\.rdo-team-template input\[type="time"\][^}]*width:100%[^}]*appearance:none/);
+assert.match(css, /\.rdo-worker-fields label\{min-width:0/);
+assert.match(css, /\.rdo-team-search/);
 assert.doesNotMatch(css, /var\(--(?:radius|shadow-sm|surface3)\)/);
 
 const cloud = fs.readFileSync(path.join(root, "database/cloud.js"), "utf8");
@@ -44,6 +49,10 @@ assert.match(rdo, /Reprovar diário/);
 assert.match(rdo, /Custo por hora/);
 assert.match(rdo, /customer\.logo/);
 assert.match(rdo, /currentStep===4/);
+assert.match(rdo, /id="rdo-team-search"/);
+assert.match(rdo, /const selected=!!saved/);
+assert.match(rdo, /\['2','Equipe e horas','user'\]/);
+assert.doesNotMatch(rdo, /users-round/);
 
 const measurements = fs.readFileSync(path.join(root, "modules/medicoes/medicoes.js"), "utf8");
 assert.match(measurements, /Excluir medição/);

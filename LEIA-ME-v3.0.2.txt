@@ -1,0 +1,15 @@
+CLIQUEOBRAS v3.0.2
+
+Esta revisão foi criada sobre a v3.0.1. O pacote inclui ajustes do RDO mobile,
+busca segura da equipe, reorganização do menu e endurecimento das requisições
+administrativas.
+
+Para publicar:
+1. Substitua no GitHub os arquivos do site pelo conteúdo desta pasta.
+2. Preserve config/cloud-config.js com a URL e a Publishable Key atuais.
+3. Confirme que a migração v3.0.2 e as versões novas das duas Edge Functions
+   estão aplicadas no Supabase.
+4. Aguarde o deploy da Hostinger e confira v3.0.2 no rodapé.
+
+Nunca publique SUPABASE_SERVICE_ROLE_KEY, senha do banco ou qualquer secret no
+GitHub, na Hostinger ou em config/cloud-config.js.

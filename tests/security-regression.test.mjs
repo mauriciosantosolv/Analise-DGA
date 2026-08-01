@@ -13,11 +13,13 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.1"/);
+assert.match(html, /name="application-version" content="3\.0\.2"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.1/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.2/);
+assert.match(html, /script-src-elem 'self'/);
+assert.match(html, /frame-src 'none'/);
 
 const integrity = read("assets/vendor/INTEGRITY-SHA256.txt");
 for (const relative of [
@@ -37,6 +39,12 @@ assert.match(htaccess, /frame-ancestors 'none'/);
 assert.match(htaccess, /X-Frame-Options "DENY"/);
 assert.match(htaccess, /X-Content-Type-Options "nosniff"/);
 assert.match(htaccess, /Strict-Transport-Security/);
+assert.match(htaccess, /Cross-Origin-Resource-Policy "same-origin"/);
+assert.match(htaccess, /X-Permitted-Cross-Domain-Policies "none"/);
+
+const helpers = read("utils/helpers.js");
+assert.match(helpers, /message\.textContent=this\.plainText\(msg\)/);
+assert.match(helpers, /modal-head h2'\)\.textContent=this\.plainText\(title\)/);
 
 const cloud = read("database/cloud.js");
 assert.match(cloud, /rdo_projects:\[\]/);
@@ -117,10 +125,26 @@ const inviteFunction = read("supabase/functions/send-organization-invite/index.t
 assert.match(inviteFunction, /auth\.admin\.inviteUserByEmail/);
 assert.match(inviteFunction, /\["owner", "admin"\]\.includes\(membership\.role\)/);
 assert.match(inviteFunction, /SUPABASE_SERVICE_ROLE_KEY/);
+assert.match(inviteFunction, /enforceRateLimit/);
+assert.match(inviteFunction, /rejectUntrustedOrigin/);
 
 const deleteRdoFunction = read("supabase/functions/delete-rdo/index.ts");
 assert.match(deleteRdoFunction, /clique_obras_delete_rdo/);
 assert.match(deleteRdoFunction, /storage[\s\S]*remove\(objectPaths\)/);
 assert.match(deleteRdoFunction, /\["owner", "admin"\]\.includes\(membership\.role\)/);
+assert.match(deleteRdoFunction, /enforceRateLimit/);
+
+const edgeSecurity = read("supabase/functions/_shared/security.ts");
+assert.match(edgeSecurity, /https:\/\/cliqueobras\.com/);
+assert.match(edgeSecurity, /CLIQUE_OBRAS_ALLOWED_ORIGINS/);
+assert.match(edgeSecurity, /BODY_TOO_LARGE/);
+assert.match(edgeSecurity, /clique_obras_check_request_limit/);
+assert.doesNotMatch(edgeSecurity, /Access-Control-Allow-Origin["']?:\s*["']\*/);
+
+const requestSecuritySql = read("supabase/ATUALIZACAO-v3.0.2-SEGURANCA-REQUISICOES.sql");
+assert.match(requestSecuritySql, /create table if not exists clique_obras_private\.request_rate_limits/);
+assert.match(requestSecuritySql, /security definer[\s\S]*set search_path=''/i);
+assert.match(requestSecuritySql, /revoke all on function public\.clique_obras_check_request_limit[\s\S]*from public,anon,authenticated/);
+assert.match(requestSecuritySql, /grant execute on function public\.clique_obras_check_request_limit[\s\S]*to service_role/);
 
 console.log("Security regression tests passed");

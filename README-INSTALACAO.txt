@@ -1,7 +1,8 @@
-CLIQUEOBRAS v3.0.1 — INSTALAÇÃO SEGURA
+CLIQUEOBRAS v3.0.2 — INSTALAÇÃO SEGURA
 
-Este pacote foi construído sobre a v2.9 e preserva os endurecimentos de
-segurança da v2.6/v2.7. Publique todos os arquivos juntos.
+Este pacote foi construído diretamente sobre a v3.0.1 e preserva os
+endurecimentos de segurança das versões anteriores. Publique todos os arquivos
+juntos.
 
 ORDEM OBRIGATÓRIA
 1. Exporte um backup do banco no Supabase e mantenha a v2.9 publicada até o
@@ -10,6 +11,8 @@ ORDEM OBRIGATÓRIA
    supabase/ATUALIZACAO-v3.0-REPAROS.sql
    Em seguida, execute:
    supabase/ATUALIZACAO-v3.0.1-STORAGE-RDO.sql
+   Por último, execute:
+   supabase/ATUALIZACAO-v3.0.2-SEGURANCA-REQUISICOES.sql
 3. Implante as duas Edge Functions:
    supabase/functions/send-organization-invite/index.ts
    Nome da função: send-organization-invite
@@ -17,7 +20,7 @@ ORDEM OBRIGATÓRIA
    Nome da função: delete-rdo
    Verificação JWT: ativada (padrão).
 4. Somente depois substitua no GitHub/Hostinger todos os arquivos do site pela
-   pasta CliqueObras-v3.0.1.
+   pasta CliqueObras-v3.0.2.
 5. Preserve config/cloud-config.js com a URL e a Publishable Key atuais.
 
 COMO IMPLANTAR AS EDGE FUNCTIONS
@@ -32,10 +35,10 @@ COMO IMPLANTAR AS EDGE FUNCTIONS
 
 PUBLICAÇÃO NO GITHUB / HOSTINGER
 1. No repositório mauriciosantosolv/Analise-DGA, substitua o conteúdo da branch
-   publicada pelo conteúdo da pasta CliqueObras-v3.0.1.
+   publicada pelo conteúdo da pasta CliqueObras-v3.0.2.
 2. Não remova .htaccess nem manifest.webmanifest.
 3. Faça o commit e aguarde a implantação automática da Hostinger.
-4. Abra cliqueobras.com em janela anônima e confira se o rodapé mostra v3.0.1.
+4. Abra cliqueobras.com em janela anônima e confira se o rodapé mostra v3.0.2.
 
 TESTE DE HOMOLOGAÇÃO
 1. Role uma tela longa, altere um registro e confirme que a página não volta ao
@@ -50,7 +53,16 @@ TESTE DE HOMOLOGAÇÃO
 7. Cadastre duas competências em Base de Cálculo e confirme que uma obra
    concluída mantém o percentual histórico.
 
-PRINCIPAIS REPAROS v3.0.1
+PRINCIPAIS REPAROS v3.0.2
+- Campos de hora do RDO ajustados para iPhone e demais telas estreitas.
+- Busca de colaboradores por nome ou função; novos RDOs exigem seleção
+  explícita da equipe para evitar inclusão acidental.
+- Menus de RDO, colaboradores, medições e valores HH reunidos em Execução, com
+  ícones compatíveis com a biblioteca publicada.
+- Edge Functions com origem permitida, limite de corpo, validação de entrada e
+  limitação persistente de requisições administrativas.
+- Mensagens e títulos de modal deixaram de inserir texto dinâmico como HTML.
+- CSP e cabeçalhos HTTP reforçados contra execução de scripts e incorporação.
 - Rolagem preservada e eco da própria sincronização ignorado.
 - Modelos procuram o cabeçalho nas primeiras 20 linhas e preservam campos
   opcionais de fornecedor, pedido/nota, categoria, descrição e observações.

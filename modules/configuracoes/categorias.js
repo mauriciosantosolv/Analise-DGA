@@ -59,7 +59,7 @@ Views.categorias = {
       const name = document.getElementById('ct-name').value.trim();
       if(!name) return UI.toast('Informe o nome', 'warn');
       const duplicate=State.categories.find(x=>x.id!==id && Biz.sameCategory(x.name,name));
-      if(duplicate) return UI.toast(`Esta categoria já existe como <b>${U.esc(duplicate.name)}</b>. Use o cadastro existente.`, 'warn', 6000);
+      if(duplicate) return UI.toast(`Esta categoria já existe como ${duplicate.name}. Use o cadastro existente.`, 'warn', 6000);
       await DB.put('categories', { ...(id?c:{id:U.id()}), name:Biz.categoryName(name),
         color:document.getElementById('ct-color').value, icon:document.getElementById('ct-icon').value });
       await State.reload(); UI.close(); UI.toast('Categoria salva', 'success'); App.render();
@@ -72,7 +72,7 @@ Views.categorias = {
       .some(x=>Biz.sameCategory(x.category,category.name) && Math.abs(+x.value||0)>0.004);
     const hasValues=linkedValues || (totals && [totals.budget,totals.spent,totals.projected].some(v=>Math.abs(v)>0.004));
     if(hasValues){
-      return UI.toast(`A categoria <b>${U.esc(category.name)}</b> não pode ser excluída porque possui valores orçados, realizados ou planejados.`, 'warn', 7000);
+      return UI.toast(`A categoria ${category.name} não pode ser excluída porque possui valores orçados, realizados ou planejados.`, 'warn', 7000);
     }
     UI.confirm('Excluir esta categoria sem movimentação?', async () => {
       await DB.del('categories', id); await State.reload(); UI.toast('Categoria excluída', 'warn'); App.render();

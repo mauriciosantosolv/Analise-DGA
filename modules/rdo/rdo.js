@@ -444,9 +444,10 @@ const RDO = {
     const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,overtime100:0};
     const workerCard=employee=>{
       const saved=initialEntries.get(String(employee.id));
-      const selected=existing?!!saved:true;
+      const selected=!!saved;
       const row=saved||{...defaultShift,...defaultHours};
-      return `<article class="rdo-worker-card ${selected?'selected':''}" data-employee-id="${U.esc(employee.id)}">
+      const searchText=U.norm(`${employee.name||''} ${employee.internalRole||''}`);
+      return `<article class="rdo-worker-card ${selected?'selected':''}" data-employee-id="${U.esc(employee.id)}" data-search="${U.esc(searchText)}">
         <div class="rdo-worker-head">
           <label class="rdo-worker-select"><input type="checkbox" ${selected?'checked':''}><span class="avatar-ph">${U.initials(employee.name||'CO')}</span>
             <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}</small></span></label>
@@ -469,7 +470,7 @@ const RDO = {
         <aside class="rdo-stepper" aria-label="Etapas do diário">
           ${[
             ['1','Informações','calendar-days'],
-            ['2','Equipe e horas','users-round'],
+            ['2','Equipe e horas','user'],
             ['3','Serviço e anexos','camera'],
             ['4','Revisão','badge-check']
           ].map(([step,label,icon])=>`<button type="button" data-rdo-step-target="${step}"><span><i data-lucide="${icon}"></i></span><b>${label}</b></button>`).join('')}
@@ -498,7 +499,13 @@ const RDO = {
               <label>HE 100%<input id="rdo-all-100" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime100)||0}"></label>
             </div>
             <div class="rdo-team-summary" id="rdo-team-summary"></div>
-            <div class="rdo-worker-list">${crew.map(workerCard).join('')}</div>
+            <div class="rdo-team-search" role="search">
+              <i data-lucide="search"></i>
+              <input id="rdo-team-search" type="search" autocomplete="off" spellcheck="false" placeholder="Pesquisar colaborador por nome ou função" aria-label="Pesquisar colaborador por nome ou função">
+              <button id="rdo-team-search-clear" type="button" aria-label="Limpar pesquisa" title="Limpar pesquisa"><i data-lucide="x"></i></button>
+            </div>
+            <div class="rdo-team-search-empty" id="rdo-team-search-empty" hidden><i data-lucide="user-x"></i><span>Nenhum colaborador encontrado.</span></div>
+            <div class="rdo-worker-list" id="rdo-worker-list">${crew.map(workerCard).join('')}</div>
           </section>
 
           <section class="rdo-step" data-rdo-step="3" hidden>
@@ -564,6 +571,23 @@ const RDO = {
             (total,key)=>total+U.num(card.querySelector(`[data-field="${key}"]`).value),0
           ),0);
           byId('rdo-team-summary').innerHTML=`<span><b>${selected.length}</b> colaboradores selecionados</span><span><b>${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b> no total</span>`;
+        };
+        const filterTeam=()=>{
+          const query=U.norm(byId('rdo-team-search').value);
+          let visible=0;
+          cards.forEach(card=>{
+            const matches=!query || String(card.dataset.search||'').includes(query);
+            card.hidden=!matches;
+            if(matches) visible++;
+          });
+          byId('rdo-team-search-clear').classList.toggle('visible',!!query);
+          byId('rdo-team-search-empty').hidden=visible!==0;
+        };
+        byId('rdo-team-search').oninput=filterTeam;
+        byId('rdo-team-search-clear').onclick=()=>{
+          byId('rdo-team-search').value='';
+          filterTeam();
+          byId('rdo-team-search').focus();
         };
         cards.forEach(card=>{
           const checkbox=card.querySelector('.rdo-worker-select input');
@@ -731,7 +755,7 @@ const RDO = {
           byId('rdo-review').innerHTML=`
             <article><div><i data-lucide="calendar-days"></i><b>Informações</b><button type="button" data-review-step="1">Editar</button></div>
               <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
-            <article><div><i data-lucide="users-round"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
+            <article><div><i data-lucide="users"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
               <dl><span><dt>Equipe</dt><dd>${rdo.entries.length} pessoas</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span></dl></article>
             <article class="full"><div><i data-lucide="file-check-2"></i><b>Serviço e evidências</b><button type="button" data-review-step="3">Editar</button></div>
               <p>${U.esc(rdo.description)}</p><span class="rdo-review-tag"><i data-lucide="paperclip"></i>${rdo.attachmentCount} ${rdo.attachmentCount===1?'anexo':'anexos'}</span></article>`;
@@ -829,7 +853,7 @@ const RDO = {
         <small>${U.esc(rdo.number||'Diário de Obra')}</small>
         <h2>Diário enviado para aprovação</h2>
         <p>O registro ficou disponível para revisão do responsável e está bloqueado para edição enquanto aguarda aprovação.</p>
-        <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users-round"></i>${(rdo.entries||[]).length} colaboradores</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
+        <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users"></i>${(rdo.entries||[]).length} colaboradores</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
       </section>`,
       footer:`<button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
         <button class="btn btn-primary" onclick="UI.closeAll()"><i data-lucide="list"></i>Voltar aos diários</button>`,
@@ -1107,7 +1131,7 @@ Views.colaboradores={
         <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
         <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?'Inativo':'Ativo'}</span>
         ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
-      </div>`).join('')||'<div class="empty card"><i data-lucide="users-round"></i><br>Nenhum colaborador cadastrado.</div>'}</div>`;
+      </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador cadastrado.</div>'}</div>`;
     U.icons();
   },
   form(id=''){

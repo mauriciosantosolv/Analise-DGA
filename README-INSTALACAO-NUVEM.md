@@ -14,17 +14,24 @@ protegidos por RLS de organização, módulo e projeto autorizado.
    - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
    - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`;
    - `supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql`;
-   - `supabase/ATUALIZACAO-v3.0-REPAROS.sql`.
+   - `supabase/ATUALIZACAO-v3.0-REPAROS.sql`;
+   - `supabase/ATUALIZACAO-v3.0.1-STORAGE-RDO.sql`;
+   - `supabase/ATUALIZACAO-v3.0.2-SEGURANCA-REQUISICOES.sql`.
 4. Em uma instalação já existente, execute nesta ordem:
    - `supabase/ATUALIZACAO-SEGURANCA-v2.7.sql`;
    - `supabase/ATUALIZACAO-v2.7-RDO-HH.sql`;
    - `supabase/ATUALIZACAO-v2.8-RDO-FOTOS-PDF.sql`;
-   - `supabase/ATUALIZACAO-v3.0-REPAROS.sql`.
+   - `supabase/ATUALIZACAO-v3.0-REPAROS.sql`;
+   - `supabase/ATUALIZACAO-v3.0.1-STORAGE-RDO.sql`;
+   - `supabase/ATUALIZACAO-v3.0.2-SEGURANCA-REQUISICOES.sql`.
 5. Implante a função `send-organization-invite` a partir de
    `supabase/functions/send-organization-invite/index.ts`, mantendo a
    verificação JWT ativada. Pelo CLI: `supabase functions deploy
    send-organization-invite`.
-6. Confira se as tabelas abaixo estão com RLS ativo:
+6. Implante também `delete-rdo`; mantenha a verificação JWT ativada nas duas
+   funções. O código compartilhado em `supabase/functions/_shared` faz parte da
+   implantação.
+7. Confira se as tabelas abaixo estão com RLS ativo:
    - `app_records`
    - `profiles`
    - `organizations`
@@ -33,7 +40,7 @@ protegidos por RLS de organização, módulo e projeto autorizado.
    - `rdo_measurement_links`
    - `rdo_cost_postings`
    - `rdo_attachments`
-7. Em `Authentication > URL Configuration`, use:
+8. Em `Authentication > URL Configuration`, use:
    - Site URL: `https://cliqueobras.com`
    - Redirect URL: `https://cliqueobras.com/**`
 
@@ -56,6 +63,11 @@ window.CLIQUE_OBRAS_CLOUD = {
 
 Nunca use `sb_secret_...`, `service_role`, senha do banco ou qualquer chave
 administrativa no navegador.
+
+As Edge Functions aceitam `https://cliqueobras.com` e
+`https://www.cliqueobras.com`. Se um domínio legítimo adicional for usado,
+adicione-o ao secret `CLIQUE_OBRAS_ALLOWED_ORIGINS`, separando múltiplas origens
+por vírgula. Não use `*` em produção.
 
 ## Perfis de acesso
 

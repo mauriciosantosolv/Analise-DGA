@@ -83,12 +83,22 @@ Object.assign(U, {
 /* ===== UI: toasts, modais, confirmação, loading ===== */
 const UI = {
   modalStack:[],
+  plainText(value){
+    const entities={'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&#39;':"'"};
+    return String(value??'').replace(/&(amp|lt|gt|quot|#39);/g,match=>entities[match]||match);
+  },
   toast(msg, type='info', ms=3800){
     const icons = {info:'info', success:'check-circle', error:'x-circle', warn:'alert-triangle'};
     const colors = {info:'var(--blue)', success:'var(--green)', error:'var(--red)', warn:'var(--amber)'};
+    const safeType=Object.prototype.hasOwnProperty.call(icons,type)?type:'info';
     const el = document.createElement('div');
-    el.className = `toast ${type}`;
-    el.innerHTML = `<i data-lucide="${icons[type]}" style="color:${colors[type]}"></i><div>${msg}</div>`;
+    const icon=document.createElement('i');
+    const message=document.createElement('div');
+    el.className = `toast ${safeType}`;
+    icon.dataset.lucide=icons[safeType];
+    icon.style.color=colors[safeType];
+    message.textContent=this.plainText(msg);
+    el.append(icon,message);
     document.getElementById('toasts').appendChild(el);
     U.icons();
     setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(), 260); }, ms);
@@ -101,8 +111,9 @@ const UI = {
       this.modalStack.push({className:m.className, fragment});
     }
     m.className = 'modal' + (wide ? ' wide' : '');
-    m.innerHTML = `<div class="modal-head"><h2>${title}</h2><button class="icon-btn" onclick="UI.close()"><i data-lucide="x"></i></button></div>
+    m.innerHTML = `<div class="modal-head"><h2></h2><button class="icon-btn" onclick="UI.close()"><i data-lucide="x"></i></button></div>
       <div class="modal-body">${body}</div>${footer ? `<div class="modal-foot">${footer}</div>` : ''}`;
+    m.querySelector('.modal-head h2').textContent=this.plainText(title);
     ov.classList.add('open');
     U.icons();
     if(onOpen) onOpen(m);
