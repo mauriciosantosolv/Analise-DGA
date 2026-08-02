@@ -7,8 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 assert.match(html, /assets\/logo-clique\.png/);
 assert.match(html, /assets\/apple-touch-icon\.png/);
-assert.match(html, /assets\/coolicons\/coolicons\.js/);
-assert.doesNotMatch(html, /src="assets\/vendor\/lucide\.min\.js/);
+assert.match(html, /src="assets\/vendor\/lucide\.min\.js/);
+assert.doesNotMatch(html, /assets\/coolicons\/coolicons\.js/);
 const references = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
   .map(match => match[1].split("?")[0])
   .filter(reference => !/^(?:https?:|data:|#)/.test(reference));
@@ -105,9 +105,8 @@ assert.match(premium, /--text: #27272a/);
 assert.match(premium, /#company-settings-card[\s\S]*grid-column: 1 \/ -1/);
 assert.match(premium, /#ticker-projects[\s\S]*grid-template-columns: repeat\(3/);
 
-const coolicons = fs.readFileSync(path.join(root, "assets/coolicons/coolicons.js"), "utf8");
-assert.match(coolicons, /window\.CoolIcons/);
-assert.ok(fs.existsSync(path.join(root, "assets/coolicons/icons/settings.svg")));
+const lucide = fs.readFileSync(path.join(root, "assets/vendor/lucide.min.js"), "utf8");
+assert.match(lucide, /createIcons/);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 for (const icon of manifest.icons) {

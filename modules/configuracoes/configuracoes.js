@@ -140,7 +140,7 @@ Views.configuracoes = {
       <div class="settings-page">
       ${cloudConnected?`<section class="card settings-card settings-card-wide settings-account">
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <div class="account-summary" style="padding:0;flex:1;min-width:0"><i data-lucide="circle-user-round"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
+          <div class="account-summary" style="padding:0;flex:1;min-width:0"><i data-lucide="user-circle"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
           <button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button>
         </div>
         ${Cloud.organizations().length>1?`<div style="margin-top:12px;max-width:420px"><label>Organização ativa</label><select id="cfg-active-org">${Cloud.organizations().map(x=>`<option value="${U.esc(x.id)}" ${x.id===org.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select></div>`:''}
@@ -185,7 +185,7 @@ Views.configuracoes = {
           <button class="btn btn-primary" id="cfg-company-save"><i data-lucide="check"></i>Salvar empresa</button></div>`:''}
         ${cloudConnected?`<div class="settings-company-team">
           <div style="margin:20px 0 8px"><h3>Funcionários e acessos</h3><p style="font-size:.84rem;color:var(--text2)">${canManageCompany?'Gerencie os usuários e o acesso aos módulos da empresa.':'Esta área é administrada somente pelo proprietário e pelos administradores.'}</p></div>
-          <div id="team-content"><div class="empty"><i data-lucide="loader-circle"></i><br>Carregando equipe…</div></div>
+          <div id="team-content"><div class="empty"><i data-lucide="loader-2"></i><br>Carregando equipe…</div></div>
         </div>`:''}
       </section>
       <section class="card settings-card settings-card-wide settings-ticker">
@@ -204,7 +204,7 @@ Views.configuracoes = {
       <section class="card settings-card settings-card-wide">
         <h2 style="margin-bottom:6px">Base de dados em nuvem</h2>
         ${cloudConnected?`<p style="font-size:.84rem;color:var(--text2)">Conectado como <b>${U.esc((Cloud.user()||{}).email||'usuário autenticado')}</b>. ${Cloud.pendingCount()?`Há ${Cloud.pendingCount()} alteração(ões) aguardando sincronização.`:'Todos os registros locais estão sincronizados.'}</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="cloud-upload"></i>Sincronizar agora</button><button class="btn btn-ghost btn-sm" onclick="App.logoutCloud()"><i data-lucide="log-out"></i>Sair neste aparelho</button></div>`
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="upload-cloud"></i>Sincronizar agora</button><button class="btn btn-ghost btn-sm" onclick="App.logoutCloud()"><i data-lucide="log-out"></i>Sair neste aparelho</button></div>`
           :`<p style="font-size:.84rem;color:var(--text2)">A nuvem ainda não está ativa. Siga o arquivo <b>README-INSTALACAO-NUVEM.md</b> antes de publicar a versão definitiva.</p>`}
       </section>
       <section class="card settings-card settings-card-wide">
@@ -373,7 +373,7 @@ Views.configuracoes = {
       this.teamData=await Cloud.listTeam();
       this.renderTeam();
     }catch(err){
-      box.innerHTML=`<div class="permission-banner"><i data-lucide="triangle-alert"></i><span>Não foi possível carregar a equipe: ${U.esc(err.message)}</span></div>`;
+      box.innerHTML=`<div class="permission-banner"><i data-lucide="alert-triangle"></i><span>Não foi possível carregar a equipe: ${U.esc(err.message)}</span></div>`;
       U.icons();
     }
   },

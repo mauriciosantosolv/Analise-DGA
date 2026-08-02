@@ -1,0 +1,14 @@
+CLIQUEOBRAS v3.0.5
+
+CORREÇÃO:
+- Ícones anteriores restaurados em todo o sistema.
+- Compatibilidade de nomes de ícones revisada.
+- Cache atualizado para carregar a correção imediatamente.
+
+PUBLICAÇÃO:
+1. Substitua no GitHub todos os arquivos da versão anterior pelos arquivos desta pasta.
+2. Aguarde a publicação da Hostinger.
+3. Abra o sistema em uma janela anônima e confirme “v3.0.5” no rodapé.
+
+SUPABASE:
+Não execute um novo SQL. A migração da v3.0.4 já aplicada permanece válida.

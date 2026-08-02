@@ -180,7 +180,7 @@ Views.projetos = {
           <td class="num">${U.pct(c.committedPct)}</td><td class="num">${U.pct(c.weight)}</td>
           <td>${Dash.trendIcon(c.trend)}</td><td>${lightDot(c.status)}</td></tr>`).join('')}</tbody>
       </table></div></div>`,
-      footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification(${U.jsArg(p.id)})"><i data-lucide="message-square-check"></i>Salvar justificativa</button>`:''}
+      footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification(${U.jsArg(p.id)})"><i data-lucide="check-circle"></i>Salvar justificativa</button>`:''}
               <button class="btn btn-ghost" onclick="Dash.simulator(${U.jsArg(p.id)})"><i data-lucide="sliders-horizontal"></i>Simulador</button>
               <button class="btn btn-ghost" onclick="Exports.projectPDF(${U.jsArg(p.id)})"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
               <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`

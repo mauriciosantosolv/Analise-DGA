@@ -397,7 +397,7 @@ const RDO = {
         <div class="full"><label>Comentário da reprovação *</label><textarea id="rdo-rejection-comment" rows="5" maxlength="1200" placeholder="Explique o que precisa ser corrigido antes de um novo envio."></textarea></div>
       </div>
       <div class="import-log">O diário voltará para edição e o comentário ficará visível ao responsável pelo preenchimento.</div>`,
-      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-danger" id="rdo-reject-confirm"><i data-lucide="message-square-x"></i>Reprovar diário</button>'
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-danger" id="rdo-reject-confirm"><i data-lucide="x-square"></i>Reprovar diário</button>'
     });
     document.getElementById('rdo-reject-confirm').onclick=async()=>{
       const comment=document.getElementById('rdo-rejection-comment').value.trim();
@@ -515,14 +515,14 @@ const RDO = {
         </aside>
         <div class="rdo-composer-main">
           <section class="rdo-step" data-rdo-step="1">
-            ${existing?.status==='Devolvido'&&existing.rejectionComment?`<div class="rdo-rejection-banner"><i data-lucide="message-square-warning"></i><div><b>Correção solicitada</b><p>${U.esc(existing.rejectionComment)}</p></div></div>`:''}
+            ${existing?.status==='Devolvido'&&existing.rejectionComment?`<div class="rdo-rejection-banner"><i data-lucide="alert-triangle"></i><div><b>Correção solicitada</b><p>${U.esc(existing.rejectionComment)}</p></div></div>`:''}
             <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3><p>Defina o projeto, a data e a frente de serviço.</p></div></div>
             <div class="form-grid">
               <div><label>Projeto *</label><select id="rdo-project" ${existing?'disabled':''}>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
               <div><label>Data do serviço *</label><input id="rdo-date" type="date" value="${U.esc(existing?.date||U.isoDate(new Date()))}"></div>
               <div class="full"><label>Local / frente de serviço</label><input id="rdo-location" maxlength="180" value="${U.esc(existing?.location||'')}" placeholder="Ex.: Subestação SE-04"></div>
             </div>
-            <div class="rdo-context-card"><i data-lucide="briefcase-business"></i><div><b>Projeto autorizado para este usuário</b><small>A lista respeita as permissões configuradas pelo administrador.</small></div><i data-lucide="check-circle-2"></i></div>
+            <div class="rdo-context-card"><i data-lucide="briefcase"></i><div><b>Projeto autorizado para este usuário</b><small>A lista respeita as permissões configuradas pelo administrador.</small></div><i data-lucide="check-circle-2"></i></div>
           </section>
 
           <section class="rdo-step" data-rdo-step="2" hidden>
@@ -1084,7 +1084,7 @@ const RDO = {
       <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
       footer:`${this.canEdit(rdo)?`<button class="btn btn-ghost" onclick="UI.close();RDO.form(${U.jsArg(rdo.id)})"><i data-lucide="pencil"></i>Editar</button>`:''}
         ${rdo.status==='Enviado'&&!this.canReview()&&(typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos'))?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}
-        ${rdo.status==='Enviado'&&this.canReview()?`<button class="btn btn-danger" onclick="RDO.reject(${U.jsArg(rdo.id)})"><i data-lucide="message-square-x"></i>Reprovar</button>`:''}
+        ${rdo.status==='Enviado'&&this.canReview()?`<button class="btn btn-danger" onclick="RDO.reject(${U.jsArg(rdo.id)})"><i data-lucide="x-square"></i>Reprovar</button>`:''}
         ${rdo.status==='Enviado'&&this.canApprove()?`<button class="btn btn-primary" onclick="RDO.approve(${U.jsArg(rdo.id)})"><i data-lucide="badge-check"></i>Aprovar diário</button>`:''}
         ${this.canDelete(rdo)?`<button class="btn btn-danger" onclick="RDO.remove(${U.jsArg(rdo.id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
@@ -1183,7 +1183,7 @@ Views.colaboradores={
     const all=RDO.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     const employees=all.filter(employee=>!normalized||U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`).includes(normalized));
     $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2><small>Colaboradores disponíveis para os diários.</small></div><div class="spacer"></div>
-      ${canEdit?'<div class="toolbar-actions"><button class="btn btn-ghost" onclick="Views.colaboradores.rolesForm()"><i data-lucide="briefcase-business"></i>Funções</button><button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button></div>':''}</div>
+      ${canEdit?'<div class="toolbar-actions"><button class="btn btn-ghost" onclick="Views.colaboradores.rolesForm()"><i data-lucide="briefcase"></i>Funções</button><button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button></div>':''}</div>
       <div class="crew-filter-panel"><div class="rdo-search"><i data-lucide="search"></i><input id="crew-search" type="search" value="${U.esc(this.query)}" placeholder="Buscar por matrícula, nome ou cargo" aria-label="Buscar colaboradores">${this.query?'<button id="crew-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div><span>${employees.length} de ${all.length} colaboradores</span></div>
       <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
         ${this.avatar(employee)}
@@ -1316,7 +1316,7 @@ Views.colaboradores={
   rolesForm(){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
     const roles=RDO.crewRoles();
-    UI.modal({title:'Funções dos colaboradores',body:`<div class="role-directory">${roles.map(role=>`<div class="role-row"><span><b>${U.esc(role.name||'Função')}</b><small>${RDO.crewMembers().filter(employee=>U.norm(employee.internalRole)===U.norm(role.name)).length} colaborador(es)</small></span><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.roleForm(${U.jsArg(role.id)})"><i data-lucide="pencil"></i></button><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.removeRole(${U.jsArg(role.id)})"><i data-lucide="trash-2"></i></button></div>`).join('')||'<div class="empty"><i data-lucide="briefcase-business"></i><br>Nenhuma função cadastrada.</div>'}</div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="Views.colaboradores.roleForm()"><i data-lucide="plus"></i>Nova função</button>'});
+    UI.modal({title:'Funções dos colaboradores',body:`<div class="role-directory">${roles.map(role=>`<div class="role-row"><span><b>${U.esc(role.name||'Função')}</b><small>${RDO.crewMembers().filter(employee=>U.norm(employee.internalRole)===U.norm(role.name)).length} colaborador(es)</small></span><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.roleForm(${U.jsArg(role.id)})"><i data-lucide="pencil"></i></button><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.removeRole(${U.jsArg(role.id)})"><i data-lucide="trash-2"></i></button></div>`).join('')||'<div class="empty"><i data-lucide="briefcase"></i><br>Nenhuma função cadastrada.</div>'}</div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="Views.colaboradores.roleForm()"><i data-lucide="plus"></i>Nova função</button>'});
   },
   roleForm(id=''){
     const current=id?RDO.crewRoles().find(role=>String(role.id)===String(id)):null;
