@@ -1,0 +1,26 @@
+CLIQUEOBRAS v3.0.3
+
+PUBLICAÇÃO NO PROJETO ATUAL
+
+1. Substitua na hospedagem/GitHub os arquivos atuais pelo conteúdo desta pasta.
+2. Aguarde o deploy da Hostinger.
+3. Abra o sistema em janela anônima e confirme “v3.0.3” no rodapé.
+
+O Supabase de produção do projeto CliqueObras já recebeu e validou a migração
+v3_0_3_colaboradores_pdf. Não é necessário executar novamente o SQL nesse projeto.
+
+INSTALAÇÃO EM OUTRO SUPABASE
+
+Depois das migrações anteriores, execute:
+
+supabase/ATUALIZACAO-v3.0.3-COLABORADORES-PDF.sql
+
+CONFIGURAÇÃO INICIAL
+
+Em Configurações > Configurações da empresa:
+
+- defina entrada, saída, intervalo e horas normais por dia;
+- envie um papel timbrado JPG em proporção A4, se desejar;
+- salve as configurações da empresa.
+
+Somente proprietário ou administrador pode alterar esses dados.

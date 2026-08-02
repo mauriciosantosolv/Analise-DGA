@@ -16,6 +16,30 @@
 
 /* ---------- RELATÓRIOS / EXPORTAÇÕES ---------- */
 const Exports = {
+  stationeryMarkup(){
+    const source=U.safeImageSrc(State.settings.pdfLetterhead||'');
+    return source?`<div class="pdf-letterhead" aria-hidden="true"><img src="${U.esc(source)}" alt=""></div>`:'';
+  },
+  mountStationery(){
+    const source=U.safeImageSrc(State.settings.pdfLetterhead||'');
+    const old=document.getElementById('pdf-letterhead-overlay');
+    if(old) old.remove();
+    if(!source) return null;
+    const layer=document.createElement('div');
+    layer.id='pdf-letterhead-overlay';
+    layer.className='pdf-letterhead';
+    layer.setAttribute('aria-hidden','true');
+    layer.innerHTML=`<img src="${U.esc(source)}" alt="">`;
+    document.body.appendChild(layer);
+    return layer;
+  },
+  waitForImages(root,timeout=1800){
+    const images=[...(root||document).querySelectorAll('img')];
+    return Promise.race([
+      Promise.all(images.map(image=>image.complete?Promise.resolve():new Promise(resolve=>{image.onload=resolve;image.onerror=resolve;}))),
+      new Promise(resolve=>setTimeout(resolve,timeout))
+    ]);
+  },
   spreadsheetCell(value){
     if(typeof value !== 'string') return value;
     // Evita que Excel/LibreOffice interpretem dados importados como fórmulas.
@@ -53,16 +77,18 @@ const Exports = {
     U.download(`${store}-${U.isoDate(new Date())}.json`, JSON.stringify(this.rows(store), null, 1), 'application/json');
     UI.toast('JSON exportado', 'success');
   },
-  toPDF(){
+  async toPDF(){
     if(State.filters.project) return this.projectPDF(State.filters.project);
     document.body.classList.remove('printing-project');
     document.body.classList.add('printing-dashboard');
-    const cleanup = () => document.body.classList.remove('printing-dashboard');
+    const stationery=this.mountStationery();
+    const cleanup = () => {document.body.classList.remove('printing-dashboard');if(stationery) stationery.remove();};
     window.addEventListener('afterprint', cleanup, {once:true});
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
+    await this.waitForImages(document.body);
     setTimeout(()=>window.print(), 400);
   },
-  projectPDF(projectId){
+  async projectPDF(projectId){
     const p = State.projects.find(x=>String(x.id)===String(projectId)); if(!p) return;
     const s = Biz.projectStats(p), cats = Biz.categoryStats([p]);
     const client=State.clients.find(item=>U.norm(item.name)===U.norm(p.client))||null;
@@ -73,7 +99,7 @@ const Exports = {
     report.id = 'project-print-report';
     const healthLabel = {green:'Saudável',amber:'Atenção',red:'Crítica'}[s.light];
     const metric = (label, value, cls='') => `<div class="print-kpi ${cls}"><small>${label}</small><b>${value}</b></div>`;
-    report.innerHTML = `
+    report.innerHTML = `${this.stationeryMarkup()}
       <div class="print-head">
         <div class="print-project-identity">
           ${clientLogo?`<img src="${U.esc(clientLogo)}" alt="">`:`<span>${U.esc(U.initials(p.client||p.name||p.proposal))}</span>`}
@@ -110,6 +136,7 @@ const Exports = {
     document.body.classList.add('printing-project');
     UI.close();
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
+    await this.waitForImages(report);
     window.addEventListener('afterprint', () => {
       report.remove();
       document.body.classList.remove('printing-project');

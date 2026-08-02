@@ -55,7 +55,7 @@ Views.medicoes = {
             <td><span class="tag tag-gray">${m.source==='rdo-hh'?`${(m.rdoIds||[]).length} RDO(s)`:'Manual'}</span></td>
             <td><span class="tag ${{Faturada:'tag-green',Aprovada:'tag-blue','Aguardando aprovação':'tag-amber'}[m.status]||'tag-gray'}">${U.esc(m.status||'—')}</span></td>
             <td class="num"><b>${U.money2(m.value)}</b></td>
-            <td>${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})"><i data-lucide="pencil"></i></button>`:''}</td>
+            <td><div class="table-actions">${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
           </tr>`).join('')}</tbody>
         </table></div>
       </div>`;
@@ -235,6 +235,76 @@ Views.medicoes = {
     });
   },
 
+  measurementRows(measurement){
+    return (measurement.rdoIds||[]).flatMap(rdoId=>{
+      const rdo=State.rdos.find(item=>String(item.id)===String(rdoId));
+      const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdoId));
+      if(!rdo) return [];
+      return (rdo.entries||[]).map(entry=>{
+        const snapshot=(financial?.rows||[]).find(row=>String(row.employeeId)===String(entry.employeeId));
+        const employee=RDO.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
+        const regular=Number(entry.regular)||0;
+        const overtime50=Number(entry.overtime50)||0;
+        const overtime100=Number(entry.overtime100)||0;
+        return {
+          date:rdo.date,
+          rdoNumber:rdo.number||String(rdo.id),
+          registration:entry.employeeRegistration||snapshot?.employeeRegistration||employee.registration||'',
+          employeeName:entry.employeeName||snapshot?.employeeName||employee.name||'Colaborador',
+          role:snapshot?.commercialRole||entry.internalRole||employee.internalRole||'',
+          start:entry.start||'',end:entry.end||'',breakMinutes:Number(entry.breakMinutes)||0,
+          regular,overtime50,overtime100,
+          hours:regular+overtime50+overtime100,
+          value:Number(snapshot?.sale)||0
+        };
+      });
+    }).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.employeeName).localeCompare(String(b.employeeName),'pt-BR'));
+  },
+
+  async print(id){
+    const measurement=State.measurements.find(item=>String(item.id)===String(id));
+    if(!measurement) return UI.toast('Medição não encontrada.','warn');
+    if(measurement.source!=='rdo-hh') return UI.toast('O relatório detalhado de horas está disponível para medições HH.','info',5500);
+    const project=State.projects.find(item=>String(item.id)===String(measurement.projectId));
+    const customer=RDO.projectClient(measurement.projectId);
+    const rows=this.measurementRows(measurement);
+    if(!rows.length) return UI.toast('Os RDOs desta medição não estão disponíveis para montar o relatório.','warn',6500);
+    const grouped=rows.reduce((groups,row)=>{
+      (groups[row.date]=groups[row.date]||[]).push(row); return groups;
+    },{});
+    const old=document.getElementById('measurement-print-report');
+    if(old) old.remove();
+    const report=document.createElement('section');
+    report.id='measurement-print-report';
+    const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const hours=value=>`${Number(value||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:2})}h`;
+    report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
+      <header class="measurement-print-head">
+        <div class="measurement-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>CONTRATADA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>Relatório de medição de mão de obra</span></div></div>
+        <div class="measurement-print-client">${customer.logo?`<img src="${U.esc(customer.logo)}" alt="">`:`<span>${U.esc(U.initials(customer.name))}</span>`}<div><small>CLIENTE</small><b>${U.esc(customer.name)}</b><span>${U.esc(RDO.projectLabel(measurement.projectId))}</span></div></div>
+        <div class="measurement-print-number"><small>MEDIÇÃO</small><b>${U.esc(measurement.ref||measurement.id)}</b><span>${U.esc(measurement.status||'Aguardando aprovação')}</span></div>
+      </header>
+      <div class="measurement-print-facts"><div><small>Período</small><b>${U.date(measurement.periodFrom)} a ${U.date(measurement.periodTo)}</b></div><div><small>RDOs consolidados</small><b>${(measurement.rdoIds||[]).length}</b></div><div><small>Total de horas</small><b>${hours(measurement.hours||rows.reduce((sum,row)=>sum+row.hours,0))}</b></div><div><small>Valor total da medição</small><b>${U.money(measurement.value)}</b></div></div>
+      <table class="measurement-print-table"><thead><tr><th>Data</th><th>RDO</th><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Total</th><th>Valor medido</th></tr></thead><tbody>
+        ${Object.entries(grouped).map(([date,dayRows])=>{
+          const dayHours=dayRows.reduce((sum,row)=>sum+row.hours,0);
+          const dayValue=dayRows.reduce((sum,row)=>sum+row.value,0);
+          return `${dayRows.map(row=>`<tr><td>${U.date(row.date)}</td><td>${U.esc(row.rdoNumber)}</td><td>${U.esc(row.registration||'—')}</td><td>${U.esc(row.employeeName)}</td><td>${U.esc(row.role||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${row.breakMinutes} min</td><td>${U.esc(row.end||'—')}</td><td>${hours(row.regular)}</td><td>${hours(row.overtime50)}</td><td>${hours(row.overtime100)}</td><td><b>${hours(row.hours)}</b></td><td><b>${U.money(row.value)}</b></td></tr>`).join('')}<tr class="measurement-day-total"><td colspan="11">Total de ${U.date(date)}</td><td>${hours(dayHours)}</td><td>${U.money(dayValue)}</td></tr>`;
+        }).join('')}
+      </tbody><tfoot><tr><td colspan="11">TOTAL DA MEDIÇÃO</td><td>${hours(rows.reduce((sum,row)=>sum+row.hours,0))}</td><td>${U.money(measurement.value)}</td></tr></tfoot></table>
+      ${measurement.notes?`<section class="measurement-print-notes"><b>Observações</b><p>${U.esc(measurement.notes)}</p></section>`:''}
+      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
+    document.body.appendChild(report);
+    document.body.classList.add('printing-measurement');
+    UI.closeAll();
+    UI.loading(true,'Preparando PDF da medição…');
+    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
+    UI.loading(false);
+    UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
+    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-measurement');},{once:true});
+    setTimeout(()=>window.print(),250);
+  },
+
   hhStatusForm(measurement){
     const canDelete=(typeof Cloud==='undefined'||!Cloud.active()||RDO.fullAccess())
       && measurement.status!=='Faturada';
@@ -252,7 +322,7 @@ Views.medicoes = {
         <div class="full"><label>Observações</label><textarea id="hh-status-notes" rows="2">${U.esc(measurement.notes||'')}</textarea></div>
       </div>`,
       footer:`${canDelete?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove(${U.jsArg(measurement.id)})"><i data-lucide="trash-2"></i>Excluir medição</button>`:''}
-        <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
+        <button class="btn btn-ghost" onclick="Views.medicoes.print(${U.jsArg(measurement.id)})"><i data-lucide="file-down"></i>Gerar PDF</button><button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
     });
     document.getElementById('hh-status-save').onclick=async()=>{
       await DB.put('measurements',{

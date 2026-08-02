@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.2"/);
+assert.match(html, /name="application-version" content="3\.0\.3"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.2/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.3/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -146,5 +146,13 @@ assert.match(requestSecuritySql, /create table if not exists clique_obras_privat
 assert.match(requestSecuritySql, /security definer[\s\S]*set search_path=''/i);
 assert.match(requestSecuritySql, /revoke all on function public\.clique_obras_check_request_limit[\s\S]*from public,anon,authenticated/);
 assert.match(requestSecuritySql, /grant execute on function public\.clique_obras_check_request_limit[\s\S]*to service_role/);
+
+const v303Sql = read("supabase/ATUALIZACAO-v3.0.3-COLABORADORES-PDF.sql");
+assert.match(v303Sql, /create or replace function clique_obras_private\.validate_v303_records/);
+assert.match(v303Sql, /security invoker/);
+assert.match(v303Sql, /pdfLetterhead/);
+assert.match(v303Sql, /rdoDailyHours/);
+assert.match(v303Sql, /Somente proprietário ou administrador/);
+assert.doesNotMatch(v303Sql, /auth\.role\(\)/);
 
 console.log("Security regression tests passed");

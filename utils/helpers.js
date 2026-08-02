@@ -46,7 +46,7 @@ Object.assign(U, {
 
   // Reduz imagens (logos) para no máx. 256px — evita data URLs gigantes no banco,
   // que deixam o carregamento lento ou travam o navegador
-  resizeImage(dataUrl, max=256){
+  resizeImage(dataUrl, max=256, outputType='image/png', quality=.9){
     return new Promise((res,rej) => {
       if(!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(String(dataUrl||'')))
         return rej(new Error('Formato de imagem não permitido. Use PNG, JPEG ou WebP.'));
@@ -69,7 +69,8 @@ Object.assign(U, {
             cv.width = Math.max(1, Math.round((img.width||max) * sc));
             cv.height = Math.max(1, Math.round((img.height||max) * sc));
             cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-            const out = cv.toDataURL('image/png');
+            const safeType=['image/png','image/jpeg','image/webp'].includes(outputType)?outputType:'image/png';
+            const out = cv.toDataURL(safeType,Math.max(.55,Math.min(.96,Number(quality)||.9)));
             done(out && out.length > 30 ? out : '');
           }catch(e){ done(''); }
         };

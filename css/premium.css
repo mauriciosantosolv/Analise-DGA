@@ -7,23 +7,23 @@
 
 :root {
   color-scheme: light;
-  --blue: #007aff;
-  --blue-hover: #006ee6;
-  --blue-soft: #edf6ff;
+  --blue: #18181b;
+  --blue-hover: #27272a;
+  --blue-soft: #f4f4f5;
   --green: #28a745;
   --green-soft: #edf9f0;
   --red: #ff3b30;
   --red-soft: #fff0ef;
   --amber: #ff9500;
   --amber-soft: #fff7e8;
-  --bg: #f5f5f7;
+  --bg: #f4f4f5;
   --surface: #ffffff;
-  --surface2: #f8f8fa;
-  --text: #101114;
-  --text2: #666a73;
-  --text3: #969aa3;
-  --border: #e5e5e8;
-  --border2: #efeff1;
+  --surface2: #fafafa;
+  --text: #27272a;
+  --text2: #52525b;
+  --text3: #71717a;
+  --border: #e4e4e7;
+  --border2: #e4e4e7;
   --shadow: 0 1px 2px rgba(15, 23, 42, .025), 0 8px 24px rgba(15, 23, 42, .045);
   --shadow-lg: 0 24px 70px rgba(15, 23, 42, .13);
   --glass: rgba(255, 255, 255, .88);
@@ -1060,12 +1060,51 @@ tbody tr:last-child td {
 }
 
 .settings-company {
-  grid-column: span 5;
+  grid-column: span 6;
 }
 
 .settings-ticker {
-  grid-column: span 7;
+  grid-column: span 6;
 }
+
+#company-settings-card {
+  grid-column: 1 / -1;
+}
+
+.company-settings-section {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.company-settings-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.company-settings-heading > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.company-settings-heading svg { width: 17px; height: 17px; }
+.company-settings-heading small { display: block; margin-top: 3px; color: var(--text3); line-height: 1.45; }
+.company-shift-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.letterhead-control { display: grid; grid-template-columns: minmax(220px, 420px) 1fr; align-items: center; gap: 14px; }
+.letterhead-control > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+#cfg-letterhead-preview { display: grid; min-height: 112px; place-items: center; overflow: hidden; border: 1px dashed var(--border); border-radius: 12px; background: var(--surface2); color: var(--text3); }
+#cfg-letterhead-preview img { display: block; width: 100%; max-height: 180px; object-fit: contain; background: #fff; }
+#cfg-letterhead-preview span { display: flex; align-items: center; gap: 7px; font-size: .78rem; }
+#cfg-letterhead-preview svg { width: 18px; height: 18px; }
 
 .settings-account .account-summary small {
   display: flex;
@@ -1260,6 +1299,9 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 760px) {
+  .company-shift-grid { grid-template-columns: 1fr 1fr; }
+  .letterhead-control { grid-template-columns: 1fr; }
+
   .cloud-auth-shell {
     width: 100%;
     min-height: 100dvh;
@@ -1280,6 +1322,7 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 520px) {
+  .company-shift-grid { grid-template-columns: 1fr; }
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

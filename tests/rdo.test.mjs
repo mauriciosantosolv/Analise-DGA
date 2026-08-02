@@ -17,7 +17,8 @@ const state = {
     }
   ],
   measurements:[],
-  rdos:[]
+  rdos:[],
+  settings:{rdoDailyHours:8.8,rdoShiftStart:"07:30",rdoShiftEnd:"17:18",rdoShiftBreakMinutes:60}
 };
 const context = {
   State:state,
@@ -45,7 +46,11 @@ const RDO = context.__RDO;
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(RDO.workedHours("07:30","17:30",60))),
-  {total:9,regular:8,overtime50:1,overtime100:0}
+  {total:9,regular:8.8,overtime50:0.2,overtime100:0}
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(RDO.workedHours("07:30","17:18",60))),
+  {total:8.8,regular:8.8,overtime50:0,overtime100:0}
 );
 
 const result = RDO.calculate({

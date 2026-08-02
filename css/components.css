@@ -116,6 +116,7 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
 .chart-box canvas{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important}
 /* ===== Logo sem borda e sem fundo ===== */
 .logo-clean{border:none!important;background:transparent!important}
+.pdf-letterhead{display:none}
 /* ===== Impressão / PDF: oculta menus e expande conteúdo ===== */
 @media print{
   #sidebar,#topbar,#rightbar,#finance-ticker,.toolbar,.filters-bar,#toasts,.drop-zone,#modal-overlay,.loading-overlay,.section-title button{display:none!important}
@@ -129,6 +130,15 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   .two-col{display:block}
   .two-col .card{margin-bottom:14px}
   .chart-box,.chart-box.sm{height:250px}
+  body.printing-rdo .pdf-letterhead,
+  body.printing-project .pdf-letterhead,
+  body.printing-dashboard .pdf-letterhead,
+  body.printing-measurement .pdf-letterhead{display:block!important;position:fixed;inset:0;z-index:0;pointer-events:none}
+  .pdf-letterhead img{display:block;width:100%;height:100%;object-fit:fill}
+  #rdo-print-report>:not(.pdf-letterhead),
+  #project-print-report>:not(.pdf-letterhead),
+  #measurement-print-report>:not(.pdf-letterhead),
+  body.printing-dashboard #app{position:relative;z-index:1}
 }
 
 /* Planejamento: datas clicáveis para inclusão rápida */

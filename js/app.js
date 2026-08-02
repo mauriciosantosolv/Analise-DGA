@@ -307,8 +307,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v3.0.2 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v3.0.2 · dados locais';
+      el.textContent=`v3.0.3 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v3.0.3 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -503,7 +503,7 @@ const App = {
           categories:State.categories, measurements:State.measurements,
           rdos:State.rdos, crew:State.crew, labor_rates:State.laborRates,
           rdo_financial:State.rdoFinancial,
-          settings:Object.entries(State.settings).filter(([k]) => k !== 'companyLogo').map(([id, value]) => ({id, value})) });
+          settings:Object.entries(State.settings).filter(([k]) => !['companyLogo','pdfLetterhead'].includes(k)).map(([id, value]) => ({id, value})) });
         if(snap.length < 4500000){
           localStorage.setItem('ccf_snap', snap);
           localStorage.setItem('ccf_snap_time', String(Date.now()));

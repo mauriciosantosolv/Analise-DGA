@@ -13,11 +13,11 @@
  */
 /* ================= [1] DESIGN SYSTEM ================= */
 :root{
-  --blue:#2563EB; --blue-soft:#EFF4FE; --green:#16A34A; --green-soft:#EAF7EF;
+  --blue:#18181B; --blue-soft:#F4F4F5; --green:#16A34A; --green-soft:#EAF7EF;
   --red:#DC2626; --red-soft:#FDEEEE; --amber:#D97706; --amber-soft:#FDF4E7;
-  --bg:#F5F7FA; --surface:#FFFFFF; --surface2:#FAFBFC;
-  --text:#1F2937; --text2:#6B7280; --text3:#9CA3AF;
-  --border:#E5E9F0; --border2:#EDF0F5;
+  --bg:#F4F4F5; --surface:#FFFFFF; --surface2:#FAFAFA;
+  --text:#27272A; --text2:#52525B; --text3:#71717A;
+  --border:#E4E4E7; --border2:#E4E4E7;
   --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
   --shadow-lg:0 12px 32px -8px rgba(16,24,40,.14);
   --glass:rgba(255,255,255,.72); --r:12px;
@@ -46,4 +46,3 @@ label{font-size:.8rem;font-weight:600;color:var(--text2);display:block;margin-bo
 h1{font-size:1.35rem;font-weight:700}
 h2{font-size:1.05rem;font-weight:700}
 h3{font-size:.95rem;font-weight:600}
-

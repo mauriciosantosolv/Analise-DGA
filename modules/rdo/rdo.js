@@ -143,13 +143,33 @@ const RDO = {
       logo:U.safeImageSrc((client&&client.logo)||(project&&project.clientLogo)||'')
     };
   },
+  crewMembers(){
+    return State.crew.filter(item=>item.recordType!=='role');
+  },
+  crewRoles(){
+    return State.crew
+      .filter(item=>item.recordType==='role')
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  },
   activeCrew(){
-    return State.crew.filter(x=>x.active!==false).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    return this.crewMembers().filter(x=>x.active!==false).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   },
   linkedRdoIds(){
     return new Set(State.measurements.flatMap(m=>Array.isArray(m.rdoIds)?m.rdoIds.map(String):[]));
   },
-  workedHours(start,end,breakMinutes=0){
+  standardDailyHours(){
+    const configured=Number((State.settings||{}).rdoDailyHours);
+    return configured>0&&configured<=24?configured:8.8;
+  },
+  defaultShift(){
+    const settings=State.settings||{};
+    const start=/^\d{2}:\d{2}$/.test(String(settings.rdoShiftStart||''))?settings.rdoShiftStart:'07:30';
+    const end=/^\d{2}:\d{2}$/.test(String(settings.rdoShiftEnd||''))?settings.rdoShiftEnd:'17:18';
+    const configuredBreak=Number(settings.rdoShiftBreakMinutes);
+    const breakMinutes=Number.isFinite(configuredBreak)&&configuredBreak>=0&&configuredBreak<=360?configuredBreak:60;
+    return {start,end,breakMinutes};
+  },
+  workedHours(start,end,breakMinutes=0,regularLimit=this.standardDailyHours()){
     const toMinutes=value=>{
       const match=String(value||'').match(/^(\d{1,2}):(\d{2})$/);
       return match ? Number(match[1])*60+Number(match[2]) : null;
@@ -160,8 +180,9 @@ const RDO = {
     if(minutes<0) minutes+=24*60;
     minutes=Math.max(0,minutes-(Number(breakMinutes)||0));
     const total=Math.round(minutes/60*100)/100;
-    const regular=Math.min(8,total);
-    return {total,regular,overtime50:Math.max(0,total-regular),overtime100:0};
+    const limit=Math.max(0,Math.min(24,Number(regularLimit)||0));
+    const regular=Math.round(Math.min(limit,total)*100)/100;
+    return {total,regular,overtime50:Math.round(Math.max(0,total-regular)*100)/100,overtime100:0};
   },
   baseCostFor(employeeId,legacyRate=null){
     const base=State.laborRates.find(rate=>
@@ -288,6 +309,7 @@ const RDO = {
       rows:calculation.rows.map(row=>({
         employeeId:String(row.employeeId),
         employeeName:row.employeeName,
+        employeeRegistration:(State.crew.find(item=>String(item.id)===String(row.employeeId))||{}).registration||'',
         internalRole:row.internalRole,
         commercialRole:row.commercialRole,
         regular:Number(row.regular)||0,
@@ -439,18 +461,19 @@ const RDO = {
     if(!projects.length) return UI.toast('Nenhum projeto foi disponibilizado para preenchimento de RDO.','warn',6500);
     if(!crew.length) return UI.toast('Cadastre a equipe antes de criar o primeiro RDO.','warn',6500);
     const initialEntries=new Map((existing?.entries||[]).map(row=>[String(row.employeeId),row]));
-    const defaultShift={start:'07:30',end:'17:30',breakMinutes:60};
+    const defaultShift=this.defaultShift();
     const defaultHours=this.workedHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes);
     const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,overtime100:0};
     const workerCard=employee=>{
       const saved=initialEntries.get(String(employee.id));
       const selected=!!saved;
       const row=saved||{...defaultShift,...defaultHours};
-      const searchText=U.norm(`${employee.name||''} ${employee.internalRole||''}`);
+      const searchText=U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`);
+      const photo=U.safeImageSrc(employee.photo||'');
       return `<article class="rdo-worker-card ${selected?'selected':''}" data-employee-id="${U.esc(employee.id)}" data-search="${U.esc(searchText)}">
         <div class="rdo-worker-head">
-          <label class="rdo-worker-select"><input type="checkbox" ${selected?'checked':''}><span class="avatar-ph">${U.initials(employee.name||'CO')}</span>
-            <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}</small></span></label>
+          <label class="rdo-worker-select"><input type="checkbox" ${selected?'checked':''}>${photo?`<img class="employee-avatar" src="${U.esc(photo)}" alt="">`:`<span class="avatar-ph">${U.initials(employee.name||'CO')}</span>`}
+            <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}</small></span></label>
           <span class="rdo-worker-total">${U.pct((Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)).replace('%','h')}</span>
         </div>
         <div class="rdo-worker-fields">
@@ -501,7 +524,7 @@ const RDO = {
             <div class="rdo-team-summary" id="rdo-team-summary"></div>
             <div class="rdo-team-search" role="search">
               <i data-lucide="search"></i>
-              <input id="rdo-team-search" type="search" autocomplete="off" spellcheck="false" placeholder="Pesquisar colaborador por nome ou função" aria-label="Pesquisar colaborador por nome ou função">
+              <input id="rdo-team-search" type="search" autocomplete="off" spellcheck="false" placeholder="Pesquisar por matrícula, nome ou função" aria-label="Pesquisar colaborador por matrícula, nome ou função">
               <button id="rdo-team-search-clear" type="button" aria-label="Limpar pesquisa" title="Limpar pesquisa"><i data-lucide="x"></i></button>
             </div>
             <div class="rdo-team-search-empty" id="rdo-team-search-empty" hidden><i data-lucide="user-x"></i><span>Nenhum colaborador encontrado.</span></div>
@@ -649,6 +672,7 @@ const RDO = {
             return {
               employeeId:String(card.dataset.employeeId),
               employeeName:employee.name||'Colaborador',
+              employeeRegistration:employee.registration||'',
               internalRole:employee.internalRole||'',
               start:card.querySelector('[data-field="start"]').value,
               end:card.querySelector('[data-field="end"]').value,
@@ -953,7 +977,7 @@ const RDO = {
         Enviado:'Aguardando aprovação',
         Devolvido:'Reprovado'
       }[rdo.status]||rdo.status;
-      report.innerHTML=`<header>
+      report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}<header>
         <div class="rdo-print-identities">
           <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra</small></span></div>
           <div class="rdo-print-client">
@@ -971,8 +995,8 @@ const RDO = {
       </div>
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
-        <table><thead><tr><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(row.internalRole||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
+        <table><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
+        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(row.internalRole||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${Number(row.breakMinutes)||0} min</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
@@ -1121,23 +1145,44 @@ Views.rdos={
 
 Views.colaboradores={
   title:'Colaboradores',
+  query:'',
+  avatar(employee,size='normal'){
+    const photo=U.safeImageSrc(employee&&employee.photo||'');
+    return photo
+      ? `<img class="employee-avatar ${size==='large'?'large':''}" src="${U.esc(photo)}" alt="">`
+      : `<span class="avatar-ph ${size==='large'?'large':''}">${U.initials(employee&&employee.name||'CO')}</span>`;
+  },
   render(){
     const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('crew');
     const canViewCost=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
+    const normalized=U.norm(this.query);
+    const all=RDO.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+    const employees=all.filter(employee=>!normalized||U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`).includes(normalized));
     $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2><small>Colaboradores disponíveis para os diários.</small></div><div class="spacer"></div>
-      ${canEdit?'<button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button>':''}</div>
-      <div class="crew-directory">${State.crew.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
-        <span class="avatar-ph">${U.initials(employee.name||'CO')}</span>
-        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
+      ${canEdit?'<div class="toolbar-actions"><button class="btn btn-ghost" onclick="Views.colaboradores.rolesForm()"><i data-lucide="briefcase-business"></i>Funções</button><button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button></div>':''}</div>
+      <div class="crew-filter-panel"><div class="rdo-search"><i data-lucide="search"></i><input id="crew-search" type="search" value="${U.esc(this.query)}" placeholder="Buscar por matrícula, nome ou cargo" aria-label="Buscar colaboradores">${this.query?'<button id="crew-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div><span>${employees.length} de ${all.length} colaboradores</span></div>
+      <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
+        ${this.avatar(employee)}
+        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
         <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?'Inativo':'Ativo'}</span>
         ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
-      </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador cadastrado.</div>'}</div>`;
+      </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
+    const search=document.getElementById('crew-search');
+    if(search) search.oninput=U.debounce(()=>{
+      this.query=search.value; this.render();
+      const next=document.getElementById('crew-search');
+      if(next){next.focus();next.setSelectionRange(next.value.length,next.value.length);}
+    },180);
+    const clear=document.getElementById('crew-search-clear');
+    if(clear) clear.onclick=()=>{this.query='';this.render();};
     U.icons();
   },
   form(id=''){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
-    const employee=id?State.crew.find(x=>String(x.id)===String(id)):{id:U.id(),name:'',internalRole:'',active:true};
+    const employee=id?RDO.crewMembers().find(x=>String(x.id)===String(id)):{id:U.id(),name:'',registration:'',photo:'',internalRole:'',active:true};
     if(!employee) return;
+    const roleNames=RDO.crewRoles().filter(role=>role.active!==false).map(role=>String(role.name||'').trim()).filter(Boolean);
+    if(employee.internalRole&&!roleNames.some(name=>U.norm(name)===U.norm(employee.internalRole))) roleNames.push(employee.internalRole);
     const canEditCost=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('labor_rates');
     const baseRecord=State.laborRates.find(rate=>
       String(rate.employeeId)===String(employee.id)
@@ -1150,15 +1195,61 @@ Views.colaboradores={
     );
     const hourlyCost=RDO.baseCostFor(employee.id,baseRecord||legacyRate).costRegular;
     const hasRegisteredCost=!!(baseRecord||legacyRate);
-    UI.modal({title:id?'Editar colaborador':'Novo colaborador',body:`<div class="form-grid">
-      <div class="full"><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}"></div>
-      <div><label>Função interna</label><input id="crew-role" maxlength="120" value="${U.esc(employee.internalRole||'')}"></div>
+    let photo=U.safeImageSrc(employee.photo||'');
+    UI.modal({title:id?'Editar colaborador':'Novo colaborador',body:`<div class="employee-form-photo">
+      <div id="crew-photo-preview">${this.avatar(employee,'large')}</div><div><b>Foto do colaborador</b><small>JPG, PNG ou WebP. A imagem será reduzida antes de sincronizar.</small><div><button class="btn btn-ghost btn-sm" id="crew-photo-select" type="button"><i data-lucide="image-plus"></i>${photo?'Alterar foto':'Adicionar foto'}</button>${photo?'<button class="btn btn-ghost btn-sm" id="crew-photo-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div></div></div>
+      <div class="form-grid">
+      <div><label>Matrícula</label><input id="crew-registration" maxlength="60" value="${U.esc(employee.registration||'')}" autocomplete="off"></div>
+      <div><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}" autocomplete="name"></div>
+      <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
       <div><label>Custo por hora *</label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'O custo é único para todas as obras. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
       <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
+    const clearPhoto=()=>{
+      photo='';
+      document.getElementById('crew-photo-preview').innerHTML=`<span class="avatar-ph large">${U.initials(document.getElementById('crew-name').value||employee.name||'CO')}</span>`;
+      document.getElementById('crew-photo-select').innerHTML='<i data-lucide="image-plus"></i>Adicionar foto';
+      document.getElementById('crew-photo-remove')?.remove();
+      U.icons();
+    };
+    const ensurePhotoRemove=()=>{
+      let button=document.getElementById('crew-photo-remove');
+      if(!button){
+        button=document.createElement('button');
+        button.className='btn btn-ghost btn-sm';
+        button.id='crew-photo-remove';
+        button.type='button';
+        button.innerHTML='<i data-lucide="trash-2"></i>Remover';
+        document.getElementById('crew-photo-select').after(button);
+      }
+      button.onclick=clearPhoto;
+    };
+    if(photo) ensurePhotoRemove();
+    document.getElementById('crew-photo-select').onclick=()=>{
+      const input=document.getElementById('img-input');
+      input.accept='image/png,image/jpeg,image/webp';
+      input.onchange=()=>{
+        const file=input.files[0]; input.value=''; if(!file) return;
+        const reader=new FileReader();
+        reader.onload=async event=>{
+          try{
+            photo=await U.resizeImage(event.target.result,512,'image/jpeg',.86);
+            document.getElementById('crew-photo-preview').innerHTML=`<img class="employee-avatar large" src="${U.esc(photo)}" alt="">`;
+            document.getElementById('crew-photo-select').innerHTML='<i data-lucide="image-plus"></i>Alterar foto';
+            ensurePhotoRemove();
+            U.icons();
+          }catch(err){UI.toast(U.esc(err.message||err),'error',6000);}
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    };
     document.getElementById('crew-save').onclick=async()=>{
       const name=document.getElementById('crew-name').value.trim();
+      const registration=document.getElementById('crew-registration').value.trim();
       if(!name) return UI.toast('Informe o nome do colaborador','warn');
+      if(registration&&RDO.crewMembers().some(item=>String(item.id)!==String(employee.id)&&U.norm(item.registration)===U.norm(registration)))
+        return UI.toast('Esta matrícula já pertence a outro colaborador.','warn');
       const rawCost=canEditCost?document.getElementById('crew-hourly-cost').value:'';
       if(canEditCost && (rawCost===''||U.num(rawCost)<0)) return UI.toast('Informe o custo por hora do colaborador.','warn');
       try{
@@ -1167,6 +1258,8 @@ Views.colaboradores={
           ...employee,
           createdAt:employee.createdAt||new Date().toISOString(),
           name,
+          registration,
+          photo,
           internalRole:document.getElementById('crew-role').value.trim(),
           active:document.getElementById('crew-active').value==='true',
           updatedAt:new Date().toISOString()
@@ -1195,18 +1288,51 @@ Views.colaboradores={
         UI.toast('Não foi possível salvar o colaborador: '+U.esc(err.message||err),'error',7500);
       }
     };
+  },
+  rolesForm(){
+    if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
+    const roles=RDO.crewRoles();
+    UI.modal({title:'Funções dos colaboradores',body:`<div class="role-directory">${roles.map(role=>`<div class="role-row"><span><b>${U.esc(role.name||'Função')}</b><small>${RDO.crewMembers().filter(employee=>U.norm(employee.internalRole)===U.norm(role.name)).length} colaborador(es)</small></span><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.roleForm(${U.jsArg(role.id)})"><i data-lucide="pencil"></i></button><button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.removeRole(${U.jsArg(role.id)})"><i data-lucide="trash-2"></i></button></div>`).join('')||'<div class="empty"><i data-lucide="briefcase-business"></i><br>Nenhuma função cadastrada.</div>'}</div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Fechar</button><button class="btn btn-primary" onclick="Views.colaboradores.roleForm()"><i data-lucide="plus"></i>Nova função</button>'});
+  },
+  roleForm(id=''){
+    const current=id?RDO.crewRoles().find(role=>String(role.id)===String(id)):null;
+    UI.modal({title:current?'Editar função':'Nova função',body:`<div><label>Nome da função *</label><input id="crew-role-name" maxlength="120" value="${U.esc(current?.name||'')}" placeholder="Ex.: Técnico em Elétrica"></div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-role-save"><i data-lucide="check"></i>Salvar</button>'});
+    document.getElementById('crew-role-save').onclick=async()=>{
+      const name=document.getElementById('crew-role-name').value.trim().replace(/\s+/g,' ');
+      if(!name) return UI.toast('Informe o nome da função.','warn');
+      if(RDO.crewRoles().some(role=>String(role.id)!==String(current?.id||'')&&U.norm(role.name)===U.norm(name)))
+        return UI.toast('Esta função já está cadastrada.','warn');
+      await DB.put('crew',{...(current||{id:`role:${U.id()}`,recordType:'role',createdAt:new Date().toISOString()}),name,active:true,updatedAt:new Date().toISOString()});
+      await State.reload(); UI.closeAll(); UI.toast('Função salva','success'); this.rolesForm();
+    };
+  },
+  removeRole(id){
+    const role=RDO.crewRoles().find(item=>String(item.id)===String(id));
+    if(!role) return;
+    const inUse=RDO.crewMembers().filter(employee=>U.norm(employee.internalRole)===U.norm(role.name)).length;
+    if(inUse) return UI.toast(`A função está vinculada a ${inUse} colaborador(es) e não pode ser excluída.`,'warn',6500);
+    UI.confirm(`Excluir a função <b>${U.esc(role.name)}</b>?`,async()=>{
+      await DB.del('crew',role.id); await State.reload(); UI.closeAll(); UI.toast('Função excluída','warn'); this.rolesForm();
+    },false);
   }
 };
 
 Views.valoreshh={
   title:'Valores HH',
+  projectFilter:'',
   render(){
     const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('labor_rates');
-    const rows=State.laborRates.filter(rate=>rate.isBaseCost!==true&&String(rate.projectId)!=='__base__').sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
+    if(!this.projectFilter&&State.filters.project) this.projectFilter=String(State.filters.project);
+    const rows=State.laborRates.filter(rate=>
+      rate.isBaseCost!==true&&String(rate.projectId)!=='__base__'
+      &&(!this.projectFilter||String(rate.projectId)===String(this.projectFilter))
+    ).sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
+    const rateProjects=State.projects.filter(project=>State.laborRates.some(rate=>String(rate.projectId)===String(project.id))||project.type==='HH');
     $c().innerHTML=`<div class="toolbar"><div><h2>Valores de venda por projeto</h2><small>O custo vem do cadastro do colaborador; somente o valor de venda varia por obra.</small></div><div class="spacer"></div>
       ${canEdit?'<button class="btn btn-primary" onclick="Views.valoreshh.form()"><i data-lucide="plus"></i>Configurar valor</button>':''}</div>
+      <div class="rate-filter-panel"><label>Filtrar por projeto<select id="rate-project-filter"><option value="">Todos os projetos</option>${rateProjects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(this.projectFilter)?'selected':''}>${U.esc(U.projLabel(project))}</option>`).join('')}</select></label><span>${rows.length} configuração(ões)</span></div>
       <div class="rate-list">${rows.map(rate=>{
-        const employee=State.crew.find(x=>String(x.id)===String(rate.employeeId))||{};
+        const employee=RDO.crewMembers().find(x=>String(x.id)===String(rate.employeeId))||{};
         const costs=RDO.baseCostFor(rate.employeeId,rate);
         return `<${canEdit?'button':'div'} class="rate-card"${canEdit?` onclick="Views.valoreshh.form(${U.jsArg(rate.id)})"`:''}>
           <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(RDO.projectLabel(rate.projectId))} · ${U.esc(rate.commercialRole||employee.internalRole||'')}</small></span>
@@ -1215,20 +1341,22 @@ Views.valoreshh={
           <i data-lucide="chevron-right"></i>
         </${canEdit?'button':'div'}>`;
       }).join('')||'<div class="empty card"><i data-lucide="badge-dollar-sign"></i><br>Nenhum valor configurado.</div>'}</div>`;
+    document.getElementById('rate-project-filter').onchange=event=>{this.projectFilter=event.target.value;this.render();};
     U.icons();
   },
   form(id=''){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('labor_rates')) return;
+    const employees=RDO.crewMembers();
     const rate=id?State.laborRates.find(x=>String(x.id)===String(id)):{
-      projectId:State.projects[0]?.id||'',employeeId:State.crew[0]?.id||'',commercialRole:'',
+      projectId:this.projectFilter||State.projects[0]?.id||'',employeeId:employees[0]?.id||'',commercialRole:'',
       costRegular:0,cost50:0,cost100:0,saleRegular:0,sale50:0,sale100:0,active:true
     };
-    if(!State.projects.length||!State.crew.length) return UI.toast('Cadastre um projeto e um colaborador antes de configurar valores.','warn',6500);
+    if(!State.projects.length||!employees.length) return UI.toast('Cadastre um projeto e um colaborador antes de configurar valores.','warn',6500);
     const field=(label,key)=>`<div><label>${label}</label><input id="rate-${key}" type="number" min="0" step="0.01" value="${Number(rate[key])||''}"></div>`;
     const costs=RDO.baseCostFor(rate.employeeId,rate);
     UI.modal({title:id?'Editar valores':'Configurar valores',wide:true,body:`<div class="form-grid">
       <div><label>Projeto *</label><select id="rate-project">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
-      <div><label>Colaborador *</label><select id="rate-employee">${State.crew.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
+      <div><label>Colaborador *</label><select id="rate-employee">${employees.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
       <div class="full"><label>Função apresentada ao cliente</label><input id="rate-role" maxlength="140" value="${U.esc(rate.commercialRole||'')}"></div>
       <div class="full import-log" id="rate-cost-summary">Custo padrão do colaborador: <b>${U.money(costs.costRegular)}/h</b> · HE 50%: <b>${U.money(costs.cost50)}/h</b> · HE 100%: <b>${U.money(costs.cost100)}/h</b>.</div>
       ${field('Venda · hora normal','saleRegular')}

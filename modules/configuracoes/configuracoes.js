@@ -49,10 +49,12 @@ const Backup = {
         const item=this.cleanValue(row);
         if(!item || item.id==null || String(item.id).length>200)
           throw new Error(`A seção ${store} contém um registro sem identificador válido.`);
-        if(store==='settings' && item.id==='companyLogo')
+        if(store==='settings' && ['companyLogo','pdfLetterhead'].includes(item.id))
           item.value=U.safeImageSrc(item.value);
         if(store==='clients' && item.logo)
           item.logo=U.safeImageSrc(item.logo);
+        if(store==='crew' && item.photo)
+          item.photo=U.safeImageSrc(item.photo);
         return item;
       });
     }
@@ -161,6 +163,22 @@ Views.configuracoes = {
           <div class="full" style="display:flex;gap:12px;align-items:center">
             <div id="cfg-logo-preview">${U.safeImageSrc(State.settings.companyLogo)?`<img class="avatar logo-clean" style="width:48px;height:48px" src="${U.esc(U.safeImageSrc(State.settings.companyLogo))}">`:`<span class="avatar-ph" style="width:48px;height:48px"><i data-lucide="zap" style="width:18px;height:18px"></i></span>`}</div>
             ${canManageCompany?'<button class="btn btn-ghost btn-sm" id="cfg-logo-btn"><i data-lucide="image-plus"></i>Alterar logo</button>':'<small style="color:var(--text3)">Somente proprietário ou administrador pode alterar a identidade da empresa.</small>'}</div>
+          <div class="full company-settings-section">
+            <div class="company-settings-heading"><span><i data-lucide="clock-3"></i></span><div><h3>Jornada padrão dos RDOs</h3><small>Estes valores preenchem todos os colaboradores. O que exceder o limite diário será lançado como hora extra.</small></div></div>
+            <div class="company-shift-grid">
+              <div><label>Entrada padrão</label><input id="cfg-rdo-start" type="time" value="${U.esc(State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Saída padrão</label><input id="cfg-rdo-end" type="time" value="${U.esc(State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Intervalo (min)</label><input id="cfg-rdo-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Horas normais/dia</label><input id="cfg-rdo-daily-hours" type="number" min="0.25" max="24" step="0.01" value="${Number(State.settings.rdoDailyHours)||8.8}" ${canManageCompany?'':'disabled'}><small>Ex.: 8,8 horas</small></div>
+            </div>
+          </div>
+          <div class="full company-settings-section">
+            <div class="company-settings-heading"><span><i data-lucide="file-image"></i></span><div><h3>Papel timbrado dos PDFs</h3><small>Envie uma imagem JPG em proporção A4. Ela será aplicada ao RDO, à medição e aos relatórios do dashboard.</small></div></div>
+            <div class="letterhead-control">
+              <div id="cfg-letterhead-preview">${U.safeImageSrc(State.settings.pdfLetterhead)?`<img src="${U.esc(U.safeImageSrc(State.settings.pdfLetterhead))}" alt="Prévia do papel timbrado">`:'<span><i data-lucide="image"></i>Sem papel timbrado</span>'}</div>
+              ${canManageCompany?`<div><button class="btn btn-ghost btn-sm" id="cfg-letterhead-btn" type="button"><i data-lucide="upload"></i>${State.settings.pdfLetterhead?'Substituir JPG':'Adicionar JPG'}</button>${State.settings.pdfLetterhead?'<button class="btn btn-ghost btn-sm" id="cfg-letterhead-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div>`:''}
+            </div>
+          </div>
         </div>
         ${canManageCompany?`<div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button class="btn btn-primary" id="cfg-company-save"><i data-lucide="check"></i>Salvar empresa</button></div>`:''}
@@ -214,6 +232,7 @@ Views.configuracoes = {
       </section>
       </div>`;
     let logo = U.safeImageSrc(State.settings.companyLogo);
+    let letterhead = U.safeImageSrc(State.settings.pdfLetterhead);
     if(cloudConnected && Cloud.organizations().length>1)
       document.getElementById('cfg-active-org').onchange=async e=>{
         try{
@@ -233,6 +252,7 @@ Views.configuracoes = {
     const logoButton=document.getElementById('cfg-logo-btn');
     if(logoButton) logoButton.onclick = () => {
       const inp = document.getElementById('img-input');
+      inp.accept='image/png,image/jpeg,image/webp';
       inp.onchange = () => { const f = inp.files[0]; inp.value=''; if(!f) return;
         const fr = new FileReader();
         fr.onload = async e => {
@@ -243,6 +263,49 @@ Views.configuracoes = {
         };
         fr.readAsDataURL(f); };
       inp.click();
+    };
+    const letterheadButton=document.getElementById('cfg-letterhead-btn');
+    const clearLetterhead=()=>{
+      letterhead='';
+      document.getElementById('cfg-letterhead-preview').innerHTML='<span><i data-lucide="image"></i>Sem papel timbrado</span>';
+      document.getElementById('cfg-letterhead-remove')?.remove();
+      letterheadButton.innerHTML='<i data-lucide="upload"></i>Adicionar JPG';
+      U.icons();
+    };
+    const ensureLetterheadRemove=()=>{
+      let button=document.getElementById('cfg-letterhead-remove');
+      if(!button){
+        button=document.createElement('button');
+        button.className='btn btn-ghost btn-sm';
+        button.id='cfg-letterhead-remove';
+        button.type='button';
+        button.innerHTML='<i data-lucide="trash-2"></i>Remover';
+        letterheadButton.after(button);
+      }
+      button.onclick=clearLetterhead;
+    };
+    if(letterheadButton&&letterhead) ensureLetterheadRemove();
+    if(letterheadButton) letterheadButton.onclick=()=>{
+      const input=document.getElementById('img-input');
+      input.accept='.jpg,.jpeg,image/jpeg';
+      input.onchange=()=>{
+        const file=input.files[0]; input.value=''; if(!file) return;
+        const isJpeg=String(file.type||'').toLowerCase()==='image/jpeg'||/\.jpe?g$/i.test(file.name||'');
+        if(!isJpeg)
+          return UI.toast('O papel timbrado deve estar em formato JPG.','warn',5500);
+        const reader=new FileReader();
+        reader.onload=async event=>{
+          try{
+            letterhead=await U.resizeImage(event.target.result,1800,'image/jpeg',.86);
+            document.getElementById('cfg-letterhead-preview').innerHTML=`<img src="${U.esc(letterhead)}" alt="Prévia do papel timbrado">`;
+            letterheadButton.innerHTML='<i data-lucide="upload"></i>Substituir JPG';
+            ensureLetterheadRemove();
+            U.icons();
+          }catch(err){UI.toast(U.esc(err.message||err),'error',6500);}
+        };
+        reader.readAsDataURL(String(file.type||'').toLowerCase()==='image/jpeg'?file:file.slice(0,file.size,'image/jpeg'));
+      };
+      input.click();
     };
     document.getElementById('ticker-all').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=true);
     document.getElementById('ticker-none').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=false);
@@ -255,11 +318,22 @@ Views.configuracoes = {
     if(companySave) companySave.onclick=async()=>{
       const name=document.getElementById('cfg-name').value.trim();
       if(!name) return UI.toast('Informe o nome da empresa.','warn');
+      const shiftStart=document.getElementById('cfg-rdo-start').value;
+      const shiftEnd=document.getElementById('cfg-rdo-end').value;
+      const shiftBreak=U.num(document.getElementById('cfg-rdo-break').value);
+      const dailyHours=U.num(document.getElementById('cfg-rdo-daily-hours').value);
+      if(!shiftStart||!shiftEnd||shiftBreak<0||shiftBreak>360||dailyHours<=0||dailyHours>24)
+        return UI.toast('Revise a jornada padrão do RDO.','warn',5500);
       try{
         UI.loading(true,'Salvando configurações da empresa…');
         if(cloudConnected) await Cloud.updateOrganizationName(name);
         await State.setSetting('companyName',name);
         await State.setSetting('companyLogo',logo);
+        await State.setSetting('rdoShiftStart',shiftStart);
+        await State.setSetting('rdoShiftEnd',shiftEnd);
+        await State.setSetting('rdoShiftBreakMinutes',shiftBreak);
+        await State.setSetting('rdoDailyHours',dailyHours);
+        await State.setSetting('pdfLetterhead',letterhead);
         UI.loading(false);
         App.applyBranding(); App.applyStorageStatus();
         UI.toast('Configurações da empresa salvas','success');
@@ -488,7 +562,7 @@ Views.backup = {
   title:'Backup',
   render(){
     const counts = { Projetos:State.projects.length, Orçamentos:State.budgets.length, Lançamentos:State.purchases.length,
-      Medições:State.measurements.length, RDOs:State.rdos.length, Colaboradores:State.crew.length,
+      Medições:State.measurements.length, RDOs:State.rdos.length, Colaboradores:RDO.crewMembers().length,
       Planejamento:State.planning.length, Clientes:State.clients.length, Categorias:State.categories.length };
     $c().innerHTML = `
       <div class="kpi-grid">${Object.entries(counts).map(([k,v])=>`<div class="kpi"><div class="k-label">${k}</div><div class="k-value">${v}</div></div>`).join('')}</div>
@@ -528,7 +602,8 @@ Views.backup = {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.planning)), 'planning');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.measurements)), 'measurements');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.rdos)), 'rdos');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.crew)), 'crew');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(RDO.crewMembers())), 'crew');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(RDO.crewRoles())), 'crew_roles');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Exports.spreadsheetRows(State.clients.map(({logo,...c})=>c))), 'clients');
     XLSX.writeFile(wb, `banco-completo-${U.isoDate(new Date())}.xlsx`);
     UI.toast('Banco exportado em Excel', 'success');

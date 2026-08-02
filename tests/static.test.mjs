@@ -33,6 +33,8 @@ assert.match(css, /#rdo-next\[hidden\]/);
 assert.match(css, /\.rdo-team-template input\[type="time"\][^}]*width:100%[^}]*appearance:none/);
 assert.match(css, /\.rdo-worker-fields label\{min-width:0/);
 assert.match(css, /\.rdo-team-search/);
+assert.match(css, /\.crew-card>span:nth-child\(2\)>b/);
+assert.match(css, /#measurement-print-report/);
 assert.doesNotMatch(css, /var\(--(?:radius|shadow-sm|surface3)\)/);
 
 const cloud = fs.readFileSync(path.join(root, "database/cloud.js"), "utf8");
@@ -52,11 +54,18 @@ assert.match(rdo, /currentStep===4/);
 assert.match(rdo, /id="rdo-team-search"/);
 assert.match(rdo, /const selected=!!saved/);
 assert.match(rdo, /\['2','Equipe e horas','user'\]/);
+assert.match(rdo, /Buscar por matrícula, nome ou cargo/);
+assert.match(rdo, /rolesForm\(\)/);
+assert.match(rdo, /rdoDailyHours/);
+assert.match(rdo, /employeeRegistration/);
 assert.doesNotMatch(rdo, /users-round/);
 
 const measurements = fs.readFileSync(path.join(root, "modules/medicoes/medicoes.js"), "utf8");
 assert.match(measurements, /Excluir medição/);
 assert.match(measurements, /deleteRdoMeasurement/);
+assert.match(measurements, /measurementRows/);
+assert.match(measurements, /Valor total da medição/);
+assert.match(measurements, /measurement-day-total/);
 
 const importer = fs.readFileSync(path.join(root, "js/importer.js"), "utf8");
 assert.match(importer, /labor:[\s\S]*supplier:[\s\S]*order:[\s\S]*notes:/);
@@ -74,6 +83,17 @@ assert.match(costs, /baseRatesForProject/);
 const exports = fs.readFileSync(path.join(root, "utils/export.js"), "utf8");
 assert.match(exports, /deviationJustification/);
 assert.match(exports, /clientLogo/);
+assert.match(exports, /stationeryMarkup/);
+
+const configuration = fs.readFileSync(path.join(root, "modules/configuracoes/configuracoes.js"), "utf8");
+assert.match(configuration, /cfg-rdo-daily-hours/);
+assert.match(configuration, /cfg-letterhead-btn/);
+assert.match(configuration, /pdfLetterhead/);
+
+const premium = fs.readFileSync(path.join(root, "css/premium.css"), "utf8");
+assert.match(premium, /--bg: #f4f4f5/);
+assert.match(premium, /--text: #27272a/);
+assert.match(premium, /#company-settings-card[\s\S]*grid-column: 1 \/ -1/);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 for (const icon of manifest.icons) {
