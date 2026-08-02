@@ -33,6 +33,19 @@ const Exports = {
     document.body.appendChild(layer);
     return layer;
   },
+  mountCompanyMeta(){
+    const host=document.getElementById('content');
+    if(!host) return null;
+    const old=document.getElementById('pdf-company-meta');
+    if(old) old.remove();
+    const cnpj=U.formatCnpj(State.settings.companyCnpj||'');
+    const meta=document.createElement('div');
+    meta.id='pdf-company-meta';
+    meta.className='pdf-company-meta';
+    meta.textContent=`${State.settings.companyName||'CliqueObras'}${cnpj?` · CNPJ ${cnpj}`:''}`;
+    host.prepend(meta);
+    return meta;
+  },
   waitForImages(root,timeout=1800){
     const images=[...(root||document).querySelectorAll('img')];
     return Promise.race([
@@ -82,7 +95,8 @@ const Exports = {
     document.body.classList.remove('printing-project');
     document.body.classList.add('printing-dashboard');
     const stationery=this.mountStationery();
-    const cleanup = () => {document.body.classList.remove('printing-dashboard');if(stationery) stationery.remove();};
+    const companyMeta=this.mountCompanyMeta();
+    const cleanup = () => {document.body.classList.remove('printing-dashboard');if(stationery) stationery.remove();if(companyMeta) companyMeta.remove();};
     window.addEventListener('afterprint', cleanup, {once:true});
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
     await this.waitForImages(document.body);
@@ -98,6 +112,7 @@ const Exports = {
     const report = document.createElement('section');
     report.id = 'project-print-report';
     const healthLabel = {green:'Saudável',amber:'Atenção',red:'Crítica'}[s.light];
+    const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
     const metric = (label, value, cls='') => `<div class="print-kpi ${cls}"><small>${label}</small><b>${value}</b></div>`;
     report.innerHTML = `${this.stationeryMarkup()}
       <div class="print-head">
@@ -130,7 +145,7 @@ const Exports = {
       <table class="print-table"><thead><tr><th>Categoria</th><th>Orçado</th><th>Realizado</th><th>Projetado</th><th>Saldo</th><th>% comprometido</th></tr></thead>
         <tbody>${cats.map(c=>`<tr><td>${U.esc(c.name)}</td><td>${U.money(c.budget)}</td><td>${U.money(c.spent)}</td><td>${U.money(c.projected)}</td><td class="${c.balance<0?'negative':''}">${U.money(c.balance)}</td><td>${U.pct(c.committedPct)}</td></tr>`).join('') || '<tr><td colspan="6">Sem dados de categorias</td></tr>'}</tbody>
       </table>
-      <div class="print-foot">Realizado inclui compras, contas pagas, mão de obra e custos da base de cálculo. Projetado contém somente o Planejamento. Gerado em ${new Date().toLocaleString('pt-BR')}.</div>`;
+      <div class="print-foot"><b>${U.esc(State.settings.companyName||'CliqueObras')}${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</b><br>Realizado inclui compras, contas pagas, mão de obra e custos da base de cálculo. Projetado contém somente o Planejamento. Gerado em ${new Date().toLocaleString('pt-BR')}.</div>`;
     document.body.appendChild(report);
     document.body.classList.remove('printing-dashboard');
     document.body.classList.add('printing-project');

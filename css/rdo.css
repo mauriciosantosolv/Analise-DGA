@@ -65,6 +65,7 @@
 .employee-form-photo>div:nth-child(2){display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:5px}.employee-form-photo small{color:var(--text3);font-size:.72rem;line-height:1.4}.employee-form-photo>div:nth-child(2)>div{display:flex;gap:7px;flex-wrap:wrap;margin-top:3px}
 .role-directory{display:grid;gap:8px}.role-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:7px;padding:10px 11px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}.role-row>span{display:flex;min-width:0;flex-direction:column}.role-row small{margin-top:2px;color:var(--text3)}
 .rate-card{grid-template-columns:minmax(220px,1fr) 150px 150px 20px;width:100%;color:var(--text);text-align:left}
+.rate-card.inactive{opacity:.58;background:var(--surface2)}
 .permission-projects{margin-top:14px;padding-top:13px;border-top:1px solid var(--border)}
 .permission-projects-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}
 .permission-projects-head>span{display:flex;flex-direction:column}.permission-projects-head small{color:var(--text3)}

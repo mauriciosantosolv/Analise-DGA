@@ -10,7 +10,7 @@ const State={
     start:"07:30",end:"18:18",breakMinutes:60,regular:8.8,overtime50:1,overtime100:0
   }]}],
   rdoFinancial:[{id:"r1",rdoId:"r1",rows:[{
-    employeeId:"e1",commercialRole:"Técnico em Elétrica",sale:1234.5
+    employeeId:"e1",internalRole:"Instrumentista",commercialRole:"Técnico em Elétrica",roleDisplayMode:"client",sale:1234.5
   }]}],
   crew:[{id:"e1",name:"João",registration:"MAT-10",internalRole:"Instrumentista"}],
   projects:[],filters:{},settings:{}
@@ -30,5 +30,9 @@ assert.equal(rows[0].registration,"MAT-10");
 assert.equal(rows[0].role,"Técnico em Elétrica");
 assert.equal(rows[0].hours,9.8);
 assert.equal(rows[0].value,1234.5);
+
+State.rdoFinancial[0].rows[0].roleDisplayMode="internal";
+const internalRows=context.Views.medicoes.measurementRows(State.measurements[0]);
+assert.equal(internalRows[0].role,"Instrumentista");
 
 console.log("Measurement PDF rows tests passed");

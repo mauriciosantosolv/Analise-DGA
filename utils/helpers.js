@@ -19,6 +19,29 @@ Object.assign(U, {
 
   debounce(fn,ms=250){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; },
 
+  formatCnpj(value){
+    const digits=String(value||'').replace(/\D/g,'').slice(0,14);
+    return digits
+      .replace(/^(\d{2})(\d)/,'$1.$2')
+      .replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/,'.$1/$2')
+      .replace(/(\d{4})(\d)/,'$1-$2');
+  },
+
+  validCnpj(value){
+    const digits=String(value||'').replace(/\D/g,'');
+    if(digits.length!==14||/^(\d)\1{13}$/.test(digits)) return false;
+    const digit=base=>{
+      let factor=base.length-7, total=0;
+      for(const char of base){ total+=Number(char)*factor--; if(factor<2) factor=9; }
+      const remainder=total%11;
+      return remainder<2?0:11-remainder;
+    };
+    const first=digit(digits.slice(0,12));
+    const second=digit(digits.slice(0,12)+first);
+    return digits.endsWith(`${first}${second}`);
+  },
+
   icons(){ const raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame : (f)=>setTimeout(f,16); raf(()=>{ try{ lucide.createIcons(); }catch(e){} }); },
 
   // Valores inseridos em atributos HTML e handlers inline precisam de

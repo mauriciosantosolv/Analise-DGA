@@ -7,14 +7,14 @@
  * - normalização e escape de strings
  *
  * Dependências:
- * - database (State.settings.currency em U.money)
+ * - moeda do produto fixa em real brasileiro (BRL)
  *
  * Não modificar:
  * - regras de parsing sem revisar importações e exportações
  */
 
 const U = {
-  money(v){ const cur = State.settings.currency || 'BRL'; return new Intl.NumberFormat('pt-BR',{style:'currency',currency:cur,minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0); },
+  money(v){ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0); },
 
   money2(v){ return this.money(v); },
 

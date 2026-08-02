@@ -243,6 +243,9 @@ Views.medicoes = {
       return (rdo.entries||[]).map(entry=>{
         const snapshot=(financial?.rows||[]).find(row=>String(row.employeeId)===String(entry.employeeId));
         const employee=RDO.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
+        const roleDisplayMode=snapshot?.roleDisplayMode||entry.roleDisplayMode||'client';
+        const internalRole=snapshot?.internalRole||entry.internalRole||employee.internalRole||'';
+        const commercialRole=snapshot?.commercialRole||entry.commercialRole||'';
         const regular=Number(entry.regular)||0;
         const overtime50=Number(entry.overtime50)||0;
         const overtime100=Number(entry.overtime100)||0;
@@ -251,7 +254,7 @@ Views.medicoes = {
           rdoNumber:rdo.number||String(rdo.id),
           registration:entry.employeeRegistration||snapshot?.employeeRegistration||employee.registration||'',
           employeeName:entry.employeeName||snapshot?.employeeName||employee.name||'Colaborador',
-          role:snapshot?.commercialRole||entry.internalRole||employee.internalRole||'',
+          role:roleDisplayMode==='internal'?internalRole:(commercialRole||internalRole),
           start:entry.start||'',end:entry.end||'',breakMinutes:Number(entry.breakMinutes)||0,
           regular,overtime50,overtime100,
           hours:regular+overtime50+overtime100,
@@ -277,10 +280,11 @@ Views.medicoes = {
     const report=document.createElement('section');
     report.id='measurement-print-report';
     const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
     const hours=value=>`${Number(value||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:2})}h`;
     report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
       <header class="measurement-print-head">
-        <div class="measurement-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>CONTRATADA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>Relatório de medição de mão de obra</span></div></div>
+        <div class="measurement-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>CONTRATADA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Relatório de medição de mão de obra</span></div></div>
         <div class="measurement-print-client">${customer.logo?`<img src="${U.esc(customer.logo)}" alt="">`:`<span>${U.esc(U.initials(customer.name))}</span>`}<div><small>CLIENTE</small><b>${U.esc(customer.name)}</b><span>${U.esc(RDO.projectLabel(measurement.projectId))}</span></div></div>
         <div class="measurement-print-number"><small>MEDIÇÃO</small><b>${U.esc(measurement.ref||measurement.id)}</b><span>${U.esc(measurement.status||'Aguardando aprovação')}</span></div>
       </header>

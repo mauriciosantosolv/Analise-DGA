@@ -214,6 +214,18 @@ const RDO = {
     if(!rate) return null;
     return {...rate,...this.baseCostFor(employeeId,rate)};
   },
+  displayRoleFor(projectId,entry,snapshot=null){
+    const employee=this.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
+    const rate=State.laborRates.find(item=>
+      String(item.projectId)===String(projectId)
+      && String(item.employeeId)===String(entry.employeeId)
+      && item.isBaseCost!==true
+    )||null;
+    const mode=snapshot?.roleDisplayMode||entry.roleDisplayMode||rate?.roleDisplayMode||'client';
+    const internal=snapshot?.internalRole||entry.internalRole||employee.internalRole||'';
+    const commercial=snapshot?.commercialRole||entry.commercialRole||rate?.commercialRole||'';
+    return mode==='internal'?internal:(commercial||internal);
+  },
   entryTotals(entry,rate){
     const regular=Number(entry.regular)||0;
     const overtime50=Number(entry.overtime50)||0;
@@ -238,6 +250,7 @@ const RDO = {
         employeeName:employee.name||entry.employeeName||'Colaborador',
         internalRole:employee.internalRole||entry.internalRole||'',
         commercialRole:(rate&&rate.commercialRole)||entry.commercialRole||employee.internalRole||'',
+        roleDisplayMode:(rate&&rate.roleDisplayMode)==='internal'?'internal':'client',
         rate,
         ...totals
       };
@@ -312,6 +325,7 @@ const RDO = {
         employeeRegistration:(State.crew.find(item=>String(item.id)===String(row.employeeId))||{}).registration||'',
         internalRole:row.internalRole,
         commercialRole:row.commercialRole,
+        roleDisplayMode:row.roleDisplayMode,
         regular:Number(row.regular)||0,
         overtime50:Number(row.overtime50)||0,
         overtime100:Number(row.overtime100)||0,
@@ -669,11 +683,18 @@ const RDO = {
           notes:document.getElementById('rdo-notes').value.trim(),
           entries:cards.filter(card=>card.querySelector('.rdo-worker-select input').checked).map(card=>{
             const employee=State.crew.find(x=>String(x.id)===String(card.dataset.employeeId))||{};
+            const rate=State.laborRates.find(item=>
+              String(item.projectId)===String(document.getElementById('rdo-project').value)
+              && String(item.employeeId)===String(card.dataset.employeeId)
+              && item.isBaseCost!==true
+            )||null;
             return {
               employeeId:String(card.dataset.employeeId),
               employeeName:employee.name||'Colaborador',
               employeeRegistration:employee.registration||'',
               internalRole:employee.internalRole||'',
+              commercialRole:rate?.commercialRole||'',
+              roleDisplayMode:rate?.roleDisplayMode==='internal'?'internal':'client',
               start:card.querySelector('[data-field="start"]').value,
               end:card.querySelector('[data-field="end"]').value,
               breakMinutes:U.num(card.querySelector('[data-field="breakMinutes"]').value),
@@ -969,7 +990,10 @@ const RDO = {
       const report=document.createElement('section');
       report.id='rdo-print-report';
       const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+      const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
       const customer=this.projectClient(rdo.projectId);
+      const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
+      const snapshotFor=employeeId=>(financial?.rows||[]).find(row=>String(row.employeeId)===String(employeeId))||null;
       const total=(rdo.entries||[]).reduce(
         (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
       );
@@ -979,7 +1003,7 @@ const RDO = {
       }[rdo.status]||rdo.status;
       report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}<header>
         <div class="rdo-print-identities">
-          <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra</small></span></div>
+          <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</small></span></div>
           <div class="rdo-print-client">
             ${customer.logo?`<img src="${U.esc(customer.logo)}" alt="">`:`<span>${U.esc(U.initials(customer.name))}</span>`}
             <div><small>Cliente</small><b>${U.esc(customer.name)}</b></div>
@@ -996,7 +1020,7 @@ const RDO = {
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
         <table><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(row.internalRole||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${Number(row.breakMinutes)||0} min</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
+        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${Number(row.breakMinutes)||0} min</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
@@ -1045,7 +1069,7 @@ const RDO = {
       <div class="card rdo-description-card"><h3>Serviço realizado</h3><p>${U.esc(rdo.description||'—')}</p>${rdo.location?`<small>${U.esc(rdo.location)}</small>`:''}</div>
       <div class="rdo-detail-workers">${(rdo.entries||[]).map(row=>`<div>
         <span class="avatar-ph">${U.initials(row.employeeName||'CO')}</span>
-        <span><b>${U.esc(row.employeeName||'Colaborador')}</b><small>${U.esc(row.internalRole||'')}</small></span>
+        <span><b>${U.esc(row.employeeName||'Colaborador')}</b><small>${U.esc(this.displayRoleFor(rdo.projectId,row,(financial?.rows||[]).find(item=>String(item.employeeId)===String(row.employeeId)))||'')}</small></span>
         <span><small>Normal</small><b>${U.pct(row.regular||0).replace('%','h')}</b></span>
         <span><small>HE 50%</small><b>${U.pct(row.overtime50||0).replace('%','h')}</b></span>
         <span><small>HE 100%</small><b>${U.pct(row.overtime100||0).replace('%','h')}</b></span>
@@ -1334,8 +1358,8 @@ Views.valoreshh={
       <div class="rate-list">${rows.map(rate=>{
         const employee=RDO.crewMembers().find(x=>String(x.id)===String(rate.employeeId))||{};
         const costs=RDO.baseCostFor(rate.employeeId,rate);
-        return `<${canEdit?'button':'div'} class="rate-card"${canEdit?` onclick="Views.valoreshh.form(${U.jsArg(rate.id)})"`:''}>
-          <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(RDO.projectLabel(rate.projectId))} · ${U.esc(rate.commercialRole||employee.internalRole||'')}</small></span>
+        return `<${canEdit?'button':'div'} class="rate-card ${rate.active===false?'inactive':''}"${canEdit?` onclick="Views.valoreshh.form(${U.jsArg(rate.id)})"`:''}>
+          <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(RDO.projectLabel(rate.projectId))} · ${U.esc(RDO.displayRoleFor(rate.projectId,{employeeId:rate.employeeId,internalRole:employee.internalRole,commercialRole:rate.commercialRole,roleDisplayMode:rate.roleDisplayMode})||'Sem função')} · ${rate.active===false?'Inativo':'Ativo'}</small></span>
           <span><small>Custo padrão</small><b>${U.money(costs.costRegular)}/h</b></span>
           <span><small>Venda normal</small><b>${U.money(rate.saleRegular)}/h</b></span>
           <i data-lucide="chevron-right"></i>
@@ -1348,16 +1372,19 @@ Views.valoreshh={
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('labor_rates')) return;
     const employees=RDO.crewMembers();
     const rate=id?State.laborRates.find(x=>String(x.id)===String(id)):{
-      projectId:this.projectFilter||State.projects[0]?.id||'',employeeId:employees[0]?.id||'',commercialRole:'',
+      projectId:this.projectFilter||State.projects[0]?.id||'',employeeId:employees[0]?.id||'',commercialRole:'',roleDisplayMode:'client',
       costRegular:0,cost50:0,cost100:0,saleRegular:0,sale50:0,sale100:0,active:true
     };
     if(!State.projects.length||!employees.length) return UI.toast('Cadastre um projeto e um colaborador antes de configurar valores.','warn',6500);
     const field=(label,key)=>`<div><label>${label}</label><input id="rate-${key}" type="number" min="0" step="0.01" value="${Number(rate[key])||''}"></div>`;
     const costs=RDO.baseCostFor(rate.employeeId,rate);
+    const displayMode=rate.roleDisplayMode==='internal'?'internal':'client';
     UI.modal({title:id?'Editar valores':'Configurar valores',wide:true,body:`<div class="form-grid">
       <div><label>Projeto *</label><select id="rate-project">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Colaborador *</label><select id="rate-employee">${employees.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
-      <div class="full"><label>Função apresentada ao cliente</label><input id="rate-role" maxlength="140" value="${U.esc(rate.commercialRole||'')}"></div>
+      <div><label>Função exibida nos documentos</label><select id="rate-role-mode"><option value="client" ${displayMode==='client'?'selected':''}>Função externa do cliente</option><option value="internal" ${displayMode==='internal'?'selected':''}>Função interna do colaborador</option></select><small>Define a função do PDF do RDO e da medição.</small></div>
+      <div><label>Status do valor HH</label><select id="rate-active"><option value="true" ${rate.active!==false?'selected':''}>Ativo</option><option value="false" ${rate.active===false?'selected':''}>Inativo</option></select><small>Valores inativos não entram em novos cálculos.</small></div>
+      <div class="full" id="rate-role-wrap" ${displayMode==='internal'?'hidden':''}><label>Função externa apresentada ao cliente *</label><input id="rate-role" maxlength="140" value="${U.esc(rate.commercialRole||'')}" placeholder="Ex.: Técnico em Elétrica"></div>
       <div class="full import-log" id="rate-cost-summary">Custo padrão do colaborador: <b>${U.money(costs.costRegular)}/h</b> · HE 50%: <b>${U.money(costs.cost50)}/h</b> · HE 100%: <b>${U.money(costs.cost100)}/h</b>.</div>
       ${field('Venda · hora normal','saleRegular')}
       ${field('Venda · HE 50%','sale50')}
@@ -1367,22 +1394,29 @@ Views.valoreshh={
       const selectedCosts=RDO.baseCostFor(event.target.value);
       document.getElementById('rate-cost-summary').innerHTML=`Custo padrão do colaborador: <b>${U.money(selectedCosts.costRegular)}/h</b> · HE 50%: <b>${U.money(selectedCosts.cost50)}/h</b> · HE 100%: <b>${U.money(selectedCosts.cost100)}/h</b>.`;
     };
+    document.getElementById('rate-role-mode').onchange=event=>{
+      document.getElementById('rate-role-wrap').hidden=event.target.value==='internal';
+    };
     document.getElementById('rate-save').onclick=async()=>{
       const projectId=document.getElementById('rate-project').value;
       const employeeId=document.getElementById('rate-employee').value;
       const existing=State.laborRates.find(x=>String(x.projectId)===String(projectId)&&String(x.employeeId)===String(employeeId)&&String(x.id)!==String(id));
       if(existing) return UI.toast('Já existe uma configuração para este colaborador no projeto.','warn');
+      const roleDisplayMode=document.getElementById('rate-role-mode').value;
+      const commercialRole=document.getElementById('rate-role').value.trim();
+      if(roleDisplayMode==='client'&&!commercialRole)
+        return UI.toast('Informe a função externa que será apresentada ao cliente.','warn',6000);
       const employeeCosts=RDO.baseCostFor(employeeId,rate);
       const obj={
         ...(id?rate:{id:`${projectId}:${employeeId}`,createdAt:new Date().toISOString()}),
-        projectId,employeeId,commercialRole:document.getElementById('rate-role').value.trim(),
+        projectId,employeeId,commercialRole,roleDisplayMode,
         costRegular:employeeCosts.costRegular,
         saleRegular:U.num(document.getElementById('rate-saleRegular').value),
         cost50:employeeCosts.cost50,
         sale50:U.num(document.getElementById('rate-sale50').value),
         cost100:employeeCosts.cost100,
         sale100:U.num(document.getElementById('rate-sale100').value),
-        active:true,updatedAt:new Date().toISOString()
+        active:document.getElementById('rate-active').value==='true',updatedAt:new Date().toISOString()
       };
       await DB.put('labor_rates',obj); await State.reload(); UI.close(); UI.toast('Valores salvos','success'); App.render();
     };

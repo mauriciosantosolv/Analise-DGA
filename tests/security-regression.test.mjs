@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.3"/);
+assert.match(html, /name="application-version" content="3\.0\.4"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.3/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.4/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -154,5 +154,13 @@ assert.match(v303Sql, /pdfLetterhead/);
 assert.match(v303Sql, /rdoDailyHours/);
 assert.match(v303Sql, /Somente proprietário ou administrador/);
 assert.doesNotMatch(v303Sql, /auth\.role\(\)/);
+
+const v304Sql = read("supabase/ATUALIZACAO-v3.0.4-CNPJ-PNG-HH-RDO.sql");
+assert.match(v304Sql, /companyCnpj/);
+assert.match(v304Sql, /jpeg\|png/);
+assert.match(v304Sql, /roleDisplayMode/);
+assert.match(v304Sql, /security invoker/);
+assert.match(v304Sql, /set search_path=''/);
+assert.doesNotMatch(v304Sql, /auth\.role\(\)/);
 
 console.log("Security regression tests passed");

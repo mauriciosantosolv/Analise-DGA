@@ -12,6 +12,13 @@
  * Não modificar:
  * - a posição deste arquivo como último <link> no index.html
  */
+/* ===== Coolicons ===== */
+.coolicon{display:inline-block;width:18px;height:18px;flex:0 0 auto;background-color:currentColor;-webkit-mask-image:var(--coolicon-url);mask-image:var(--coolicon-url);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;vertical-align:-.16em}
+.nav-item .coolicon,.icon-btn .coolicon{width:17px;height:17px}
+.btn .coolicon,.k-label .coolicon{width:16px;height:16px}
+.empty .coolicon{width:24px;height:24px}
+.company-settings-heading .coolicon{width:17px;height:17px}
+
 /* ===== Buttons ===== */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;font-weight:600;font-size:.88rem;border:1px solid transparent;transition:all .15s;white-space:nowrap}
 .btn svg{width:15px;height:15px}
@@ -117,6 +124,7 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
 /* ===== Logo sem borda e sem fundo ===== */
 .logo-clean{border:none!important;background:transparent!important}
 .pdf-letterhead{display:none}
+.pdf-company-meta{display:none}
 /* ===== Impressão / PDF: oculta menus e expande conteúdo ===== */
 @media print{
   #sidebar,#topbar,#rightbar,#finance-ticker,.toolbar,.filters-bar,#toasts,.drop-zone,#modal-overlay,.loading-overlay,.section-title button{display:none!important}
@@ -134,11 +142,12 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   body.printing-project .pdf-letterhead,
   body.printing-dashboard .pdf-letterhead,
   body.printing-measurement .pdf-letterhead{display:block!important;position:fixed;inset:0;z-index:0;pointer-events:none}
-  .pdf-letterhead img{display:block;width:100%;height:100%;object-fit:fill}
+  .pdf-letterhead img{display:block;width:100%;height:100%;object-fit:contain;object-position:center top;background:#fff}
   #rdo-print-report>:not(.pdf-letterhead),
   #project-print-report>:not(.pdf-letterhead),
   #measurement-print-report>:not(.pdf-letterhead),
   body.printing-dashboard #app{position:relative;z-index:1}
+  body.printing-dashboard .pdf-company-meta{display:block!important;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid #dbe2ea;color:#334155;font-size:9px;font-weight:700}
 }
 
 /* Planejamento: datas clicáveis para inclusão rápida */

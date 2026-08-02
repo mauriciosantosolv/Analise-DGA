@@ -1064,7 +1064,18 @@ tbody tr:last-child td {
 }
 
 .settings-ticker {
-  grid-column: span 6;
+  grid-column: 1 / -1;
+}
+
+#ticker-projects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#ticker-projects .check-item {
+  min-width: 0;
+  margin: 0;
 }
 
 #company-settings-card {
@@ -1301,6 +1312,7 @@ tbody tr:last-child td {
 @media (max-width: 760px) {
   .company-shift-grid { grid-template-columns: 1fr 1fr; }
   .letterhead-control { grid-template-columns: 1fr; }
+  #ticker-projects { grid-template-columns: 1fr; }
 
   .cloud-auth-shell {
     width: 100%;

@@ -62,6 +62,11 @@ assert.equal(result.costTotal,570);
 assert.equal(result.saleTotal,1140);
 assert.equal(result.missingRates.length,0);
 assert.equal(RDO.rateFor("p-hh","e-1").costRegular,60);
+assert.equal(RDO.displayRoleFor("p-hh",{employeeId:"e-1"}),"Técnico em Elétrica");
+
+state.laborRates[1].roleDisplayMode="internal";
+assert.equal(RDO.displayRoleFor("p-hh",{employeeId:"e-1"}),"Instrumentista");
+state.laborRates[1].roleDisplayMode="client";
 
 const missing = RDO.calculate({
   projectId:"p-hh",
@@ -70,6 +75,10 @@ const missing = RDO.calculate({
 assert.equal(missing.missingRates.length,1);
 assert.equal(missing.costTotal,0);
 assert.equal(missing.saleTotal,0);
+
+state.laborRates[1].active=false;
+assert.equal(RDO.rateFor("p-hh","e-1"),null);
+state.laborRates[1].active=true;
 
 assert.doesNotThrow(()=>RDO.validateAttachmentFile({
   name:"campo.jpg",type:"image/jpeg",size:1024

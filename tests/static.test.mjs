@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 assert.match(html, /assets\/logo-clique\.png/);
 assert.match(html, /assets\/apple-touch-icon\.png/);
+assert.match(html, /assets\/coolicons\/coolicons\.js/);
+assert.doesNotMatch(html, /src="assets\/vendor\/lucide\.min\.js/);
 const references = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
   .map(match => match[1].split("?")[0])
   .filter(reference => !/^(?:https?:|data:|#)/.test(reference));
@@ -58,6 +60,9 @@ assert.match(rdo, /Buscar por matrícula, nome ou cargo/);
 assert.match(rdo, /rolesForm\(\)/);
 assert.match(rdo, /rdoDailyHours/);
 assert.match(rdo, /employeeRegistration/);
+assert.match(rdo, /roleDisplayMode/);
+assert.match(rdo, /displayRoleFor/);
+assert.match(rdo, /id="rate-active"/);
 assert.doesNotMatch(rdo, /users-round/);
 
 const measurements = fs.readFileSync(path.join(root, "modules/medicoes/medicoes.js"), "utf8");
@@ -89,11 +94,20 @@ const configuration = fs.readFileSync(path.join(root, "modules/configuracoes/con
 assert.match(configuration, /cfg-rdo-daily-hours/);
 assert.match(configuration, /cfg-letterhead-btn/);
 assert.match(configuration, /pdfLetterhead/);
+assert.match(configuration, /companyCnpj/);
+assert.match(configuration, /image\/jpeg,image\/png/);
+assert.doesNotMatch(configuration, /id="cfg-currency"/);
+assert.doesNotMatch(configuration, /Preferências do sistema/);
 
 const premium = fs.readFileSync(path.join(root, "css/premium.css"), "utf8");
 assert.match(premium, /--bg: #f4f4f5/);
 assert.match(premium, /--text: #27272a/);
 assert.match(premium, /#company-settings-card[\s\S]*grid-column: 1 \/ -1/);
+assert.match(premium, /#ticker-projects[\s\S]*grid-template-columns: repeat\(3/);
+
+const coolicons = fs.readFileSync(path.join(root, "assets/coolicons/coolicons.js"), "utf8");
+assert.match(coolicons, /window\.CoolIcons/);
+assert.ok(fs.existsSync(path.join(root, "assets/coolicons/icons/settings.svg")));
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 for (const icon of manifest.icons) {

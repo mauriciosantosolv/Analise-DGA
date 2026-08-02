@@ -2,7 +2,7 @@
  * Módulo Configurações (configuracoes.js)
  *
  * Responsabilidades:
- * - tela de configurações (tema, moeda, marca)
+ * - tela de configurações da empresa, marca, jornada e documentos
  * - tela e rotinas de backup: exportar e restaurar
  *
  * Dependências:
@@ -159,7 +159,8 @@ Views.configuracoes = {
           ${cloudConnected&&canManageCompany?'<button class="btn btn-primary btn-sm" onclick="Views.configuracoes.inviteForm()"><i data-lucide="user-plus"></i>Convidar usuário</button>':''}
         </div>
         <div class="form-grid">
-          <div class="full"><label>Nome da empresa</label><input id="cfg-name" maxlength="120" value="${U.esc(cloudConnected?(org?.name||''):(State.settings.companyName||''))}" placeholder="Nome da organização" ${canManageCompany?'':'disabled'}></div>
+          <div><label>Nome da empresa</label><input id="cfg-name" maxlength="120" value="${U.esc(cloudConnected?(org?.name||''):(State.settings.companyName||''))}" placeholder="Nome da organização" ${canManageCompany?'':'disabled'}></div>
+          <div><label>CNPJ da empresa</label><input id="cfg-cnpj" inputmode="numeric" maxlength="18" value="${U.esc(U.formatCnpj(State.settings.companyCnpj||''))}" placeholder="00.000.000/0000-00" ${canManageCompany?'':'disabled'}><small>Será exibido nos documentos PDF.</small></div>
           <div class="full" style="display:flex;gap:12px;align-items:center">
             <div id="cfg-logo-preview">${U.safeImageSrc(State.settings.companyLogo)?`<img class="avatar logo-clean" style="width:48px;height:48px" src="${U.esc(U.safeImageSrc(State.settings.companyLogo))}">`:`<span class="avatar-ph" style="width:48px;height:48px"><i data-lucide="zap" style="width:18px;height:18px"></i></span>`}</div>
             ${canManageCompany?'<button class="btn btn-ghost btn-sm" id="cfg-logo-btn"><i data-lucide="image-plus"></i>Alterar logo</button>':'<small style="color:var(--text3)">Somente proprietário ou administrador pode alterar a identidade da empresa.</small>'}</div>
@@ -173,10 +174,10 @@ Views.configuracoes = {
             </div>
           </div>
           <div class="full company-settings-section">
-            <div class="company-settings-heading"><span><i data-lucide="file-image"></i></span><div><h3>Papel timbrado dos PDFs</h3><small>Envie uma imagem JPG em proporção A4. Ela será aplicada ao RDO, à medição e aos relatórios do dashboard.</small></div></div>
+            <div class="company-settings-heading"><span><i data-lucide="file-image"></i></span><div><h3>Papel timbrado dos PDFs</h3><small>Envie uma imagem JPG ou PNG em proporção A4. A escala será preservada no RDO, na medição e nos relatórios do dashboard.</small></div></div>
             <div class="letterhead-control">
               <div id="cfg-letterhead-preview">${U.safeImageSrc(State.settings.pdfLetterhead)?`<img src="${U.esc(U.safeImageSrc(State.settings.pdfLetterhead))}" alt="Prévia do papel timbrado">`:'<span><i data-lucide="image"></i>Sem papel timbrado</span>'}</div>
-              ${canManageCompany?`<div><button class="btn btn-ghost btn-sm" id="cfg-letterhead-btn" type="button"><i data-lucide="upload"></i>${State.settings.pdfLetterhead?'Substituir JPG':'Adicionar JPG'}</button>${State.settings.pdfLetterhead?'<button class="btn btn-ghost btn-sm" id="cfg-letterhead-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div>`:''}
+              ${canManageCompany?`<div><button class="btn btn-ghost btn-sm" id="cfg-letterhead-btn" type="button"><i data-lucide="upload"></i>${State.settings.pdfLetterhead?'Substituir imagem':'Adicionar JPG/PNG'}</button>${State.settings.pdfLetterhead?'<button class="btn btn-ghost btn-sm" id="cfg-letterhead-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div>`:''}
             </div>
           </div>
         </div>
@@ -187,16 +188,7 @@ Views.configuracoes = {
           <div id="team-content"><div class="empty"><i data-lucide="loader-circle"></i><br>Carregando equipe…</div></div>
         </div>`:''}
       </section>
-      <section class="card settings-card settings-company">
-        <h2 style="margin-bottom:14px">Preferências do sistema</h2>
-        <div class="form-grid">
-          <div><label>Tema</label><select id="cfg-theme"><option value="light" ${State.settings.theme!=='dark'?'selected':''}>Claro</option><option value="dark" ${State.settings.theme==='dark'?'selected':''}>Escuro</option></select></div>
-          <div><label>Moeda</label><select id="cfg-currency">${['BRL','USD','EUR'].map(c=>`<option ${c===(State.settings.currency||'BRL')?'selected':''}>${c}</option>`).join('')}</select></div>
-        </div>
-        <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <button class="btn btn-primary" id="cfg-save"><i data-lucide="check"></i>Salvar preferências</button></div>
-      </section>
-      <section class="card settings-card settings-ticker">
+      <section class="card settings-card settings-card-wide settings-ticker">
         <h2 style="margin-bottom:6px">Projetos no ticker financeiro</h2>
         <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha quais projetos terão saldo passando na faixa superior do sistema.</p>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
@@ -269,7 +261,7 @@ Views.configuracoes = {
       letterhead='';
       document.getElementById('cfg-letterhead-preview').innerHTML='<span><i data-lucide="image"></i>Sem papel timbrado</span>';
       document.getElementById('cfg-letterhead-remove')?.remove();
-      letterheadButton.innerHTML='<i data-lucide="upload"></i>Adicionar JPG';
+      letterheadButton.innerHTML='<i data-lucide="upload"></i>Adicionar JPG/PNG';
       U.icons();
     };
     const ensureLetterheadRemove=()=>{
@@ -287,23 +279,25 @@ Views.configuracoes = {
     if(letterheadButton&&letterhead) ensureLetterheadRemove();
     if(letterheadButton) letterheadButton.onclick=()=>{
       const input=document.getElementById('img-input');
-      input.accept='.jpg,.jpeg,image/jpeg';
+      input.accept='.jpg,.jpeg,.png,image/jpeg,image/png';
       input.onchange=()=>{
         const file=input.files[0]; input.value=''; if(!file) return;
-        const isJpeg=String(file.type||'').toLowerCase()==='image/jpeg'||/\.jpe?g$/i.test(file.name||'');
-        if(!isJpeg)
-          return UI.toast('O papel timbrado deve estar em formato JPG.','warn',5500);
+        const type=String(file.type||'').toLowerCase();
+        const outputType=type==='image/png'||/\.png$/i.test(file.name||'')?'image/png':
+          (type==='image/jpeg'||/\.jpe?g$/i.test(file.name||'')?'image/jpeg':'');
+        if(!outputType)
+          return UI.toast('O papel timbrado deve estar em formato JPG ou PNG.','warn',5500);
         const reader=new FileReader();
         reader.onload=async event=>{
           try{
-            letterhead=await U.resizeImage(event.target.result,1800,'image/jpeg',.86);
+            letterhead=await U.resizeImage(event.target.result,1800,outputType,outputType==='image/png'?1:.88);
             document.getElementById('cfg-letterhead-preview').innerHTML=`<img src="${U.esc(letterhead)}" alt="Prévia do papel timbrado">`;
-            letterheadButton.innerHTML='<i data-lucide="upload"></i>Substituir JPG';
+            letterheadButton.innerHTML='<i data-lucide="upload"></i>Substituir imagem';
             ensureLetterheadRemove();
             U.icons();
           }catch(err){UI.toast(U.esc(err.message||err),'error',6500);}
         };
-        reader.readAsDataURL(String(file.type||'').toLowerCase()==='image/jpeg'?file:file.slice(0,file.size,'image/jpeg'));
+        reader.readAsDataURL(file);
       };
       input.click();
     };
@@ -318,6 +312,8 @@ Views.configuracoes = {
     if(companySave) companySave.onclick=async()=>{
       const name=document.getElementById('cfg-name').value.trim();
       if(!name) return UI.toast('Informe o nome da empresa.','warn');
+      const cnpj=U.formatCnpj(document.getElementById('cfg-cnpj').value);
+      if(cnpj&&!U.validCnpj(cnpj)) return UI.toast('Informe um CNPJ válido.','warn',5500);
       const shiftStart=document.getElementById('cfg-rdo-start').value;
       const shiftEnd=document.getElementById('cfg-rdo-end').value;
       const shiftBreak=U.num(document.getElementById('cfg-rdo-break').value);
@@ -328,6 +324,7 @@ Views.configuracoes = {
         UI.loading(true,'Salvando configurações da empresa…');
         if(cloudConnected) await Cloud.updateOrganizationName(name);
         await State.setSetting('companyName',name);
+        await State.setSetting('companyCnpj',cnpj);
         await State.setSetting('companyLogo',logo);
         await State.setSetting('rdoShiftStart',shiftStart);
         await State.setSetting('rdoShiftEnd',shiftEnd);
@@ -342,13 +339,8 @@ Views.configuracoes = {
         UI.toast('Não foi possível salvar a empresa: '+U.esc(err.message||err),'error',7000);
       }
     };
-    document.getElementById('cfg-save').onclick = async () => {
-      await State.setSetting('currency', document.getElementById('cfg-currency').value);
-      const theme = document.getElementById('cfg-theme').value;
-      await State.setSetting('theme', theme);
-      App.applyTheme(theme); App.applyBranding();
-      UI.toast('Configurações salvas', 'success');
-    };
+    const cnpjInput=document.getElementById('cfg-cnpj');
+    if(cnpjInput&&!cnpjInput.disabled) cnpjInput.oninput=()=>{cnpjInput.value=U.formatCnpj(cnpjInput.value);};
     if(cloudConnected) this.loadTeam();
     U.icons();
   },
