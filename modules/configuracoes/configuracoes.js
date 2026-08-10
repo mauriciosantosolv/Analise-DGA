@@ -136,14 +136,22 @@ Views.configuracoes = {
     const currentUser=cloudConnected?(Cloud.user()||{}):{};
     const currentDisplayName=String((currentUser.user_metadata&&currentUser.user_metadata.full_name)||'').trim();
     const canManageCompany=!cloudConnected||['owner','admin'].includes(currentRole);
+    const ownProfilePhoto=cloudConnected&&typeof Cloud.profileAvatarUrl==='function'?Cloud.profileAvatarUrl():'';
+    const hasOwnProfilePhoto=cloudConnected&&typeof Cloud.profileAvatarPath==='function'&&!!Cloud.profileAvatarPath();
+    const profileFallback=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const profileImage=ownProfilePhoto||profileFallback;
     $c().innerHTML = `
       <div class="settings-page">
       ${cloudConnected?`<section class="card settings-card settings-card-wide settings-account">
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <div class="account-summary" style="padding:0;flex:1;min-width:0"><i data-lucide="user-circle"></i><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
+          <div class="account-summary" style="padding:0;flex:1;min-width:0"><div class="profile-avatar-preview"><img src="${U.esc(profileImage)}" alt="${ownProfilePhoto?'Foto do perfil':'Logo da empresa'}"></div><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
           <button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button>
         </div>
         ${Cloud.organizations().length>1?`<div style="margin-top:12px;max-width:420px"><label>Organização ativa</label><select id="cfg-active-org">${Cloud.organizations().map(x=>`<option value="${U.esc(x.id)}" ${x.id===org.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select></div>`:''}
+        <div class="profile-photo-editor">
+          <div><b>Sua foto de perfil</b><small>${hasOwnProfilePhoto?'Foto pessoal ativa.':'Sem foto pessoal: a logo da empresa é usada automaticamente.'}</small></div>
+          <div><button class="btn btn-ghost btn-sm" id="cfg-profile-photo-select" type="button"><i data-lucide="image-plus"></i>${hasOwnProfilePhoto?'Alterar foto':'Escolher foto'}</button>${hasOwnProfilePhoto?'<button class="btn btn-ghost btn-sm" id="cfg-profile-photo-remove" type="button"><i data-lucide="trash-2"></i>Usar logo da empresa</button>':''}</div>
+        </div>
         <div class="profile-name-editor">
           <label for="cfg-user-name">Seu nome no sistema</label>
           <div class="profile-name-row">
@@ -240,6 +248,9 @@ Views.configuracoes = {
       document.getElementById('cfg-user-name').onkeydown=e=>{
         if(e.key==='Enter'){ e.preventDefault(); this.saveOwnName(); }
       };
+      document.getElementById('cfg-profile-photo-select').onclick=()=>this.selectOwnPhoto();
+      const removePhoto=document.getElementById('cfg-profile-photo-remove');
+      if(removePhoto) removePhoto.onclick=()=>this.removeOwnPhoto();
     }
     const logoButton=document.getElementById('cfg-logo-btn');
     if(logoButton) logoButton.onclick = () => {
@@ -362,6 +373,47 @@ Views.configuracoes = {
       UI.toast('Não foi possível atualizar seu nome: '+U.esc(err.message),'error',6500);
       if(input) input.focus();
     }
+  },
+  selectOwnPhoto(){
+    const input=document.getElementById('img-input');
+    input.accept='image/png,image/jpeg,image/webp';
+    input.onchange=()=>{
+      const file=input.files[0]; input.value=''; if(!file) return;
+      if(!['image/png','image/jpeg','image/webp'].includes(String(file.type||'').toLowerCase()))
+        return UI.toast('Use uma foto JPG, PNG ou WebP.','warn',5500);
+      const reader=new FileReader();
+      reader.onload=async event=>{
+        try{
+          UI.loading(true,'Atualizando sua foto de perfil…');
+          const photo=await U.resizeImage(event.target.result,512,'image/jpeg',.86);
+          await Cloud.updateProfileAvatar(photo);
+          UI.loading(false);
+          App.applyBranding();
+          this.render();
+          UI.toast('Foto de perfil atualizada','success');
+        }catch(err){
+          UI.loading(false);
+          UI.toast('Não foi possível atualizar a foto: '+U.esc(err.message||err),'error',7000);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  },
+  removeOwnPhoto(){
+    UI.confirm('Remover sua foto pessoal e voltar a usar a logo da empresa?',async()=>{
+      try{
+        UI.loading(true,'Removendo sua foto de perfil…');
+        await Cloud.removeProfileAvatar();
+        UI.loading(false);
+        App.applyBranding();
+        this.render();
+        UI.toast('A logo da empresa voltou a ser usada no perfil','success');
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível remover a foto: '+U.esc(err.message||err),'error',7000);
+      }
+    },false);
   },
   async loadTeam(){
     const box=document.getElementById('team-content'); if(!box) return;

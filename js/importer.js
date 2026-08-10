@@ -4,7 +4,7 @@
  * Responsabilidades:
  * - leitura de planilhas-modelo (XLSX) com mapeamento por sinônimos
  * - importação de orçamentos (usada pelo módulo orcamentos)
- * - importação de compras, contas pagas e mão de obra com deduplicação
+ * - importação cumulativa de compras, contas pagas e mão de obra
  * - criação automática de projetos e categorias
  *
  * Dependências:
@@ -14,7 +14,7 @@
  *
  * Não modificar:
  * - sinônimos de colunas (MAPS) sem validar com as planilhas-modelo
- * - regra de deduplicação por multiplicidade
+ * - regra cumulativa: linhas válidas nunca são descartadas por semelhança
  */
 
 /* ================= [5] IMPORTADORES =================
@@ -147,17 +147,26 @@ const Importer = (() => {
     });
   }
 
-  // Separa "649 Caramuru São Simão" em proposta=649 e nome
+  // Separa o código inicial do nome sem remover pontos, traços ou letras.
+  // Exemplos: "649 Caramuru" e "815-USF Unidade".
   function splitProject(raw){
-    const s = String(raw??'').trim();
-    const m = s.match(/^(\d+)\s*[-–—]?\s*(.*)$/);
-    return m ? {proposal:m[1], name:(m[2]||'').trim()} : {proposal:s, name:''};
+    const s = String(raw??'').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g,'-').trim();
+    // Espaços ao redor de um traço continuam sendo tratados como separador
+    // legado entre proposta e nome ("649 - Caramuru"). No código composto, o
+    // separador vem junto: "815-USF" ou "815.02-A".
+    const legacy = s.match(/^([a-z0-9]+)\s+-\s+(.+)$/i);
+    if(legacy) return {proposal:U.projectCode(legacy[1]),name:String(legacy[2]||'').trim()};
+    const m = s.match(/^([a-z0-9]+(?:[.\-_/][a-z0-9]+)*)\s+(.+)$/i);
+    return m
+      ? {proposal:U.projectCode(m[1]), name:String(m[2]||'').trim()}
+      : {proposal:U.projectCode(s), name:''};
   }
 
   // Garante que o projeto existe; cria automaticamente se necessário
   async function ensureProject(raw, created){
     const {proposal, name} = splitProject(raw);
-    let p = State.projects.find(x => x.proposal === proposal);
+    const proposalKey=U.projectCodeKey(proposal);
+    let p = State.projects.find(x => U.projectCodeKey(x.proposal) === proposalKey);
     if(!p){
       p = {id:U.id(), proposal, name, client:'', clientLogo:'', saleValue:0, type:'Obra',
            status:'Em andamento', start:'', deadline:'', expectedEnd:'', realEnd:'', notes:'', createdAt:Date.now()};
@@ -212,11 +221,6 @@ const Importer = (() => {
     const critical = missing.filter(f => ['project','value','category'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de compras: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
-    // Deduplicação por multiplicidade: reimportar o mesmo arquivo não duplica nada,
-    // mas lançamentos legitimamente idênticos (ex.: parcelas iguais) são preservados.
-    const existingCount = {};
-    State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
-    const seenCount = {};
     const records = [];
     for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
@@ -235,9 +239,6 @@ const Importer = (() => {
         value:val, date: date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'purchase'
       };
-      rec.dedupe = [p.proposal, rec.order, rec.supplier, cat, rec.desc, rec.value, rec.date].join('|');
-      seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
-      if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -254,9 +255,7 @@ const Importer = (() => {
     const critical = missing.filter(f => ['project','category','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de contas pagas: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
-    const existingCount = {};
-    State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
-    const seenCount = {}, records = [];
+    const records = [];
     for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
       const rawProj = r[cols.project], cat = String(r[cols.category]??'').trim(), val = U.num(r[cols.value]);
@@ -274,9 +273,6 @@ const Importer = (() => {
         date:date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'paidAccount'
       };
-      rec.dedupe = ['paidAccount', p.proposal, cat, account, desc, rec.value, rec.date].join('|');
-      seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
-      if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -294,9 +290,7 @@ const Importer = (() => {
     const critical = missing.filter(f => ['project','value','date'].includes(f));
     if(critical.length) return {error:`Colunas obrigatórias não reconhecidas no modelo de mão de obra: ${critical.join(', ')}. Cabeçalho encontrado: ${headerRow.filter(Boolean).join(' | ')}`};
     const created = new Set(); let added = 0; const skipped = [];
-    const existingCount = {};
-    State.purchases.forEach(x => { if(x.dedupe) existingCount[x.dedupe] = (existingCount[x.dedupe]||0)+1; });
-    const seenCount = {}, records = [];
+    const records = [];
     const laborCategory = 'Mão de Obra';
     for(let i=headerIndex+1; i<rows.length; i++){
       const r = rows[i]; if(!r || r.every(c=>c==null||c==='')) continue;
@@ -314,9 +308,6 @@ const Importer = (() => {
         date:date ? U.isoDate(date) : '', costCenter:category,
         importedAt:Date.now(), file:file.name, sourceType:'labor'
       };
-      rec.dedupe = ['labor', p.proposal, rec.supplier, rec.order, rec.desc, rec.value, rec.date].join('|');
-      seenCount[rec.dedupe] = (seenCount[rec.dedupe]||0)+1;
-      if(seenCount[rec.dedupe] <= (existingCount[rec.dedupe]||0)){ skipped.push(i+1); continue; }
       records.push(rec); added++;
     }
     await DB.bulkPut('purchases', records);
@@ -371,7 +362,7 @@ const Importer = (() => {
     if(s.projects.size) lines.push(`✔ ${s.projects.size} projeto(s) novo(s) identificado(s): ${[...s.projects].join(', ')}`);
     if(s.saleUpdates) lines.push(`✔ ${s.saleUpdates} valor(es) de venda atualizado(s)`);
     lines.push(`✔ ${s.added} registro(s) adicionado(s) ao banco`);
-    lines.push(s.skipped.length ? `⚠ ${s.skipped.length} linha(s) ignorada(s) por inconsistência ou duplicidade (linhas: ${s.skipped.slice(0,15).join(', ')}${s.skipped.length>15?'…':''})` : `✔ Nenhum erro encontrado`);
+    lines.push(s.skipped.length ? `⚠ ${s.skipped.length} linha(s) ignorada(s) por dados obrigatórios ausentes ou inválidos (linhas: ${s.skipped.slice(0,15).join(', ')}${s.skipped.length>15?'…':''})` : `✔ Nenhum erro encontrado`);
     return `<div class="import-log">${lines.map(U.esc).join('<br>')}</div>`;
   }
 
@@ -403,5 +394,5 @@ const Importer = (() => {
     Views.financeiro.showImportReconciliation(ids);
   }
 
-  return { pick, handle, pickModel, clearModel, saveModel, reconcileLast, KIND_LABELS };
+  return { pick, handle, pickModel, clearModel, saveModel, reconcileLast, projectParts:splitProject, KIND_LABELS };
 })();

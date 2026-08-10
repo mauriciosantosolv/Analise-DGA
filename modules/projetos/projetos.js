@@ -87,8 +87,12 @@ Views.projetos = {
         <button class="btn btn-primary" id="f-save"><i data-lucide="check"></i>Salvar</button>`
     });
     document.getElementById('f-save').onclick = async () => {
-      const proposal = document.getElementById('f-proposal').value.trim();
+      const proposal = U.projectCode(document.getElementById('f-proposal').value);
       if(!proposal) return UI.toast('Informe o número da proposta', 'warn');
+      const duplicate=State.projects.find(project=>
+        String(project.id)!==String(id||'') && U.projectCodeKey(project.proposal)===U.projectCodeKey(proposal)
+      );
+      if(duplicate) return UI.toast(`Já existe o projeto ${U.esc(U.projLabel(duplicate))}.`, 'warn', 6000);
       const obj = { ...(id?p:{id:U.id(),createdAt:Date.now(),clientLogo:''}), proposal,
         name:document.getElementById('f-name').value.trim(), client:document.getElementById('f-client').value.trim(),
         saleValue:U.num(document.getElementById('f-sale').value), type:document.getElementById('f-type').value,

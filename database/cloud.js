@@ -14,6 +14,7 @@ const Cloud = (() => {
   const LEGACY_BOUND_USER_KEY = 'clique_obras_local_owner';
   const ACTIVE_ORG_KEY = 'clique_obras_active_organization';
   const RDO_BUCKET = 'rdo-evidencias';
+  const PROFILE_BUCKET = 'profile-avatars';
   const ALL_STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
     'rdos','crew','labor_rates','rdo_financial'
@@ -32,6 +33,7 @@ const Cloud = (() => {
   let realtimeStatus = 'CLOSED';
   let warnedOffline = false;
   let accessDeniedMessage = '';
+  let profileContext = {avatarPath:'',avatarUrl:'',avatarPromise:null};
   const recordVersions = new Map();
   const pendingWriteEchoes = new Map();
   const pendingDeleteEchoes = new Map();
@@ -50,7 +52,11 @@ const Cloud = (() => {
     return session;
   }
   function saveSession(data){
-    if(!data){ session=null; orgContext={organizations:[],active:null}; localStorage.removeItem(SESSION_KEY); return; }
+    if(!data){
+      if(profileContext.avatarUrl) URL.revokeObjectURL(profileContext.avatarUrl);
+      profileContext={avatarPath:'',avatarUrl:'',avatarPromise:null};
+      session=null; orgContext={organizations:[],active:null}; localStorage.removeItem(SESSION_KEY); return;
+    }
     const previousUser = session && session.user;
     const expiresAt = data.expires_at
       ? Number(data.expires_at) * (Number(data.expires_at) < 1000000000000 ? 1000 : 1)
@@ -245,7 +251,7 @@ const Cloud = (() => {
     const organizations=await request(`/rest/v1/organizations?select=id,name,created_by,created_at&id=in.(${ids.map(encodeURIComponent).join(',')})`, {
       headers:authHeaders(false)
     }) || [];
-    const profiles=await request(`/rest/v1/profiles?select=active_organization_id&id=eq.${encodeURIComponent(user().id)}&limit=1`, {
+    const profiles=await request(`/rest/v1/profiles?select=active_organization_id,avatar_path&id=eq.${encodeURIComponent(user().id)}&limit=1`, {
       headers:authHeaders(false)
     }) || [];
     const byId=Object.fromEntries(organizations.map(x=>[x.id,x]));
@@ -255,6 +261,11 @@ const Cloud = (() => {
       joinedAt:m.joined_at
     }));
     const cloudSaved=profiles[0] && profiles[0].active_organization_id;
+    const nextAvatarPath=String(profiles[0]?.avatar_path||'');
+    if(nextAvatarPath!==profileContext.avatarPath){
+      if(profileContext.avatarUrl) URL.revokeObjectURL(profileContext.avatarUrl);
+      profileContext={avatarPath:nextAvatarPath,avatarUrl:'',avatarPromise:null};
+    }
     const localSaved=localStorage.getItem(ACTIVE_ORG_KEY);
     const selected=choices.find(x=>x.id===cloudSaved) ||
       choices.find(x=>x.id===localSaved) ||
@@ -789,7 +800,7 @@ const Cloud = (() => {
     return clean || 'arquivo';
   }
 
-  async function authenticatedStorage(){
+  async function authenticatedStorage(bucketId=RDO_BUCKET){
     await ensureFresh();
     if(!window.supabase || typeof window.supabase.createClient!=='function')
       throw new Error('O serviço de arquivos não foi carregado.');
@@ -797,7 +808,65 @@ const Cloud = (() => {
       auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
       global:{headers:{Authorization:`Bearer ${session.access_token}`}}
     });
-    return client.storage.from(RDO_BUCKET);
+    return client.storage.from(bucketId);
+  }
+
+  function profileAvatarPath(){ return profileContext.avatarPath; }
+  function profileAvatarUrl(){ return profileContext.avatarUrl; }
+  async function loadProfileAvatar(){
+    if(!profileContext.avatarPath) return '';
+    if(profileContext.avatarUrl) return profileContext.avatarUrl;
+    if(profileContext.avatarPromise) return profileContext.avatarPromise;
+    profileContext.avatarPromise=(async()=>{
+      const bucket=await authenticatedStorage(PROFILE_BUCKET);
+      const result=await bucket.download(profileContext.avatarPath);
+      if(result.error) throw result.error;
+      const url=URL.createObjectURL(result.data);
+      profileContext.avatarUrl=url;
+      return url;
+    })().finally(()=>{profileContext.avatarPromise=null;});
+    return profileContext.avatarPromise;
+  }
+  function avatarBlob(dataUrl){
+    const match=String(dataUrl||'').match(/^data:image\/jpeg;base64,([a-z0-9+/=]+)$/i);
+    if(!match) throw new Error('A foto de perfil precisa ser uma imagem JPG válida.');
+    const binary=atob(match[1]);
+    const bytes=new Uint8Array(binary.length);
+    for(let index=0;index<binary.length;index++) bytes[index]=binary.charCodeAt(index);
+    if(!bytes.length||bytes.length>2*1024*1024) throw new Error('A foto de perfil deve ter no máximo 2 MB.');
+    return new Blob([bytes],{type:'image/jpeg'});
+  }
+  async function updateProfileAvatar(dataUrl){
+    await ensureFresh();
+    const blob=avatarBlob(dataUrl);
+    const path=`${user().id}/avatar.jpg`;
+    const bucket=await authenticatedStorage(PROFILE_BUCKET);
+    const upload=await bucket.upload(path,blob,{cacheControl:'3600',contentType:'image/jpeg',upsert:true});
+    if(upload.error) throw upload.error;
+    await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(user().id)}`,{
+      method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},
+      body:JSON.stringify({avatar_path:path})
+    });
+    if(profileContext.avatarUrl) URL.revokeObjectURL(profileContext.avatarUrl);
+    profileContext={avatarPath:path,avatarUrl:'',avatarPromise:null};
+    return loadProfileAvatar();
+  }
+  async function removeProfileAvatar(){
+    await ensureFresh();
+    const path=profileContext.avatarPath;
+    await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(user().id)}`,{
+      method:'PATCH',headers:{...authHeaders(true),Prefer:'return=minimal'},
+      body:JSON.stringify({avatar_path:null})
+    });
+    if(path){
+      try{
+        const bucket=await authenticatedStorage(PROFILE_BUCKET);
+        await bucket.remove([path]);
+      }catch(error){}
+    }
+    if(profileContext.avatarUrl) URL.revokeObjectURL(profileContext.avatarUrl);
+    profileContext={avatarPath:'',avatarUrl:'',avatarPromise:null};
+    return true;
   }
 
   async function listRdoAttachments(rdoId){
@@ -1004,6 +1073,7 @@ const Cloud = (() => {
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
     listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
+    profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };
 })();

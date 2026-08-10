@@ -36,6 +36,20 @@ const U = {
 
   norm: s => String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(),
 
+  // Códigos de projeto preservam pontos, traços, barras e letras. A chave
+  // canônica serve apenas para comparação e nunca reduz "815-USF" a "815".
+  projectCode(value){
+    return String(value??'')
+      .normalize('NFKC')
+      .replace(/[\u2010-\u2015\u2212]/g,'-')
+      .trim()
+      .replace(/\s*([.\-_/])\s*/g,'$1')
+      .replace(/\s+/g,' ')
+      .toUpperCase();
+  },
+
+  projectCodeKey(value){ return this.projectCode(value); },
+
   esc: s => String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),
 
   num(v){ // interpreta número em formatos BR/US

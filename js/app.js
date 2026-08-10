@@ -294,12 +294,20 @@ const App = {
       if(orgName) orgName.textContent=State.settings.companyName || 'Gestão de obras';
     }
     const safeLogo=U.safeImageSrc(State.settings.companyLogo);
-    if(safeLogo){
-      const box = document.getElementById('company-logo-box');
-      if(box){
-        box.style.background = 'transparent'; // remove fundo/borda quando há logo própria
-        box.innerHTML = `<img src="${U.esc(safeLogo)}" class="logo-clean" style="width:100%;height:100%;object-fit:contain">`;
-      }
+    const profileAvatar=typeof Cloud!=='undefined'&&Cloud.active()&&typeof Cloud.profileAvatarUrl==='function'
+      ? Cloud.profileAvatarUrl() : '';
+    const box = document.getElementById('company-logo-box');
+    if(box){
+      const source=profileAvatar||safeLogo||'assets/logo-clique.png';
+      const isProfile=!!profileAvatar;
+      box.style.background='transparent';
+      box.innerHTML=`<img src="${U.esc(source)}" class="${isProfile?'profile-avatar-image':'logo-clean'}" alt="${isProfile?'Foto do perfil':'Logo da empresa'}">`;
+    }
+    if(typeof Cloud!=='undefined'&&Cloud.active()&&Cloud.profileAvatarPath()&&!profileAvatar){
+      Cloud.loadProfileAvatar().then(()=>{
+        this.applyBranding();
+        if(State.view==='configuracoes') Views.configuracoes.render();
+      }).catch(()=>{});
     }
   },
   applyStorageStatus(){
@@ -307,8 +315,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v3.0.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v3.0.5 · dados locais';
+      el.textContent=`v3.0.6 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v3.0.6 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();

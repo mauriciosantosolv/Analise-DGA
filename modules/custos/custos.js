@@ -29,6 +29,8 @@ const Biz = {
       [/^(mao de obra|m o|mo)$/, 'mao de obra'],
       [/^(custos? administrativos?|administrativo|administracao|adm)$/, 'custo administrativo'],
       [/^impostos?$/, 'impostos'],
+      [/^(alimentacao|refeicao|refeicoes)$/, 'alimentacao'],
+      [/^(hospedagem|hotel|hoteis)$/, 'hospedagem'],
       [/^(taxas?|comissoes?|taxas? e comissoes?)$/, 'taxas'],
       [/^(outros encargos|outras despesas|outros custos)$/, 'outros encargos']
     ];
@@ -50,10 +52,34 @@ const Biz = {
       'mao de obra':'Mão de Obra',
       'custo administrativo':'Custo Administrativo',
       'impostos':'Impostos',
+      'alimentacao':'Alimentação',
+      'hospedagem':'Hospedagem',
       'taxas':'Taxas',
       'outros encargos':'Outros Encargos'
     };
     return labels[key] || String(category||'').trim() || 'Sem categoria';
+  },
+
+  // Ordem operacional única para o dashboard geral e para o detalhe de cada
+  // projeto. Categorias adicionais mantêm a ordem do cadastro e, por fim,
+  // ordem alfabética estável.
+  compareCategories(a,b){
+    const priority=['custo administrativo','impostos','mao de obra','compras de material','alimentacao','hospedagem'];
+    const keyA=this.categoryKey(a?.name||a), keyB=this.categoryKey(b?.name||b);
+    const fixedA=priority.indexOf(keyA), fixedB=priority.indexOf(keyB);
+    if(fixedA!==-1||fixedB!==-1){
+      if(fixedA===-1) return 1;
+      if(fixedB===-1) return -1;
+      if(fixedA!==fixedB) return fixedA-fixedB;
+    }
+    const registered=this.uniqueCategories().map(category=>this.categoryKey(category.name));
+    const indexA=registered.indexOf(keyA), indexB=registered.indexOf(keyB);
+    if(indexA!==-1||indexB!==-1){
+      if(indexA===-1) return 1;
+      if(indexB===-1) return -1;
+      if(indexA!==indexB) return indexA-indexB;
+    }
+    return String(a?.name||a||'').localeCompare(String(b?.name||b||''),'pt-BR');
   },
 
   // Lançamentos filtrados pelos filtros globais ativos
@@ -255,6 +281,9 @@ const Biz = {
       const k = this.categoryKey(name);
       return map[k] = map[k] || {name:this.categoryName(name), categoryKey:k, budget:0, spent:0, projected:0, monthly:{}};
     };
+    // Todas as categorias cadastradas permanecem visíveis, mesmo quando um
+    // projeto ainda não possui valores naquela categoria.
+    this.uniqueCategories().forEach(category=>ensure(category.name));
     State.budgets.filter(b=>ids.has(b.projectId)).forEach(b => {
       ensure(b.category).budget += b.value;
     });
@@ -299,7 +328,7 @@ const Biz = {
       return {...c, consumed, weight: budgetTotal>0 ? c.budget/budgetTotal*100 : 0,
               balance: c.budget - committed, plannedFuture:c.projected, committed, committedPct, trend,
               status: committedPct>100 ? 'red' : committedPct>85 ? 'amber' : 'green'};
-    }).sort((a,b)=>b.committed-a.committed);
+    }).sort((a,b)=>this.compareCategories(a,b));
   },
 
   // Central de alertas inteligente

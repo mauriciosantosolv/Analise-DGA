@@ -204,6 +204,12 @@ const RDO = {
       cost100:Number(legacyRate?.cost100)||0
     };
   },
+  projectFor(projectId){
+    return State.projects.find(project=>String(project.id)===String(projectId))||null;
+  },
+  isHhProject(projectId){
+    return String(this.projectFor(projectId)?.type||'').toUpperCase()==='HH';
+  },
   rateFor(projectId,employeeId){
     const rate=State.laborRates.find(item=>
       String(item.projectId)===String(projectId)
@@ -213,6 +219,31 @@ const RDO = {
     ) || null;
     if(!rate) return null;
     return {...rate,...this.baseCostFor(employeeId,rate)};
+  },
+  rdoRateFor(projectId,employeeId){
+    if(this.isHhProject(projectId)) return this.rateFor(projectId,employeeId);
+    const employee=this.crewMembers().find(item=>String(item.id)===String(employeeId))||{};
+    const costs=this.baseCostFor(employeeId);
+    return {
+      id:`operational:${employeeId}`,
+      projectId:String(projectId),employeeId:String(employeeId),
+      commercialRole:employee.internalRole||'',roleDisplayMode:'internal',
+      costRegular:costs.costRegular,cost50:costs.cost50,cost100:costs.cost100,
+      saleRegular:0,sale50:0,sale100:0,active:true,operationalOnly:true
+    };
+  },
+  hhConfigurationIssues(projectId,entries=[]){
+    if(!this.isHhProject(projectId)) return [];
+    return entries.map(entry=>{
+      const employee=this.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
+      const rate=this.rateFor(projectId,entry.employeeId);
+      const role=rate?.roleDisplayMode==='internal' ? employee.internalRole : rate?.commercialRole;
+      const missing=[];
+      if(!rate) missing.push('valor HH');
+      if(!rate||!(Number(rate.costRegular)>0)) missing.push('custo');
+      if(!String(role||'').trim()) missing.push('função');
+      return missing.length?{employeeId:entry.employeeId,employeeName:employee.name||entry.employeeName||'Colaborador',missing}:null;
+    }).filter(Boolean);
   },
   displayRoleFor(projectId,entry,snapshot=null){
     const employee=this.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
@@ -243,7 +274,7 @@ const RDO = {
   calculate(rdo){
     const rows=(rdo.entries||[]).map(entry=>{
       const employee=State.crew.find(x=>String(x.id)===String(entry.employeeId))||{};
-      const rate=this.rateFor(rdo.projectId,entry.employeeId);
+      const rate=this.rdoRateFor(rdo.projectId,entry.employeeId);
       const totals=rate?this.entryTotals(entry,rate):{hours:0,cost:0,sale:0};
       return {
         ...entry,
@@ -292,6 +323,13 @@ const RDO = {
       throw new Error('Todos os colaboradores selecionados precisam ter horas informadas.');
     const allowed=new Set(this.allowedProjects().map(x=>String(x.id)));
     if(!allowed.has(String(rdo.projectId))) throw new Error('Projeto indisponível para este RDO.');
+    if(status==='Enviado'){
+      const issues=this.hhConfigurationIssues(rdo.projectId,rdo.entries);
+      if(issues.length){
+        const summary=issues.map(item=>`${item.employeeName} (${item.missing.join(', ')})`).join('; ');
+        throw new Error(`Projetos HH exigem função e custo da mão de obra antes do envio. Configure em Colaboradores/Valores HH: ${summary}.`);
+      }
+    }
     const updated={
       ...rdo,
       status,
@@ -358,9 +396,11 @@ const RDO = {
     try{
       UI.loading(true,'Aprovando diário…');
       await DB.put('rdo_financial',financial);
-      if(typeof Cloud!=='undefined' && Cloud.active())
-        await Cloud.ensureRdoCostPosting(rdo.id,rdo.projectId,purchaseId,financial.costTotal);
-      await DB.put('purchases',purchase);
+      if(financial.costTotal>0){
+        if(typeof Cloud!=='undefined' && Cloud.active())
+          await Cloud.ensureRdoCostPosting(rdo.id,rdo.projectId,purchaseId,financial.costTotal);
+        await DB.put('purchases',purchase);
+      }
       await DB.put('rdos',{
         ...rdo,
         status:'Aprovado',
@@ -371,7 +411,9 @@ const RDO = {
       await State.reload();
       UI.loading(false);
       UI.closeAll();
-      UI.toast('RDO aprovado. O custo da mão de obra entrou no realizado do projeto.','success',7000);
+      UI.toast(financial.costTotal>0
+        ? 'RDO aprovado. O custo da mão de obra entrou no realizado do projeto.'
+        : 'RDO aprovado. Nenhum custo foi lançado para este projeto operacional.','success',7000);
       App.render();
     }catch(err){
       UI.loading(false);
@@ -1226,7 +1268,7 @@ Views.colaboradores={
       <div><label>Matrícula</label><input id="crew-registration" maxlength="60" value="${U.esc(employee.registration||'')}" autocomplete="off"></div>
       <div><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}" autocomplete="name"></div>
       <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
-      <div><label>Custo por hora *</label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'O custo é único para todas as obras. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
+      <div><label>Custo padrão por hora <small>Opcional</small></label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'Obrigatório somente quando o colaborador for usado no RDO de um projeto HH. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
       <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
     const clearPhoto=()=>{
@@ -1275,7 +1317,7 @@ Views.colaboradores={
       if(registration&&RDO.crewMembers().some(item=>String(item.id)!==String(employee.id)&&U.norm(item.registration)===U.norm(registration)))
         return UI.toast('Esta matrícula já pertence a outro colaborador.','warn');
       const rawCost=canEditCost?document.getElementById('crew-hourly-cost').value:'';
-      if(canEditCost && (rawCost===''||U.num(rawCost)<0)) return UI.toast('Informe o custo por hora do colaborador.','warn');
+      if(canEditCost && rawCost!=='' && U.num(rawCost)<0) return UI.toast('O custo por hora não pode ser negativo.','warn');
       try{
         UI.loading(true,'Salvando colaborador…');
         await DB.put('crew',{
@@ -1288,7 +1330,7 @@ Views.colaboradores={
           active:document.getElementById('crew-active').value==='true',
           updatedAt:new Date().toISOString()
         });
-        if(canEditCost){
+        if(canEditCost&&rawCost!==''){
           const cost=U.num(rawCost);
           await DB.put('labor_rates',{
             ...(baseRecord||{id:`base:${employee.id}`,projectId:'__base__',employeeId:String(employee.id),createdAt:new Date().toISOString()}),
@@ -1301,11 +1343,13 @@ Views.colaboradores={
             active:true,
             updatedAt:new Date().toISOString()
           });
+        }else if(canEditCost&&baseRecord){
+          await DB.del('labor_rates',baseRecord.id);
         }
         await State.reload();
         UI.loading(false);
         UI.close();
-        UI.toast(canEditCost?'Colaborador e custo salvos':'Colaborador salvo','success');
+        UI.toast(canEditCost&&rawCost!==''?'Colaborador e custo salvos':'Colaborador salvo','success');
         App.render();
       }catch(err){
         UI.loading(false);
@@ -1347,11 +1391,15 @@ Views.valoreshh={
   render(){
     const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('labor_rates');
     if(!this.projectFilter&&State.filters.project) this.projectFilter=String(State.filters.project);
+    const hhProjects=State.projects.filter(project=>String(project.type||'').toUpperCase()==='HH');
+    const hhProjectIds=new Set(hhProjects.map(project=>String(project.id)));
+    if(this.projectFilter&&!hhProjectIds.has(String(this.projectFilter))) this.projectFilter='';
     const rows=State.laborRates.filter(rate=>
       rate.isBaseCost!==true&&String(rate.projectId)!=='__base__'
+      &&hhProjectIds.has(String(rate.projectId))
       &&(!this.projectFilter||String(rate.projectId)===String(this.projectFilter))
     ).sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
-    const rateProjects=State.projects.filter(project=>State.laborRates.some(rate=>String(rate.projectId)===String(project.id))||project.type==='HH');
+    const rateProjects=hhProjects;
     $c().innerHTML=`<div class="toolbar"><div><h2>Valores de venda por projeto</h2><small>O custo vem do cadastro do colaborador; somente o valor de venda varia por obra.</small></div><div class="spacer"></div>
       ${canEdit?'<button class="btn btn-primary" onclick="Views.valoreshh.form()"><i data-lucide="plus"></i>Configurar valor</button>':''}</div>
       <div class="rate-filter-panel"><label>Filtrar por projeto<select id="rate-project-filter"><option value="">Todos os projetos</option>${rateProjects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(this.projectFilter)?'selected':''}>${U.esc(U.projLabel(project))}</option>`).join('')}</select></label><span>${rows.length} configuração(ões)</span></div>
@@ -1371,16 +1419,17 @@ Views.valoreshh={
   form(id=''){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('labor_rates')) return;
     const employees=RDO.crewMembers();
+    const hhProjects=State.projects.filter(project=>String(project.type||'').toUpperCase()==='HH');
     const rate=id?State.laborRates.find(x=>String(x.id)===String(id)):{
-      projectId:this.projectFilter||State.projects[0]?.id||'',employeeId:employees[0]?.id||'',commercialRole:'',roleDisplayMode:'client',
+      projectId:this.projectFilter||hhProjects[0]?.id||'',employeeId:employees[0]?.id||'',commercialRole:'',roleDisplayMode:'client',
       costRegular:0,cost50:0,cost100:0,saleRegular:0,sale50:0,sale100:0,active:true
     };
-    if(!State.projects.length||!employees.length) return UI.toast('Cadastre um projeto e um colaborador antes de configurar valores.','warn',6500);
+    if(!hhProjects.length||!employees.length) return UI.toast('Cadastre um projeto HH e um colaborador antes de configurar valores.','warn',6500);
     const field=(label,key)=>`<div><label>${label}</label><input id="rate-${key}" type="number" min="0" step="0.01" value="${Number(rate[key])||''}"></div>`;
     const costs=RDO.baseCostFor(rate.employeeId,rate);
     const displayMode=rate.roleDisplayMode==='internal'?'internal':'client';
     UI.modal({title:id?'Editar valores':'Configurar valores',wide:true,body:`<div class="form-grid">
-      <div><label>Projeto *</label><select id="rate-project">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
+      <div><label>Projeto HH *</label><select id="rate-project">${hhProjects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Colaborador *</label><select id="rate-employee">${employees.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
       <div><label>Função exibida nos documentos</label><select id="rate-role-mode"><option value="client" ${displayMode==='client'?'selected':''}>Função externa do cliente</option><option value="internal" ${displayMode==='internal'?'selected':''}>Função interna do colaborador</option></select><small>Define a função do PDF do RDO e da medição.</small></div>
       <div><label>Status do valor HH</label><select id="rate-active"><option value="true" ${rate.active!==false?'selected':''}>Ativo</option><option value="false" ${rate.active===false?'selected':''}>Inativo</option></select><small>Valores inativos não entram em novos cálculos.</small></div>
@@ -1400,13 +1449,20 @@ Views.valoreshh={
     document.getElementById('rate-save').onclick=async()=>{
       const projectId=document.getElementById('rate-project').value;
       const employeeId=document.getElementById('rate-employee').value;
+      if(!hhProjects.some(project=>String(project.id)===String(projectId)))
+        return UI.toast('Selecione um projeto classificado como HH.','warn');
       const existing=State.laborRates.find(x=>String(x.projectId)===String(projectId)&&String(x.employeeId)===String(employeeId)&&String(x.id)!==String(id));
       if(existing) return UI.toast('Já existe uma configuração para este colaborador no projeto.','warn');
       const roleDisplayMode=document.getElementById('rate-role-mode').value;
       const commercialRole=document.getElementById('rate-role').value.trim();
       if(roleDisplayMode==='client'&&!commercialRole)
         return UI.toast('Informe a função externa que será apresentada ao cliente.','warn',6000);
+      const employee=RDO.crewMembers().find(item=>String(item.id)===String(employeeId))||{};
+      if(roleDisplayMode==='internal'&&!String(employee.internalRole||'').trim())
+        return UI.toast('Informe a função interna deste colaborador antes de usar esta opção.','warn',6000);
       const employeeCosts=RDO.baseCostFor(employeeId,rate);
+      if(!(Number(employeeCosts.costRegular)>0))
+        return UI.toast('Informe o custo por hora no cadastro do colaborador antes de configurar o projeto HH.','warn',6500);
       const obj={
         ...(id?rate:{id:`${projectId}:${employeeId}`,createdAt:new Date().toISOString()}),
         projectId,employeeId,commercialRole,roleDisplayMode,

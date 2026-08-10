@@ -36,4 +36,17 @@ assert.equal(Biz.baseRatesForProject({
   status:"Concluído",start:"2026-01-01",realEnd:"2026-01-31"
 }).tax,10);
 
+context.State.categories.push(
+  {id:"h",name:"Hospedagem"},
+  {id:"m",name:"Compras de Materiais"},
+  {id:"a",name:"Alimentação"},
+  {id:"l",name:"Mão de Obra"},
+  {id:"t",name:"Imposto"},
+  {id:"c",name:"Custos Administrativos"}
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(Biz.categoryStats([]).map(category=>category.categoryKey))),
+  ["custo administrativo","impostos","mao de obra","compras de material","alimentacao","hospedagem"]
+);
+
 console.log("Historical base calculation tests passed");

@@ -50,7 +50,7 @@ assert.match(auth, /assets\/logo-clique\.png/);
 const rdo = fs.readFileSync(path.join(root, "modules/rdo/rdo.js"), "utf8");
 assert.match(rdo, /onclick="RDO\.remove/);
 assert.match(rdo, /Reprovar diário/);
-assert.match(rdo, /Custo por hora/);
+assert.match(rdo, /Custo padrão por hora/);
 assert.match(rdo, /customer\.logo/);
 assert.match(rdo, /currentStep===4/);
 assert.match(rdo, /id="rdo-team-search"/);
@@ -76,6 +76,8 @@ const importer = fs.readFileSync(path.join(root, "js/importer.js"), "utf8");
 assert.match(importer, /labor:[\s\S]*supplier:[\s\S]*order:[\s\S]*notes:/);
 assert.match(importer, /findHeader\(rows, MAPS\.labor, 'labor'\)/);
 assert.match(importer, /sourceType:'labor'/);
+assert.doesNotMatch(importer, /existingCount|seenCount|\.dedupe\s*=/);
+assert.match(importer, /projectParts:splitProject/);
 
 const app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
 assert.match(app, /previousScroll/);
@@ -84,6 +86,7 @@ assert.doesNotMatch(app, /document\.getElementById\('content'\)\.scrollTop = 0/)
 const costs = fs.readFileSync(path.join(root, "modules/custos/custos.js"), "utf8");
 assert.match(costs, /baseCalcHistory/);
 assert.match(costs, /baseRatesForProject/);
+assert.match(costs, /compareCategories/);
 
 const exports = fs.readFileSync(path.join(root, "utils/export.js"), "utf8");
 assert.match(exports, /deviationJustification/);
@@ -96,6 +99,7 @@ assert.match(configuration, /cfg-letterhead-btn/);
 assert.match(configuration, /pdfLetterhead/);
 assert.match(configuration, /companyCnpj/);
 assert.match(configuration, /image\/jpeg,image\/png/);
+assert.match(configuration, /cfg-profile-photo-select/);
 assert.doesNotMatch(configuration, /id="cfg-currency"/);
 assert.doesNotMatch(configuration, /Preferências do sistema/);
 

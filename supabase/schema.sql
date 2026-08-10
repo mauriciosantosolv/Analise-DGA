@@ -26,6 +26,23 @@ alter table public.profiles
   add column if not exists active_organization_id uuid
   references public.organizations(id) on delete set null;
 
+alter table public.profiles
+  add column if not exists avatar_path text;
+
+alter table public.profiles
+  drop constraint if exists profiles_avatar_path_valid;
+alter table public.profiles
+  add constraint profiles_avatar_path_valid
+  check (
+    avatar_path is null
+    or (
+      length(avatar_path) between 40 and 80
+      and avatar_path = id::text || '/avatar.jpg'
+    )
+  ) not valid;
+alter table public.profiles
+  validate constraint profiles_avatar_path_valid;
+
 create table if not exists public.organization_members (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -817,7 +834,7 @@ grant select, insert, update, delete on table public.app_records to authenticate
 -- Nome e e-mail são sincronizados exclusivamente pelo Auth. Pela Data API,
 -- cada conta pode alterar somente sua organização ativa.
 revoke update on table public.profiles from authenticated;
-grant update(active_organization_id) on table public.profiles to authenticated;
+grant update(active_organization_id,avatar_path) on table public.profiles to authenticated;
 
 drop policy if exists "cliqueobras_profiles_select" on public.profiles;
 create policy "cliqueobras_profiles_select"

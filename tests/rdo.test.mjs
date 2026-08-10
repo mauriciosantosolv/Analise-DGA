@@ -4,8 +4,14 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../modules/rdo/rdo.js", import.meta.url), "utf8");
 const state = {
-  projects:[{id:"p-hh",proposal:"798",name:"Caramuru",type:"HH"}],
-  crew:[{id:"e-1",name:"João",internalRole:"Instrumentista",active:true}],
+  projects:[
+    {id:"p-hh",proposal:"798",name:"Caramuru",type:"HH"},
+    {id:"p-obra",proposal:"815-USF",name:"Unidade",type:"Obra"}
+  ],
+  crew:[
+    {id:"e-1",name:"João",internalRole:"Instrumentista",active:true},
+    {id:"e-2",name:"Maria",internalRole:"",active:true}
+  ],
   laborRates:[
     {
       id:"base:e-1",projectId:"__base__",employeeId:"e-1",isBaseCost:true,
@@ -63,6 +69,7 @@ assert.equal(result.saleTotal,1140);
 assert.equal(result.missingRates.length,0);
 assert.equal(RDO.rateFor("p-hh","e-1").costRegular,60);
 assert.equal(RDO.displayRoleFor("p-hh",{employeeId:"e-1"}),"Técnico em Elétrica");
+assert.deepEqual(JSON.parse(JSON.stringify(RDO.hhConfigurationIssues("p-hh",[{employeeId:"e-1"}]))),[]);
 
 state.laborRates[1].roleDisplayMode="internal";
 assert.equal(RDO.displayRoleFor("p-hh",{employeeId:"e-1"}),"Instrumentista");
@@ -75,6 +82,16 @@ const missing = RDO.calculate({
 assert.equal(missing.missingRates.length,1);
 assert.equal(missing.costTotal,0);
 assert.equal(missing.saleTotal,0);
+assert.match(RDO.hhConfigurationIssues("p-hh",[{employeeId:"not-configured",employeeName:"Sem cadastro"}])[0].missing.join(','),/custo/);
+
+const operational = RDO.calculate({
+  projectId:"p-obra",
+  entries:[{employeeId:"e-2",regular:8,overtime50:0,overtime100:0}]
+});
+assert.equal(operational.missingRates.length,0);
+assert.equal(operational.costTotal,0);
+assert.equal(operational.saleTotal,0);
+assert.deepEqual(JSON.parse(JSON.stringify(RDO.hhConfigurationIssues("p-obra",[{employeeId:"e-2"}]))),[]);
 
 state.laborRates[1].active=false;
 assert.equal(RDO.rateFor("p-hh","e-1"),null);

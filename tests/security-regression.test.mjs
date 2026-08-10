@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.5"/);
+assert.match(html, /name="application-version" content="3\.0\.6"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.5/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.6/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -54,12 +54,15 @@ assert.match(cloud, /clique_obras_delete_rdo_measurement/);
 assert.match(cloud, /functions\/v1\/delete-rdo/);
 assert.match(cloud, /send-organization-invite/);
 assert.match(cloud, /pendingWriteEchoes/);
+assert.match(cloud, /profile-avatars/);
+assert.match(cloud, /updateProfileAvatar/);
 assert.doesNotMatch(cloud, /service_role|sb_secret/i);
 
 const configuration = read("modules/configuracoes/configuracoes.js");
 assert.match(configuration, /Backup\.validate/);
 assert.match(configuration, /Exports\.spreadsheetRows\(State\.rdos\)/);
 assert.match(configuration, /U\.jsArg\(m\.user_id\)/);
+assert.match(configuration, /removeProfileAvatar/);
 
 const rdo = read("modules/rdo/rdo.js");
 assert.match(rdo, /U\.jsArg\(rdo\.id\)/);
@@ -162,5 +165,13 @@ assert.match(v304Sql, /roleDisplayMode/);
 assert.match(v304Sql, /security invoker/);
 assert.match(v304Sql, /set search_path=''/);
 assert.doesNotMatch(v304Sql, /auth\.role\(\)/);
+
+const v306Sql = read("supabase/ATUALIZACAO-v3.0.6-PERFIL-SEGURANCA.sql");
+assert.match(v306Sql, /add column if not exists avatar_path/);
+assert.match(v306Sql, /profile-avatars/);
+assert.match(v306Sql, /public=false/);
+assert.match(v306Sql, /owner_id=\(select auth\.uid\(\)\)::text/);
+assert.match(v306Sql, /with check[\s\S]*name=\(select auth\.uid\(\)\)::text \|\| '\/avatar\.jpg'/);
+assert.doesNotMatch(v306Sql, /auth\.role\(\)/);
 
 console.log("Security regression tests passed");
