@@ -107,7 +107,7 @@ Views.dashboard = {
       <div class="section-title"><h2>Semáforo Financeiro das Obras</h2>
         <button class="btn btn-ghost btn-sm" onclick="Views.projetos.compare()"><i data-lucide="git-compare"></i>Comparar</button></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
-        <thead><tr><th></th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo</th><th class="num">Margem</th><th class="num">Saúde</th><th>Consumo</th></tr></thead>
+        <thead><tr><th></th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo Orçado</th><th class="num">Margem</th><th class="num">Saúde</th><th>Consumo</th></tr></thead>
         <tbody>${stats.sort((a,b)=>a.s.health-b.s.health).map(({p,s})=>`
           <tr class="clickable" onclick="Views.projetos.detail(${U.jsArg(p.id)})">
             <td>${lightDot(s.light)}</td><td><b>${U.esc(U.projLabel(p))}</b></td><td>${statusTag(p.status)}</td>
@@ -120,7 +120,7 @@ Views.dashboard = {
 
       <div class="section-title"><h2>Dashboard das Categorias</h2></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
-        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
+        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo Orçado</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
         <tbody>${cats.map(c=>`
           <tr class="clickable" onclick="Dash.drill({category:${U.jsArg(c.name)}})">
             <td><b>${U.esc(c.name)}</b></td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td>
