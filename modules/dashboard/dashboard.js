@@ -20,7 +20,7 @@ Views.dashboard = {
   title:'Dashboard',
   // Gráficos disponíveis — o usuário escolhe quais exibir (persistido em settings)
   chartDefs:[
-    {id:'main',    title:'Orçado × Realizado × Projeção × Saldo', short:'Orçado × Realizado'},
+    {id:'main',    title:'Orçado × Realizado × Projeção × Saldo Orçado', short:'Orçado × Realizado'},
     {id:'monthly', title:'Evolução Mensal',                        short:'Evolução Mensal'},
     {id:'cat',     title:'Distribuição por Categoria',             short:'Categorias', hint:' <small style="color:var(--text3)">(clique para detalhar)</small>'},
     {id:'cash',    title:'Fluxo de Caixa Futuro (planejado)',      short:'Fluxo de Caixa', sm:true},
