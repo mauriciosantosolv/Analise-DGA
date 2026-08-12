@@ -87,7 +87,7 @@ Views.dashboard = {
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos',${U.jsArg(selectedProject)})`)}
         ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro',${U.jsArg(selectedProject)})`)}
         ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento',${U.jsArg(selectedProject)})`)}
-        ${kpi('Saldo', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
+        ${kpi('Saldo Orçado', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
