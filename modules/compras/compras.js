@@ -35,7 +35,7 @@ Views.financeiro = {
         <div class="spacer"></div>
         <button class="btn btn-ghost" onclick="Exports.table('purchases')"><i data-lucide="download"></i>Exportar</button>
       </div>
-      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br><small>Para contas pagas e mão de obra, use os botões acima. Novos uploads somam ao banco e reimportações idênticas são ignoradas.</small></div>
+      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br><small>Para contas pagas e mão de obra, use os botões acima. As importações manuais continuam disponíveis mesmo quando a integração Omie estiver desconectada.</small></div>
       <div id="fin-body"></div>`;
     if(this.mode==='table'){
       document.getElementById('fin-body').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table id="fin-table"></table></div></div>
@@ -65,7 +65,7 @@ Views.financeiro = {
           <div style="flex:1;min-width:180px"><b>${U.esc(b.file)}</b><br><small style="color:var(--text3)">Importado em ${U.date(b.date)} · ${b.items.length} lançamento(s)</small></div>
           <b>${U.money2(b.total)}</b>
           <button class="btn btn-ghost btn-sm" onclick="Views.financeiro.viewBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="eye"></i>Ver / Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="trash-2"></i>Excluir bloco</button>
+          ${b.items.some(item=>item.externalSource==='omie')?'':`<button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="trash-2"></i>Excluir bloco</button>`}
         </div></div>`).join('')
       : `<div class="empty card"><i data-lucide="layers"></i><br>Nenhuma importação registrada ainda.</div>`;
     U.icons();
@@ -117,7 +117,7 @@ Views.financeiro = {
       <td>${Views.financeiro.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
       <td class="num"><b>${U.money2(x.value)}</b></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+      <td>${x.externalSource==='omie'?'<i data-lucide="lock" title="Gerenciado pelo Omie"></i>':`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
       || '<tr><td colspan="8"><div class="empty">Nenhum lançamento corresponde aos filtros.</div></td></tr>';
     U.icons();
   },
@@ -125,6 +125,7 @@ Views.financeiro = {
     const cfg = {
       labor:['Mão de obra','tag-blue'],
       paidAccount:['Conta paga','tag-amber'],
+      omiePayable:['Omie · conta a pagar','tag-blue'],
       purchase:['Compra','tag-green']
     }[x.sourceType] || ['Compra','tag-green'];
     return `<span class="tag ${cfg[1]}">${cfg[0]}</span>`;
@@ -174,17 +175,17 @@ Views.financeiro = {
       planningSnapshot:snapshot
     };
     try{
-      if(remaining>0){
-        const updated={...plan,value:remaining,
-          originalValue:Number(plan.originalValue)||Number(plan.value),
-          realizedAmount:Math.round(((Number(plan.realizedAmount)||0)+amount)*100)/100,
-          lastOffsetAt:new Date().toISOString()};
-        await DB.put('planning',updated);
-        Object.assign(plan,updated);
-      }else{
-        await DB.del('planning',plan.id);
-        State.planning=State.planning.filter(x=>x.id!==plan.id);
-      }
+      const before=Number(plan.value)||0;
+      const hasInitial=plan.originalValue!==''&&plan.originalValue!=null&&Number.isFinite(Number(plan.originalValue));
+      const updated={...plan,value:remaining,
+        originalValue:hasInitial?Math.max(0,Number(plan.originalValue)):before+(Number(plan.realizedAmount)||0),
+        realizedAmount:Math.round(((Number(plan.realizedAmount)||0)+amount)*100)/100,
+        consumptionStatus:remaining<=0?'consumed':'partial',lastOffsetAt:new Date().toISOString()};
+      await DB.put('planning',updated);
+      Object.assign(plan,updated);
+      await State.addPlanningHistory({planningId:String(plan.id),projectId:String(plan.projectId),category:plan.category,
+        action:'consumed',source:'manual',sourceId:String(purchase.id),amount,beforeValue:before,afterValue:remaining,
+        description:'Lançamento financeiro abatido do planejamento'});
       await DB.put('purchases',purchase);
       return true;
     }catch(err){
@@ -203,6 +204,7 @@ Views.financeiro = {
     if(typeof Cloud!=='undefined' && Cloud.active() && !Cloud.canEditStore('planning'))
       throw new Error('Este gasto abateu um planejamento, mas seu usuário não pode restaurá-lo.');
     const current=State.planning.find(x=>x.id===offset.planningId);
+    const beforeValue=current?Number(current.value)||0:0;
     const base=current || offset.planningSnapshot || {
       id:offset.planningId,projectId:purchase.projectId,category:purchase.category,
       date:purchase.date,desc:'Planejamento restaurado',notes:''
@@ -210,10 +212,15 @@ Views.financeiro = {
     const restored={...base,
       value:Math.round(((current?Number(current.value):0)+Number(offset.amount))*100)/100,
       realizedAmount:Math.max(0,Math.round(((Number(base.realizedAmount)||0)-Number(offset.amount))*100)/100),
-      lastOffsetAt:new Date().toISOString()
+      consumptionStatus:'pending',lastOffsetAt:new Date().toISOString()
     };
+    if(restored.realizedAmount>0) restored.consumptionStatus='partial';
     await DB.put('planning',restored);
     if(current) Object.assign(current,restored); else State.planning.push(restored);
+    await State.addPlanningHistory({planningId:String(restored.id),projectId:String(restored.projectId),category:restored.category,
+      action:'restored',source:'manual',sourceId:String(purchase.id),amount:Number(offset.amount),
+      beforeValue,afterValue:restored.value,
+      description:'Planejamento restaurado após remoção do lançamento'});
     return true;
   },
   showImportReconciliation(ids){
@@ -281,7 +288,7 @@ Views.financeiro = {
           <td>${this.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
           <td>${U.esc(x.supplier||'—')}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td>${U.esc(x.order||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
-          <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
+          <td onclick="event.stopPropagation()">${x.externalSource==='omie'?'<i data-lucide="lock" title="Gerenciado pelo Omie"></i>':`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
         || `<tr><td colspan="9"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
       ${rows.length?`<tr><td colspan="8" style="text-align:right"><b>Total (${rows.length} lançamentos)</b></td><td class="num"><b>${U.money2(total)}</b></td></tr>`:''}</tbody>`;
     document.getElementById('fin-pager').innerHTML = pages>1 ? `
@@ -307,9 +314,11 @@ Dash.showPurchase = function(id){
       <b>Data:</b> ${U.date(x.date)}<br>
       <b>Valor:</b> <span style="font-size:1.1rem;font-weight:800;color:var(--blue)">${U.money2(x.value)}</span><br>
       ${x.planningOffset?`<b>Planejamento abatido:</b> <span class="tag tag-green">${U.money2(x.planningOffset.amount)}</span><br>`:''}
+      ${x.externalSource==='omie'&&Number(x.planningOffsetAmount)>0?`<b>Planejamento abatido pelo Omie:</b> <span class="tag tag-green">${U.money2(x.planningOffsetAmount)}</span><br>`:''}
+      ${x.externalSource==='omie'&&Number(x.planningUnmatchedAmount)>0?`<b>Sem saldo planejado correspondente:</b> <span class="tag tag-orange">${U.money2(x.planningUnmatchedAmount)}</span><br>`:''}
       <small style="color:var(--text3)">Importado de ${U.esc(x.file||'—')} em ${U.date(x.importedAt)}</small></div>`,
-    footer:`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>
-            <button class="btn btn-ghost" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i>Editar</button>
+    footer:`${x.externalSource==='omie'?'<span style="margin-right:auto;color:var(--text3);font-size:.8rem"><i data-lucide="lock"></i> Gerenciado pela sincronização Omie</span>':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>
+            <button class="btn btn-ghost" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i>Editar</button>`}
             <button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
 };
 
@@ -322,6 +331,7 @@ Dash.purchaseForm = function(id){
         value:0, date:U.isoDate(new Date()), desc:'', notes:'', sourceType:'purchase' }
     : State.purchases.find(i=>i.id===id);
   if(!x) return;
+  if(x.externalSource==='omie') return UI.toast('Este lançamento é controlado pelo Omie e não pode ser alterado manualmente.','warn',6500);
   UI.modal({ title:isNew?'Novo Lançamento Manual':'Editar Lançamento', wide:true, body:`
     <div class="form-grid">
       <div><label>Projeto</label><select id="pf-proj">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
@@ -414,6 +424,9 @@ Dash.purchaseForm = function(id){
 };
 
 Dash.removePurchase = function(id){
+  const synced=State.purchases.find(x=>x.id===id);
+  if(synced&&synced.externalSource==='omie')
+    return UI.toast('Este lançamento é controlado pelo Omie. Altere ou cancele o título no Omie e sincronize novamente.','warn',7000);
   UI.confirm('Excluir este lançamento definitivamente?', async () => {
     const purchase=State.purchases.find(x=>x.id===id);
     if(purchase) await Views.financeiro.reversePlanningOffset(purchase);

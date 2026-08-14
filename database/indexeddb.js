@@ -12,10 +12,10 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 4;
+  const NAME = 'ccf_obras', VERSION = 5;
   const STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
-    'rdos','crew','labor_rates','rdo_financial'
+    'rdos','crew','labor_rates','rdo_financial','planning_history'
   ];
   const LOCAL_STORES = [...STORES,'rdo_attachments'];
   let db = null;
@@ -125,17 +125,68 @@ const DB = (() => {
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
-  rdos:[], crew:[], laborRates:[], rdoFinancial:[], rdoAttachments:[],
-  filters:{ project:'', client:'', category:'', status:'', type:'' },
+  rdos:[], crew:[], laborRates:[], rdoFinancial:[], planningHistory:[], rdoAttachments:[],
+  filters:{ project:'', projects:[], client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
-    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial,attachments] = await Promise.all([
+    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial,planningHistory,attachments] = await Promise.all([
       ...DB.STORES.map(s=>DB.all(s)),
       DB.attachmentAll()
     ]);
     this.projects=p; this.budgets=b; this.purchases=c; this.planning=pl; this.clients=cl; this.categories=cat; this.measurements=me;
-    this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial; this.rdoAttachments=attachments;
+    this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial;
+    this.planningHistory=planningHistory; this.rdoAttachments=attachments;
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
-  async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; }
+  async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; },
+  selectedProjectIds(){
+    if(this.filters.project) return [String(this.filters.project)];
+    return Array.isArray(this.filters.projects)
+      ? [...new Set(this.filters.projects.map(String).filter(Boolean))]
+      : [];
+  },
+  async addPlanningHistory(event){
+    const row={id:U.id(),occurredAt:new Date().toISOString(),...event};
+    await DB.put('planning_history',row);
+    this.planningHistory.push(row);
+    return row;
+  },
+  async ensurePlanningHistory(){
+    if(this.settings.planningHistoryV307) return false;
+    if(typeof Cloud!=='undefined' && Cloud.active() && !Cloud.isOwner()) return false;
+    const plans=new Map(this.planning.map(plan=>[String(plan.id),plan]));
+    let changed=false;
+    for(const purchase of this.purchases){
+      const offset=purchase&&purchase.planningOffset;
+      if(!offset||!offset.planningId||plans.has(String(offset.planningId))) continue;
+      const snapshot=offset.planningSnapshot;
+      if(!snapshot||!snapshot.id) continue;
+      const initial=Math.max(0,Number(snapshot.originalValue)||Number(snapshot.value)||Number(offset.originalPlanValue)||0);
+      const restored={...snapshot,value:0,originalValue:initial,
+        realizedAmount:Math.max(initial,Number(offset.amount)||0),consumptionStatus:'consumed',
+        lastOffsetAt:offset.appliedAt||new Date().toISOString()};
+      await DB.put('planning',restored);
+      plans.set(String(restored.id),restored); changed=true;
+    }
+    for(const plan of plans.values()){
+      const current=Math.max(0,Number(plan.value)||0);
+      const consumed=Math.max(0,Number(plan.realizedAmount)||0);
+      const hasInitial=plan.originalValue!==''&&plan.originalValue!=null&&Number.isFinite(Number(plan.originalValue));
+      const initial=hasInitial?Math.max(0,Number(plan.originalValue)):current+consumed;
+      if(Number(plan.originalValue)!==initial || plan.consumptionStatus==null){
+        const normalized={...plan,originalValue:initial,realizedAmount:consumed,
+          consumptionStatus:current<=0&&consumed>0?'consumed':consumed>0?'partial':'pending'};
+        await DB.put('planning',normalized); Object.assign(plan,normalized); changed=true;
+      }
+      if(!this.planningHistory.some(item=>String(item.planningId)===String(plan.id))){
+        await this.addPlanningHistory({planningId:String(plan.id),projectId:String(plan.projectId||''),
+          category:String(plan.category||''),action:'baseline',source:'migration',amount:initial,
+          beforeValue:initial,afterValue:current,description:'Histórico inicial preservado na atualização v3.0.7'});
+        changed=true;
+      }
+    }
+    await this.setSetting('planningHistoryV307',true);
+    if(changed) await this.reload();
+    return changed;
+  }
 };

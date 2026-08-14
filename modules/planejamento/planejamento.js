@@ -47,6 +47,10 @@ Views.planejamento = {
     let rows = State.planning.slice();
     const pid = this.projectFilter || State.filters.project || '';
     if(pid) rows = rows.filter(x=>x.projectId===pid);
+    else {
+      const ids=new Set(State.selectedProjectIds());
+      if(ids.size) rows=rows.filter(x=>ids.has(String(x.projectId)));
+    }
     if(this.focusUpcoming){
       const start = U.isoDate(new Date()), endDate = new Date(); endDate.setDate(endDate.getDate()+7);
       const end = U.isoDate(endDate); rows = rows.filter(x=>x.date>=start && x.date<=end);
@@ -78,12 +82,13 @@ Views.planejamento = {
       const items = this.items();
       if(this.mode==='list'){
         body.innerHTML = `<div class="table-wrap"><div class="table-scroll"><table>
-          <thead><tr><th>Data</th><th>Projeto</th><th>Categoria</th><th>Descrição</th><th class="num">Valor Previsto</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Projeto</th><th>Categoria</th><th>Descrição</th><th class="num">Previsto inicial</th><th class="num">Consumido</th><th class="num">Saldo atual</th><th></th></tr></thead>
           <tbody>${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
             <tr><td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.category)}</td>
-            <td>${U.esc(x.desc)}</td><td class="num">${U.money2(x.value)}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.form(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button></td></tr>`;}).join('')
-            || `<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
+            <td>${U.esc(x.desc)}</td><td class="num">${U.money2(x.originalValue!==''&&x.originalValue!=null&&Number.isFinite(Number(x.originalValue))?Number(x.originalValue):(Number(x.value)||0)+(Number(x.realizedAmount)||0))}</td>
+            <td class="num">${U.money2(Number(x.realizedAmount)||0)}</td><td class="num"><b>${U.money2(x.value)}</b></td>
+            <td><div style="display:flex;gap:4px"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.history(${U.jsArg(x.id)})" title="Ver histórico"><i data-lucide="history"></i></button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Views.planejamento.form(${U.jsArg(x.id)})" title="Editar"><i data-lucide="pencil"></i></button></div></td></tr>`;}).join('')
+            || `<tr><td colspan="8"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
       } else {
         body.innerHTML = items.length ? `<div class="card"><div class="timeline">${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
           <div class="tl-item"><b>${U.date(x.date)}</b> · <span class="tag" style="background:${App.projectColor(x.projectId)}1F;color:${App.projectColor(x.projectId)}">${U.esc(p?p.proposal:'?')}</span> ${U.esc(x.category)}<br>
@@ -126,7 +131,8 @@ Views.planejamento = {
     U.icons();
   },
   form(id, presetDate=''){
-    const x = id ? State.planning.find(i=>i.id===id) : {projectId:State.filters.project||(State.projects[0]||{}).id||'',category:'',desc:'',value:0,date:presetDate||U.isoDate(new Date()),notes:''};
+    const selected=State.selectedProjectIds();
+    const x = id ? State.planning.find(i=>i.id===id) : {projectId:selected[0]||(State.projects[0]||{}).id||'',category:'',desc:'',value:0,date:presetDate||U.isoDate(new Date()),notes:''};
     UI.modal({ title:id?'Editar Item de Planejamento':'Novo Item de Planejamento', body:`
       <div class="form-grid">
         <div><label>Projeto *</label><select id="pl-proj">${State.projects.map(p=>`<option value="${U.esc(p.id)}" ${p.id===x.projectId?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
@@ -147,11 +153,34 @@ Views.planejamento = {
         value:Math.round(U.num(document.getElementById('pl-value').value)*100)/100, date:document.getElementById('pl-date').value,
         desc:document.getElementById('pl-desc').value.trim(), notes:document.getElementById('pl-notes').value };
       if(!obj.projectId || !obj.category || !obj.date) return UI.toast('Preencha projeto, categoria e data', 'warn');
-      await DB.put('planning', obj); await State.reload();
+      const before=id?Number(x.value)||0:0;
+      const hasInitial=x.originalValue!==''&&x.originalValue!=null&&Number.isFinite(Number(x.originalValue));
+      obj.originalValue=id?(hasInitial?Math.max(0,Number(x.originalValue)):before+(Number(x.realizedAmount)||0)):obj.value;
+      obj.realizedAmount=Math.max(0,Number(x.realizedAmount)||0);
+      obj.consumptionStatus=obj.value<=0&&obj.realizedAmount>0?'consumed':obj.realizedAmount>0?'partial':'pending';
+      await DB.put('planning', obj);
+      await State.addPlanningHistory({planningId:String(obj.id),projectId:String(obj.projectId),category:obj.category,
+        action:id?'updated':'created',source:'manual',amount:Math.abs(obj.value-before),beforeValue:before,afterValue:obj.value,
+        description:id?'Planejamento atualizado manualmente':'Planejamento criado'});
+      await State.reload();
       UI.close(); UI.toast('Planejamento salvo', 'success'); App.render();
     };
   },
+  history(id){
+    const plan=State.planning.find(item=>String(item.id)===String(id)); if(!plan) return;
+    const rows=State.planningHistory.filter(item=>String(item.planningId)===String(id))
+      .sort((a,b)=>String(b.occurredAt||'').localeCompare(String(a.occurredAt||'')));
+    const labels={baseline:'Saldo inicial',created:'Criado',updated:'Alterado',consumed:'Consumido',restored:'Restaurado',omie_consumed:'Consumido pelo Omie',omie_restored:'Restaurado pelo Omie'};
+    UI.modal({title:'Histórico do valor projetado',wide:true,body:`
+      <div class="planning-history-summary"><div><small>Previsto inicial</small><b>${U.money2(plan.originalValue!==''&&plan.originalValue!=null&&Number.isFinite(Number(plan.originalValue))?Number(plan.originalValue):(Number(plan.value)||0)+(Number(plan.realizedAmount)||0))}</b></div><div><small>Consumido</small><b>${U.money2(Number(plan.realizedAmount)||0)}</b></div><div><small>Saldo projetado atual</small><b>${U.money2(plan.value)}</b></div></div>
+      <div class="table-wrap"><div class="table-scroll" style="max-height:48vh"><table><thead><tr><th>Data</th><th>Evento</th><th>Origem</th><th class="num">Antes</th><th class="num">Depois</th><th class="num">Valor</th></tr></thead><tbody>
+      ${rows.map(row=>`<tr><td>${U.date(row.occurredAt)}</td><td><b>${U.esc(labels[row.action]||row.action||'Evento')}</b><br><small>${U.esc(row.description||'')}</small></td><td>${U.esc(row.source==='omie'?'Omie':'CliqueObras')}</td><td class="num">${U.money2(row.beforeValue)}</td><td class="num">${U.money2(row.afterValue)}</td><td class="num">${U.money2(row.amount)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nenhum evento registrado.</div></td></tr>'}
+      </tbody></table></div></div>`,footer:'<button class="btn btn-primary" onclick="UI.close()">Fechar</button>'});
+  },
   remove(id){
+    const plan=State.planning.find(item=>String(item.id)===String(id));
+    if(plan&&(Number(plan.realizedAmount)||0)>0)
+      return UI.toast('Este planejamento possui consumo registrado e não pode ser excluído. Zere ou ajuste o saldo mantendo o histórico.','warn',7000);
     UI.confirm('Excluir este item de planejamento?', async () => {
       await DB.del('planning', id); await State.reload(); UI.toast('Item excluído', 'warn'); App.render();
     });

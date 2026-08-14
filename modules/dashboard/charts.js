@@ -49,31 +49,59 @@ const Dash = {
   /* ----- filtros globais ----- */
   filtersBar(){
     const f = State.filters;
+    const selectedProjects=State.selectedProjectIds();
     const catMap=new Map();
     [...State.categories.map(c=>c.name),...State.budgets.map(b=>b.category), ...State.purchases.map(x=>x.category), ...State.planning.map(x=>x.category)]
       .filter(Boolean).forEach(name=>{ const key=Biz.categoryKey(name); if(key && !catMap.has(key)) catMap.set(key,Biz.categoryName(name)); });
     Biz.categoryStats(State.projects).forEach(c=>{ if(!catMap.has(c.categoryKey)) catMap.set(c.categoryKey,c.name); });
     const cats=[...catMap.values()].sort((a,b)=>a.localeCompare(b));
     const opt = (v, sel, label) => `<option value="${U.esc(v)}" ${v===sel?'selected':''}>${U.esc(label??v)}</option>`;
+    const projectLabel=!selectedProjects.length?'Todos os projetos':selectedProjects.length===1
+      ? U.projLabel(State.projects.find(p=>String(p.id)===selectedProjects[0]))
+      : `${selectedProjects.length} projetos selecionados`;
+    const hasFilters=selectedProjects.length>0||[f.client,f.category,f.status,f.type].some(Boolean);
     return `<div class="filters-bar">
-      <select id="flt-project" title="Projeto"><option value="">Todos os projetos</option>${State.projects.map(p=>opt(p.id, f.project, U.projLabel(p))).join('')}</select>
+      <button class="filter-project-button" id="flt-projects-open" type="button" title="Selecionar um ou mais projetos"><i data-lucide="hard-hat"></i><span>${U.esc(projectLabel)}</span><i data-lucide="chevron-down"></i></button>
       <select id="flt-client" title="Cliente"><option value="">Todos os clientes</option>${[...new Set(State.projects.map(p=>p.client).filter(Boolean))].sort().map(c=>opt(c, f.client)).join('')}</select>
       <select id="flt-category" title="Categoria"><option value="">Todas as categorias</option>${cats.map(c=>`<option value="${U.esc(c)}" ${Biz.sameCategory(c,f.category)?'selected':''}>${U.esc(c)}</option>`).join('')}</select>
       <select id="flt-status" title="Status"><option value="">Todos os status</option>${['Em andamento','Concluído','Paralisado','A executar'].map(s=>opt(s, f.status)).join('')}</select>
       <select id="flt-type" title="Tipo"><option value="">Todos os tipos</option>${['HH','Obra','Fornecimento','Painel'].map(t=>opt(t, f.type)).join('')}</select>
-      ${Object.values(f).some(v=>v)?`<button class="btn btn-ghost btn-sm" onclick="App.clearFilters()"><i data-lucide="x"></i>Limpar</button>`:''}
+      ${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="App.clearFilters()"><i data-lucide="x"></i>Limpar</button>`:''}
     </div>`;
   },
   bindFilters(){
-    [['flt-project','project'],['flt-client','client'],['flt-category','category'],['flt-status','status'],['flt-type','type']]
+    const projectButton=document.getElementById('flt-projects-open');
+    if(projectButton) projectButton.onclick=()=>this.projectFilterForm();
+    [['flt-client','client'],['flt-category','category'],['flt-status','status'],['flt-type','type']]
       .forEach(([id,k]) => { const el = document.getElementById(id); if(el) el.onchange = () => { State.filters[k] = el.value; App.render(); }; });
+  },
+  projectFilterForm(){
+    const selected=new Set(State.selectedProjectIds());
+    UI.modal({title:'Filtrar projetos',wide:true,body:`
+      <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button">Limpar seleção</button></div>
+      <div class="check-list project-filter-list" id="filter-project-list">${State.projects.map(project=>`
+        <label class="check-item"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`).join('')||'<small>Nenhum projeto cadastrado.</small>'}</div>`,
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="filter-project-apply"><i data-lucide="check"></i>Aplicar filtro</button>',
+      onOpen:()=>{
+        document.getElementById('filter-project-all').onclick=()=>document.querySelectorAll('#filter-project-list input').forEach(input=>input.checked=true);
+        document.getElementById('filter-project-none').onclick=()=>document.querySelectorAll('#filter-project-list input').forEach(input=>input.checked=false);
+        document.getElementById('filter-project-apply').onclick=()=>{
+          const ids=[...document.querySelectorAll('#filter-project-list input:checked')].map(input=>String(input.value));
+          State.filters.project=ids.length===1?ids[0]:'';
+          State.filters.projects=ids.length>1?ids:[];
+          if(Views.planejamento) Views.planejamento.projectFilter='';
+          UI.close(); App.render({resetScroll:false});
+        };
+      }
+    });
   }
 };
 
 /* Banner do projeto em análise — destaca a logo do cliente quando um projeto está filtrado */
 Dash.projectBanner = function(){
-  const f = State.filters; if(!f.project) return '';
-  const p = State.projects.find(x=>x.id===f.project); if(!p) return '';
+  const ids=State.selectedProjectIds(); if(ids.length!==1) return '';
+  const p = State.projects.find(x=>String(x.id)===ids[0]); if(!p) return '';
   const c = State.clients.find(x=>x.name===p.client);
   const logo = U.safeImageSrc((c && c.logo) || p.clientLogo || '');
   const st = Biz.projectStats(p, State.filters.category || '');
@@ -107,6 +135,14 @@ Dash.drill = function(filter){
   const crumbs = [];
   const projectId = filter.projectId || State.filters.project;
   if(projectId){ rows = rows.filter(x=>x.projectId===projectId); const p = State.projects.find(x=>x.id===projectId); crumbs.push('Projeto: '+U.projLabel(p)); }
+  else {
+    const selected=State.selectedProjectIds();
+    if(selected.length){
+      const ids=new Set(selected);
+      rows=rows.filter(x=>ids.has(String(x.projectId)));
+      crumbs.push(`${selected.length} projetos selecionados`);
+    }
+  }
   if(filter.category){ rows = rows.filter(x=>Biz.sameCategory(x.category,filter.category)); crumbs.push('Categoria: '+Biz.categoryName(filter.category)); }
   if(filter.supplier){ rows = rows.filter(x=>x.supplier===filter.supplier); crumbs.push('Fornecedor: '+filter.supplier); }
   if(filter.month){ rows = rows.filter(x=>(x.date||'').startsWith(filter.month)); crumbs.push('Mês: '+filter.month); }
@@ -162,7 +198,7 @@ Dash.simulator = function(projectId){
         document.getElementById('sim-out').innerHTML = `
           <div class="kpi ${profit<0?'accent-red':'accent-green'}"><div class="k-label">Lucro Simulado</div><div class="k-value">${U.money(profit)}</div>${d(profit, s.profit)}</div>
           <div class="kpi accent-blue"><div class="k-label">Margem Simulada</div><div class="k-value">${U.pct(margin)}</div></div>
-          <div class="kpi ${balance<0?'accent-red':''}"><div class="k-label">Saldo vs Orçamento</div><div class="k-value">${U.money(balance)}</div></div>
+          <div class="kpi ${balance<0?'accent-red':''}"><div class="k-label">Saldo Orçado</div><div class="k-value">${U.money(balance)}</div></div>
           <div class="kpi"><div class="k-label">Encargos (${U.pct(rate,1)})</div><div class="k-value">${U.money(overhead)}</div></div>`;
       };
       ['sale','cost','tax','admin','fees','other'].forEach(k => document.getElementById('sim-'+k).oninput = calc);

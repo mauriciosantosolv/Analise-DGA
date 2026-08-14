@@ -37,7 +37,7 @@ export function corsHeaders(request: Request) {
       ? { "Access-Control-Allow-Origin": origin }
       : {}),
     "Access-Control-Allow-Headers":
-      "authorization, apikey, content-type, x-client-info",
+      "authorization, apikey, content-type, x-client-info, x-omie-cron",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "600",
     "Vary": "Origin",

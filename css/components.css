@@ -150,6 +150,30 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   body.printing-dashboard .pdf-company-meta{display:block!important;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid #dbe2ea;color:#334155;font-size:9px;font-weight:700}
 }
 
+/* v3.0.7 — filtro múltiplo, histórico do planejamento e integração Omie */
+.filter-project-button{min-height:38px;max-width:300px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+.filter-project-button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}
+.filter-project-button svg{width:16px;height:16px;flex:0 0 auto;color:var(--text3)}
+.project-filter-list{max-height:52vh;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:7px}
+.planning-history-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.planning-history-summary>div{padding:13px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);display:flex;flex-direction:column;gap:3px}
+.planning-history-summary small,.omie-connection-grid small{color:var(--text3)}
+.omie-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.omie-heading>div:nth-child(2){flex:1;min-width:220px}.omie-heading p{font-size:.84rem;color:var(--text2);margin-top:3px}
+.omie-mark{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--blue-soft);color:var(--blue)}
+.omie-mark svg{width:20px;height:20px}.omie-security-note{margin-top:14px}
+.omie-disconnected{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px dashed var(--border2);border-radius:13px;background:var(--surface2)}
+.omie-disconnected div{display:flex;flex-direction:column;gap:4px}.omie-disconnected small{color:var(--text3)}
+.omie-connection-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:9px}
+.omie-connection-grid>div{padding:12px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);display:flex;flex-direction:column;gap:4px}
+.omie-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.omie-last-result{display:block;color:var(--text3);margin-top:9px}
+.omie-auto-config{display:grid;grid-template-columns:1fr minmax(180px,260px);gap:12px;align-items:end;padding:12px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);margin-bottom:12px}
+.omie-tabs{margin-bottom:10px}.omie-map-list{display:flex;flex-direction:column;gap:7px;max-height:51vh;overflow:auto;padding-right:3px}
+.omie-map-row{display:grid;grid-template-columns:20px minmax(170px,1fr) 20px minmax(210px,1.2fr);gap:9px;align-items:center;padding:10px;border:1px solid var(--border2);border-radius:11px;background:var(--surface)}
+.omie-map-row>div{min-width:0}.omie-map-row b,.omie-map-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.omie-map-row small{color:var(--text3);margin-top:2px}.omie-map-row>svg{width:16px;height:16px;color:var(--text3)}
+@media(max-width:760px){.filter-project-button{max-width:none;width:100%}.planning-history-summary{grid-template-columns:1fr}.omie-connection-grid{grid-template-columns:1fr 1fr}.omie-auto-config{grid-template-columns:1fr}.omie-map-row{grid-template-columns:20px 1fr}.omie-map-row>svg{display:none}.omie-map-row>select{grid-column:2}.omie-disconnected{align-items:flex-start;flex-direction:column}}
+@media(max-width:460px){.omie-connection-grid{grid-template-columns:1fr}}
+
 /* Planejamento: datas clicáveis para inclusão rápida */
 .cal-day{cursor:pointer;transition:background .15s,border-color .15s}
 .cal-day:hover{background:var(--surface2);border-color:var(--blue)}

@@ -22,11 +22,11 @@ const App = {
   viewStores:{
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
-    planejamento:['planning'], rdos:['rdos'], medicoes:['measurements'],
+    planejamento:['planning','planning_history'], rdos:['rdos'], medicoes:['measurements'],
     colaboradores:['crew'], valoreshh:['labor_rates','rdo_financial'], clientes:['clients'],
     categorias:['categories'], basecalculo:['settings'],
     relatorios:['projects','budgets','purchases','planning','measurements'],
-    backup:['projects','budgets','purchases','planning','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial']
+    backup:['projects','budgets','purchases','planning','planning_history','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial']
   },
   primaryStore(view=State.view){
     return ({projetos:'projects',orcamentos:'budgets',financeiro:'purchases',
@@ -76,6 +76,7 @@ const App = {
   },
   goFiltered(view, projectId='', options={}){
     State.filters.project = projectId || '';
+    State.filters.projects = [];
     if(view === 'planejamento'){
       Views.planejamento.projectFilter = projectId || '';
       Views.planejamento.focusUpcoming = !!options.upcoming7;
@@ -113,9 +114,13 @@ const App = {
     const selectedIds=Array.isArray(selection) ? new Set(selection) : null;
     const projects = State.projects.filter(p=>p.status !== 'Cancelado' && (!selectedIds || selectedIds.has(p.id)));
     if(!projects.length){ el.innerHTML = `<div class="ticker-empty">${State.projects.length?'Nenhum projeto selecionado para o ticker financeiro':'Desempenho financeiro: nenhum projeto cadastrado'}</div>`; return; }
+    const metric=State.settings.tickerMetric==='profit'?'profit':'budget_balance';
     const items = projects.map(p=>{
-      const st = Biz.projectStats(p), positive = st.balance >= 0;
-      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="Abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(st.balance)}</span></button>`;
+      const st = Biz.projectStats(p);
+      const value=metric==='profit'?st.profit:st.balance;
+      const positive = value >= 0;
+      const label=metric==='profit'?'Lucro estimado':'Saldo orçado';
+      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="${label} · abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(value)}</span></button>`;
     }).join('');
     el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div></div>`;
     requestAnimationFrame(() => {
@@ -155,7 +160,8 @@ const App = {
     if(content) content.scrollTop = options.resetScroll ? 0 : previousScroll;
   },
   clearFilters(){
-    State.filters = { project:'', client:'', category:'', status:'', type:'' };
+    State.filters = { project:'', projects:[], client:'', category:'', status:'', type:'' };
+    if(Views.planejamento) Views.planejamento.projectFilter='';
     this.render();
   },
   initHistory(){
@@ -172,8 +178,8 @@ const App = {
 
   /* Painel lateral fixo — gastos futuros */
   futureExpenseRows(){
-    const projectId=State.filters.project || '';
-    return projectId ? State.planning.filter(x=>x.projectId===projectId) : State.planning;
+    const ids=new Set(State.selectedProjectIds());
+    return ids.size ? State.planning.filter(x=>ids.has(String(x.projectId))) : State.planning;
   },
   renderRightbar(){
     const fut = Biz.futureExpenses(this.futureExpenseRows());
@@ -315,8 +321,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v3.0.6 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v3.0.6 · dados locais';
+      el.textContent=`v3.0.7 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v3.0.7 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -490,6 +496,9 @@ const App = {
       this.lastCloudRefresh=Date.now();
     }
     await State.reload();
+    try{ await State.ensurePlanningHistory(); }catch(error){
+      if(typeof console!=='undefined') console.warn('Histórico do planejamento será normalizado na próxima sincronização.',error);
+    }
     // Auto-correção (em segundo plano): logo salva sem redimensionar é reduzida
     try{
       const lg = State.settings.companyLogo || '';
@@ -510,7 +519,7 @@ const App = {
           planning:State.planning, clients:State.clients.map(({logo, ...c}) => c),
           categories:State.categories, measurements:State.measurements,
           rdos:State.rdos, crew:State.crew, labor_rates:State.laborRates,
-          rdo_financial:State.rdoFinancial,
+          rdo_financial:State.rdoFinancial, planning_history:State.planningHistory,
           settings:Object.entries(State.settings).filter(([k]) => !['companyLogo','pdfLetterhead'].includes(k)).map(([id, value]) => ({id, value})) });
         if(snap.length < 4500000){
           localStorage.setItem('ccf_snap', snap);

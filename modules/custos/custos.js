@@ -85,9 +85,10 @@ const Biz = {
   // Lançamentos filtrados pelos filtros globais ativos
   filteredPurchases(){
     const f = State.filters;
+    const selected=new Set(State.selectedProjectIds());
     return State.purchases.filter(x => {
       const p = State.projects.find(pr => pr.id === x.projectId);
-      if(f.project && x.projectId !== f.project) return false;
+      if(selected.size && !selected.has(String(x.projectId))) return false;
       if(f.client && (!p || p.client !== f.client)) return false;
       if(f.category && !this.sameCategory(x.category,f.category)) return false;
       if(f.status && (!p || p.status !== f.status)) return false;
@@ -97,8 +98,9 @@ const Biz = {
   },
   filteredProjects(){
     const f = State.filters;
+    const selected=new Set(State.selectedProjectIds());
     return State.projects.filter(p => {
-      if(f.project && p.id !== f.project) return false;
+      if(selected.size && !selected.has(String(p.id))) return false;
       if(f.client && p.client !== f.client) return false;
       if(f.category){
         const matches = row => row.projectId === p.id && this.sameCategory(row.category,f.category);
@@ -201,6 +203,8 @@ const Biz = {
     const spentPurchases = purchases.reduce((s,x) => s+x.value, 0); // somente compras
     const planned = State.planning.filter(x => x.projectId === p.id && inCategory(x));
     const projected = planned.reduce((s,x) => s+x.value, 0); // somente Planejamento
+    const projectedInitial = planned.reduce((s,x) => s+(x.originalValue!==''&&x.originalValue!=null&&Number.isFinite(Number(x.originalValue))?Number(x.originalValue):(Number(x.value)||0)+(Number(x.realizedAmount)||0)), 0);
+    const planningConsumed = planned.reduce((s,x)=>s+Math.max(0,Number(x.realizedAmount)||0),0);
     // Medições: cada etapa do fluxo é calculada separadamente para que o
     // dashboard mostre o que aguarda aprovação, o que já foi aprovado e o que
     // foi faturado, sem perder o total efetivamente medido.
@@ -247,7 +251,7 @@ const Biz = {
     // de R$ 0 a R$ 500 permanece amarela; saldo negativo fica vermelho.
     const light = balance < 0 ? 'red' : balance > 500 ? 'green' : 'amber';
     const health = light === 'green' ? 100 : light === 'amber' ? 50 : 0;
-    return { budgetTotal, spent, spentPurchases, projected, projectedPurchases, committedTotal, balance,
+    return { budgetTotal, spent, spentPurchases, projected, projectedInitial, planningConsumed, projectedPurchases, committedTotal, balance,
              consumed, marginPlanned, marginCurrent, profit, deviation, daysLeft, dailyBurn,
              burnoutDate, health, light, overhead, plannedFuture:projected, purchases, budgets,
              measured, measuredPct, invoiced, invoicedPct, approved, awaitingApproval };
@@ -279,7 +283,7 @@ const Biz = {
     const ensure = (category, fallback='Sem categoria') => {
       const name = String(category||'').trim() || fallback;
       const k = this.categoryKey(name);
-      return map[k] = map[k] || {name:this.categoryName(name), categoryKey:k, budget:0, spent:0, projected:0, monthly:{}};
+      return map[k] = map[k] || {name:this.categoryName(name), categoryKey:k, budget:0, spent:0, projected:0, projectedInitial:0, planningConsumed:0, monthly:{}};
     };
     // Todas as categorias cadastradas permanecem visíveis, mesmo quando um
     // projeto ainda não possui valores naquela categoria.
@@ -295,7 +299,12 @@ const Biz = {
     // O planejamento também cria a categoria no agrupamento. Isso garante que
     // categorias sem orçamento/compra realizada não desapareçam do dashboard.
     State.planning.filter(x => ids.has(x.projectId)).forEach(x => {
-      ensure(x.category).projected += x.value;
+      const cat=ensure(x.category);
+      const current=Number(x.value)||0;
+      const initial=x.originalValue!==''&&x.originalValue!=null&&Number.isFinite(Number(x.originalValue))?Number(x.originalValue):current+(Number(x.realizedAmount)||0);
+      cat.projected += current;
+      cat.projectedInitial += initial;
+      cat.planningConsumed += Math.max(0,Number(x.realizedAmount)||0);
     });
     // Encargos da base de cálculo → realizado da categoria correspondente
     const OVERHEAD_MATCH = {
@@ -359,7 +368,7 @@ const Biz = {
   futureExpenses(rows=State.planning){
     const today = U.isoDate(new Date());
     const horizon = d => U.isoDate(new Date(Date.now()+d*86400000));
-    const fut = rows.filter(x => x.date >= today).slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const fut = rows.filter(x => x.date >= today && Number(x.value)>0).slice().sort((a,b)=>a.date.localeCompare(b.date));
     return {
       today: fut.filter(x=>x.date===today),
       d7: fut.filter(x=>x.date>today && x.date<=horizon(7)),

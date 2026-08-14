@@ -17,7 +17,7 @@ const Cloud = (() => {
   const PROFILE_BUCKET = 'profile-avatars';
   const ALL_STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
-    'rdos','crew','labor_rates','rdo_financial'
+    'rdos','crew','labor_rates','rdo_financial','planning_history'
   ];
   const DEFAULT_PERMISSIONS = {
     view:ALL_STORES.slice(),
@@ -329,6 +329,7 @@ const Cloud = (() => {
   function organizations(){ return orgContext.organizations.slice(); }
   function membership(){ return (organization()||{}).membership || null; }
   function role(){ return (membership()||{}).role || ''; }
+  function isOwner(){ return role()==='owner'; }
   function fullAccess(){ return role()==='owner' || role()==='admin'; }
   function permissionList(kind){
     const p=(membership()||{}).permissions || {};
@@ -336,11 +337,13 @@ const Cloud = (() => {
   }
   function canViewStore(store){
     if(!configured()) return true;
-    return fullAccess() || permissionList('view').includes(store);
+    const permissionStore=store==='planning_history'?'planning':store;
+    return fullAccess() || permissionList('view').includes(permissionStore);
   }
   function canEditStore(store){
     if(!configured()) return true;
-    return fullAccess() || permissionList('edit').includes(store);
+    const permissionStore=store==='planning_history'?'planning':store;
+    return fullAccess() || permissionList('edit').includes(permissionStore);
   }
   function canManageUsers(){
     if(!configured()) return true;
@@ -744,6 +747,17 @@ const Cloud = (() => {
     });
   }
 
+  async function omieRequest(action,payload={}){
+    await ensureFresh();
+    if(!organization() || !isOwner())
+      throw new Error('Somente o proprietário pode administrar a integração Omie.');
+    return request('/functions/v1/omie-integration',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({action,organizationId:organization().id,...payload})
+    });
+  }
+
   async function ensureRdoCostPosting(rdoId,projectId,purchaseRecordId,amount){
     await ensureFresh();
     if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
@@ -1064,7 +1078,7 @@ const Cloud = (() => {
     accessDeniedMessage:()=>accessDeniedMessage,
     organization, organizations, membership, role, switchOrganization,
     refreshOrganizationContext,
-    canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit,
+    canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit, isOwner,
     rdoProjects, canUseRdoProject,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
     clearCurrentQueue,
@@ -1072,6 +1086,7 @@ const Cloud = (() => {
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
+    omieRequest,
     listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
     profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES

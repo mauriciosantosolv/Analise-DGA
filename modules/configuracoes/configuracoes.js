@@ -117,7 +117,7 @@ Views.configuracoes = {
     ['settings','Configurações financeiras','Empresa, ticker e base de cálculo']
   ],
   defaultPermissions(role){
-    const all=this.permissionModules.map(x=>x[0]);
+    const all=[...this.permissionModules.map(x=>x[0]),'planning_history'];
     if(role==='editor') return {view:all,edit:all,manage_users:false};
     if(role==='viewer') return {
       view:all.filter(x=>!['labor_rates','rdo_financial'].includes(x)),
@@ -136,6 +136,7 @@ Views.configuracoes = {
     const currentUser=cloudConnected?(Cloud.user()||{}):{};
     const currentDisplayName=String((currentUser.user_metadata&&currentUser.user_metadata.full_name)||'').trim();
     const canManageCompany=!cloudConnected||['owner','admin'].includes(currentRole);
+    const canEditTicker=!cloudConnected||Cloud.canEditStore('settings');
     const ownProfilePhoto=cloudConnected&&typeof Cloud.profileAvatarUrl==='function'?Cloud.profileAvatarUrl():'';
     const hasOwnProfilePhoto=cloudConnected&&typeof Cloud.profileAvatarPath==='function'&&!!Cloud.profileAvatarPath();
     const profileFallback=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
@@ -198,17 +199,19 @@ Views.configuracoes = {
       </section>
       <section class="card settings-card settings-card-wide settings-ticker">
         <h2 style="margin-bottom:6px">Projetos no ticker financeiro</h2>
-        <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha quais projetos terão saldo passando na faixa superior do sistema.</p>
+        <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha os projetos e o indicador exibido na faixa superior do sistema.</p>
+        <div style="max-width:360px;margin-bottom:12px"><label>Indicador do ticker</label><select id="ticker-metric" ${canEditTicker?'':'disabled'}><option value="budget_balance" ${State.settings.tickerMetric!=='profit'?'selected':''}>Saldo do orçamento</option><option value="profit" ${State.settings.tickerMetric==='profit'?'selected':''}>Lucro estimado</option></select></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-ghost btn-sm" id="ticker-all">Selecionar todos</button>
-          <button class="btn btn-ghost btn-sm" id="ticker-none">Limpar seleção</button>
+          <button class="btn btn-ghost btn-sm" id="ticker-all" ${canEditTicker?'':'disabled'}>Selecionar todos</button>
+          <button class="btn btn-ghost btn-sm" id="ticker-none" ${canEditTicker?'':'disabled'}>Limpar seleção</button>
         </div>
         <div class="check-list" id="ticker-projects">
-          ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${U.esc(p.id)}" ${tickerSelected.has(p.id)?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
+          ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${U.esc(p.id)}" ${tickerSelected.has(p.id)?'checked':''} ${canEditTicker?'':'disabled'}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
             || '<small style="color:var(--text3)">Cadastre um projeto para configurar o ticker.</small>'}
         </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" id="ticker-save"><i data-lucide="check"></i>Salvar ticker</button></div>
+        ${canEditTicker?'<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" id="ticker-save"><i data-lucide="check"></i>Salvar ticker</button></div>':''}
       </section>
+      ${cloudConnected&&currentRole==='owner'?OmieIntegration.card():''}
       <section class="card settings-card settings-card-wide">
         <h2 style="margin-bottom:6px">Base de dados em nuvem</h2>
         ${cloudConnected?`<p style="font-size:.84rem;color:var(--text2)">Conectado como <b>${U.esc((Cloud.user()||{}).email||'usuário autenticado')}</b>. ${Cloud.pendingCount()?`Há ${Cloud.pendingCount()} alteração(ões) aguardando sincronização.`:'Todos os registros locais estão sincronizados.'}</p>
@@ -314,10 +317,12 @@ Views.configuracoes = {
     };
     document.getElementById('ticker-all').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=true);
     document.getElementById('ticker-none').onclick=()=>document.querySelectorAll('#ticker-projects input[type=checkbox]').forEach(x=>x.checked=false);
-    document.getElementById('ticker-save').onclick=async()=>{
+    const tickerSave=document.getElementById('ticker-save');
+    if(tickerSave) tickerSave.onclick=async()=>{
       const ids=[...document.querySelectorAll('#ticker-projects input[type=checkbox]:checked')].map(x=>x.value);
       await State.setSetting('tickerProjects',ids);
-      UI.toast('Projetos do ticker atualizados','success'); App.renderTicker();
+      await State.setSetting('tickerMetric',document.getElementById('ticker-metric').value==='profit'?'profit':'budget_balance');
+      UI.toast('Ticker financeiro atualizado','success'); App.renderTicker();
     };
     const companySave=document.getElementById('cfg-company-save');
     if(companySave) companySave.onclick=async()=>{
@@ -353,6 +358,7 @@ Views.configuracoes = {
     const cnpjInput=document.getElementById('cfg-cnpj');
     if(cnpjInput&&!cnpjInput.disabled) cnpjInput.oninput=()=>{cnpjInput.value=U.formatCnpj(cnpjInput.value);};
     if(cloudConnected) this.loadTeam();
+    if(cloudConnected&&currentRole==='owner') OmieIntegration.load();
     U.icons();
   },
   async saveOwnName(){
@@ -515,6 +521,8 @@ Views.configuracoes = {
   readPermissionForm(){
     const view=[...document.querySelectorAll('.perm-view:checked')].map(x=>x.dataset.store);
     const edit=[...document.querySelectorAll('.perm-edit:checked')].map(x=>x.dataset.store).filter(x=>view.includes(x));
+    if(view.includes('planning')&&!view.includes('planning_history')) view.push('planning_history');
+    if(edit.includes('planning')&&!edit.includes('planning_history')) edit.push('planning_history');
     const rdo_projects=[...document.querySelectorAll('.perm-rdo-project:checked')].map(input=>{
       const project=State.projects.find(x=>String(x.id)===String(input.value));
       return {id:String(input.value),label:project?U.projLabel(project):'Projeto'};

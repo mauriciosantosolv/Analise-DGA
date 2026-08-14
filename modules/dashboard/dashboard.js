@@ -57,6 +57,8 @@ Views.dashboard = {
     // obra e custos da base de cálculo (imposto/adm/taxas/outros).
     const spent = sum('spent');
     const projected = sum('projected');
+    const projectedInitial = sum('projectedInitial');
+    const planningConsumed = sum('planningConsumed');
     const committedTotal = spent + projected;
     // Equação exibida no dashboard: Orçado - Realizado - Projetado.
     const balance = budgetTotal - committedTotal;
@@ -73,7 +75,13 @@ Views.dashboard = {
     const cats = Biz.categoryStats(projects)
       .filter(c=>!categoryFilter || Biz.sameCategory(c.name,categoryFilter));
 
-    const selectedProject = State.filters.project || '';
+    const selectedProjects = State.selectedProjectIds();
+    const selectedProject = selectedProjects.length===1 ? selectedProjects[0] : '';
+    const goAction=(view,options='')=>selectedProject
+      ? `App.goFiltered('${view}',${U.jsArg(selectedProject)}${options?`,`+options:''})`
+      : options&&view==='planejamento'
+        ? `Views.planejamento.focusUpcoming=true;Views.planejamento.mode='list';App.go('planejamento')`
+        : `App.go('${view}')`;
     const kpi = (label, value, icon, cls='', sub='', action='') =>
       `<div class="kpi ${cls} ${action?'kpi-link':''}" ${action?`role="button" tabindex="0" onclick="${action}" onkeydown="if(event.key==='Enter')this.click()"`:''}><div class="k-label"><i data-lucide="${icon}"></i>${label}</div><div class="k-value">${value}</div>${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
 
@@ -82,17 +90,17 @@ Views.dashboard = {
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, `App.goFiltered('medicoes',${U.jsArg(selectedProject)})`)}
+        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, goAction('medicoes'))}
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
-        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', `App.goFiltered('orcamentos',${U.jsArg(selectedProject)})`)}
-        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', `App.goFiltered('financeiro',${U.jsArg(selectedProject)})`)}
-        ${kpi('Projetado', U.money(projected), 'trending-up', '', 'alimentado pelo Planejamento · sem imposto/adm', `App.goFiltered('planejamento',${U.jsArg(selectedProject)})`)}
+        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', goAction('orcamentos'))}
+        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', goAction('financeiro'))}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', `Previsto inicial: ${U.money(projectedInitial)} · consumido: ${U.money(planningConsumed)}`, goAction('planejamento'))}
         ${kpi('Saldo Orçado', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
         ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
-        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', `App.goFiltered('planejamento',${U.jsArg(selectedProject)},{upcoming7:true})`)}
+        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', goAction('planejamento','{upcoming7:true}'))}
       </div>
 
       <div class="toolbar" style="margin-bottom:10px">
@@ -145,7 +153,7 @@ Views.dashboard = {
     const compactTicks={autoSkip:true,maxTicksLimit:mobile?5:9,font:{size:mobile?9:11}};
     const tt = { callbacks:{ label: ctx => ` ${ctx.dataset.label||ctx.label}: ${U.money2(ctx.parsed.y ?? ctx.parsed)}` } };
 
-    // Orçado x Realizado x Projeção x Saldo por projeto
+    // Orçado x Realizado x Projeção x Saldo Orçado por projeto
     const top = stats.filter(x=>x.s.budgetTotal>0 || x.s.spent>0).sort((a,b)=>b.s.spent-a.s.spent).slice(0,itemLimit);
     if(document.getElementById('ch-main')) Dash.charts.main = new Chart(document.getElementById('ch-main'), {
       type:'bar',
@@ -154,7 +162,7 @@ Views.dashboard = {
           {label:'Orçado', data:top.map(x=>x.s.budgetTotal), backgroundColor:'#2563EB'},
           {label:'Realizado', data:top.map(x=>x.s.spent), backgroundColor:'#16A34A'},
           {label:'Projeção', data:top.map(x=>x.s.projected), backgroundColor:'#D97706'},
-          {label:'Saldo', data:top.map(x=>x.s.balance), backgroundColor:'#94A3B8'}]},
+          {label:'Saldo Orçado', data:top.map(x=>x.s.balance), backgroundColor:'#94A3B8'}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{position:'bottom'}},
         onClick:(e,els)=>{ if(els.length){ const p = top[els[0].index].p; Views.projetos.detail(p.id); } },
         scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
