@@ -135,6 +135,8 @@ const App = {
     });
   },
   go(view, options={}){
+    if(typeof DashboardPanel!=='undefined' && DashboardPanel.active && view!=='dashboard')
+      DashboardPanel.exit({render:false});
     if(!this.canOpenView(view)){
       view=this.firstAllowedView();
     }
@@ -152,6 +154,8 @@ const App = {
     const previousScroll=content ? content.scrollTop : 0;
     const v = Views[State.view] || Views.dashboard;
     document.getElementById('page-title').textContent = v.title;
+    const panelButton=document.getElementById('tv-mode-toggle');
+    if(panelButton) panelButton.hidden=State.view!=='dashboard' || (typeof DashboardPanel!=='undefined'&&DashboardPanel.active);
     Dash.destroyCharts();
     v.render();
     this.addReadOnlyBanner();
@@ -535,6 +539,9 @@ const App = {
     if(logout) logout.onclick=()=>this.logoutCloud();
     document.getElementById('theme-toggle').onclick = () => this.toggleTheme();
     document.getElementById('future-toggle').onclick = () => this.showFutureExpenses();
+    const panelButton=document.getElementById('tv-mode-toggle');
+    if(panelButton) panelButton.onclick=()=>DashboardPanel.enter();
+    if(typeof DashboardPanel!=='undefined') DashboardPanel.init();
     // Recolher menu no desktop foi REMOVIDO por estabilidade (travava a aba
     // com gráficos abertos). No celular (<=860px) o botão abre/fecha o menu.
     document.getElementById('menu-toggle').onclick = () => {
@@ -544,7 +551,15 @@ const App = {
     const backdrop = document.getElementById('mobile-menu-backdrop');
     if(backdrop) backdrop.onclick = () => this.closeMobileMenu();
     window.addEventListener('resize', () => { if(window.innerWidth > 860) this.closeMobileMenu(); });
-    document.addEventListener('keydown', e => { if(e.key==='Escape') this.closeMobileMenu(); });
+    document.addEventListener('keydown', e => {
+      if(typeof DashboardPanel!=='undefined' && DashboardPanel.active){
+        if(e.key==='Escape'){ e.preventDefault(); DashboardPanel.exit(); return; }
+        if(e.key==='ArrowRight'){ e.preventDefault(); DashboardPanel.next(); return; }
+        if(e.key==='ArrowLeft'){ e.preventDefault(); DashboardPanel.previous(); return; }
+        if(e.key===' '){ e.preventDefault(); DashboardPanel.togglePause(); return; }
+      }
+      if(e.key==='Escape') this.closeMobileMenu();
+    });
     document.getElementById('content').addEventListener('click',e=>this.guardReadOnlyAction(e),true);
     this.initSearch();
     this.applyTheme(State.settings.theme || 'light');

@@ -75,6 +75,18 @@ Views.dashboard = {
     const cats = Biz.categoryStats(projects)
       .filter(c=>!categoryFilter || Biz.sameCategory(c.name,categoryFilter));
 
+    // O modo painel reutiliza exatamente os cálculos do dashboard convencional.
+    // Ele altera somente a apresentação e não grava dados nem preferências.
+    if(typeof DashboardPanel!=='undefined' && DashboardPanel.active){
+      $c().innerHTML=DashboardPanel.render({
+        projects,active,stats,revenue,measured,invoiced,approved,awaitingApproval,
+        budgetTotal,spent,projected,balance,marginCurrent,profit,critical,next7,fut
+      });
+      DashboardPanel.mount();
+      U.icons();
+      return;
+    }
+
     const selectedProjects = State.selectedProjectIds();
     const selectedProject = selectedProjects.length===1 ? selectedProjects[0] : '';
     const goAction=(view,options='')=>selectedProject
