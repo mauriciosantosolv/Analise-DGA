@@ -784,6 +784,7 @@ const Cloud = (() => {
       projectId:String(row.project_id||''),
       objectPath:String(row.object_path||''),
       fileName:String(row.file_name||'arquivo'),
+      description:String(row.description||''),
       mimeType:String(row.mime_type||'application/octet-stream'),
       sizeBytes:Number(row.size_bytes)||0,
       uploadedBy:String(row.uploaded_by||''),
@@ -887,7 +888,7 @@ const Cloud = (() => {
     await ensureFresh();
     if(!organization() || !canViewStore('rdos')) return [];
     const query=[
-      'select=id,rdo_id,project_id,object_path,file_name,mime_type,size_bytes,uploaded_by,uploaded_at',
+      'select=id,rdo_id,project_id,object_path,file_name,description,mime_type,size_bytes,uploaded_by,uploaded_at',
       `organization_id=eq.${encodeURIComponent(organization().id)}`,
       `rdo_id=eq.${encodeURIComponent(String(rdoId))}`,
       'order=uploaded_at.asc'
@@ -896,7 +897,7 @@ const Cloud = (() => {
     return rows.map(attachmentRow);
   }
 
-  async function uploadRdoAttachment(rdoId,projectId,file){
+  async function uploadRdoAttachment(rdoId,projectId,file,description=''){
     await ensureFresh();
     if(!organization() || !canEditStore('rdos') || !canUseRdoProject(projectId))
       throw new Error('Não foi possível anexar arquivos a este RDO.');
@@ -926,6 +927,7 @@ const Cloud = (() => {
       project_id:String(projectId),
       object_path:path,
       file_name:String(file.name||'arquivo').slice(0,180),
+      description:String(description||'').trim().slice(0,180)||null,
       mime_type:mime,
       size_bytes:size,
       uploaded_by:user().id
@@ -941,6 +943,18 @@ const Cloud = (() => {
       try{ await bucket.remove([path]); }catch(cleanupError){}
       throw err;
     }
+  }
+
+  async function updateRdoAttachmentDescription(attachment,description){
+    await ensureFresh();
+    if(!organization() || !canEditStore('rdos')) throw new Error('Alteração do anexo indisponível.');
+    const clean=String(description||'').trim().slice(0,180);
+    const rows=await request(`/rest/v1/rdo_attachments?id=eq.${encodeURIComponent(String(attachment?.id||''))}&organization_id=eq.${encodeURIComponent(organization().id)}`,{
+      method:'PATCH',
+      headers:{...authHeaders(true),Prefer:'return=representation'},
+      body:JSON.stringify({description:clean||null})
+    })||[];
+    return rows[0]?attachmentRow(rows[0]):{...attachment,description:clean};
   }
 
   async function removeRdoAttachment(attachment){
@@ -1087,7 +1101,7 @@ const Cloud = (() => {
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
     omieRequest,
-    listRdoAttachments, uploadRdoAttachment, removeRdoAttachment, downloadRdoAttachment,
+    listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,
     profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES
   };

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,payableAllocations,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
+import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,isOmieConcurrentMethodError,omieRetryDelay,payableAllocations,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
 
 assert.equal(ddmmyyyyToIso('14/08/2026'),'2026-08-14');
 assert.deepEqual(payableAllocations({valor_documento:100,categorias:[
@@ -30,10 +30,22 @@ assert.equal(result.entries[2].value,50);
 assert.equal(result.entries[1].active,false);
 assert.notEqual(result.entries[0].externalItemId,result.entries[1].externalItemId);
 
+const suppliers=new Map([['24040','Depósito Aurora']]);
+const fantasy=buildPayableEntries([{
+  codigo_lancamento_omie:902,codigo_projeto:1001,codigo_cliente_fornecedor:24040,
+  nome_fornecedor:'Razão Social Antiga',valor_documento:75,codigo_categoria:'2.01.01'
+}],projects,categories,suppliers);
+assert.equal(fantasy.entries[0].supplier,'Depósito Aurora');
+
 const unmapped=buildPayableEntries([{codigo_lancamento_omie:1,codigo_projeto:999,valor_documento:10,codigo_categoria:'2.01.01'}],projects,categories);
 assert.equal(unmapped.entries.length,0);
 assert.equal(unmapped.skipped,1);
 assert.equal(safeOmieError('app_secret=super-segredo app_key=abc123'),'credencial protegida chave protegida');
+assert.equal(isOmieConcurrentMethodError('ERROR: Já existe uma requisição desse método sendo executada e você pode tentar novamente.'),true);
+assert.equal(isOmieConcurrentMethodError('ERROR: Consumo redundante detectado. Aguarde 56 segundos para tentar novamente.'),true);
+assert.equal(isOmieConcurrentMethodError('Credencial inválida'),false);
+assert.deepEqual([0,1,2].map(attempt=>omieRetryDelay(attempt)),[1500,3000,6000]);
+assert.equal(omieRetryDelay(0,'Aguarde 56 segundos para tentar novamente.'),57000);
 
 const batches=batchPayableEntries([
   {externalId:'a',externalItemId:'a:1'},

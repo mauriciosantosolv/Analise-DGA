@@ -31,7 +31,7 @@ const context = {
   Views:{},
   Cloud:{active:()=>false},
   U:{
-    projLabel:p=>`${p.proposal} — ${p.name}`,
+    projLabel:p=>`${p.proposal} | ${p.name}`,
     isoDate:()=>"",
     num:value=>Number(value)||0,
     norm:value=>String(value).toLowerCase(),
@@ -39,7 +39,8 @@ const context = {
     initials:()=>"CO",
     id:()=>"id",
     pct:value=>`${value}%`,
-    money:value=>String(value)
+    money:value=>String(value),
+    durationMinutes:value=>`${String(Math.floor((Number(value)||0)/60)).padStart(2,'0')}:${String((Number(value)||0)%60).padStart(2,'0')}`
   },
   UI:{},
   DB:{},
@@ -106,5 +107,11 @@ assert.throws(()=>RDO.validateAttachmentFile({
 assert.throws(()=>RDO.validateAttachmentFile({
   name:"grande.jpg",type:"image/jpeg",size:9*1024*1024
 }),/8 MB/);
+
+assert.equal(RDO.documentNumber({projectId:'p-hh',date:'2026-08-14'}),'798-14-08');
+assert.deepEqual(
+  JSON.parse(JSON.stringify(RDO.auditTrail({auditTrail:[{action:'edited',actorName:'Maurício',at:'2026-08-14T22:10:00Z'}]}))),
+  [{action:'edited',actorName:'Maurício',at:'2026-08-14T22:10:00Z'}]
+);
 
 console.log("RDO calculation tests passed");

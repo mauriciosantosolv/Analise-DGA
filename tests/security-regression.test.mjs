@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.7"/);
+assert.match(html, /name="application-version" content="3\.0\.8"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.7/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.8/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -50,6 +50,7 @@ const cloud = read("database/cloud.js");
 assert.match(cloud, /rdo_projects:\[\]/);
 assert.match(cloud, /uploadRdoAttachment/);
 assert.match(cloud, /downloadRdoAttachment/);
+assert.match(cloud, /updateRdoAttachmentDescription/);
 assert.match(cloud, /clique_obras_delete_rdo_measurement/);
 assert.match(cloud, /functions\/v1\/delete-rdo/);
 assert.match(cloud, /send-organization-invite/);
@@ -72,11 +73,27 @@ assert.match(rdo, /window\.print\(\)/);
 assert.match(rdo, /Comentário da reprovação/);
 assert.match(rdo, /baseCostFor/);
 assert.match(rdo, /RDO aprovado excluído e custo estornado/);
+assert.match(rdo, /Histórico interno/);
+assert.match(rdo, /documentNumber\(rdo\)/);
+assert.match(rdo, /rdo-print-labor-table-wrap/);
+assert.match(rdo, /U\.durationMinutes\(row\.breakMinutes\)/);
+assert.match(rdo, /rdo-attachment-description/);
 assert.doesNotMatch(rdo, /RDO\.detail\('\\?\$\{U\.esc/);
 
 const measurements = read("modules/medicoes/medicoes.js");
 assert.match(measurements, /Cloud\.releaseRdoMeasurement/);
 assert.match(measurements, /U\.jsArg\(m\.id\)/);
+
+const v308Sql = read("supabase/ATUALIZACAO-v3.0.8-OMIE-RDO.sql");
+assert.match(v308Sql, /clique_obras_acquire_omie_sync_lease/);
+assert.match(v308Sql, /sync_lease_expires_at/);
+assert.match(v308Sql, /supplier_backfill_completed_at/);
+assert.match(v308Sql, /alter table public\.omie_supplier_cache force row level security/);
+assert.match(v308Sql, /revoke all on public\.omie_supplier_cache from public,anon,authenticated/);
+assert.match(v308Sql, /grant update\(description\) on public\.rdo_attachments/);
+assert.match(v308Sql, /Somente a descricao da evidencia pode ser alterada/);
+assert.match(v308Sql, /audit_rdo_changes/);
+assert.match(v308Sql, /clean_new:=new\.data-'auditTrail'/);
 
 const securitySql = read("supabase/ATUALIZACAO-SEGURANCA-v2.7.sql");
 assert.match(securitySql, /where value not in \('view','edit','manage_users','rdo_projects'\)/);

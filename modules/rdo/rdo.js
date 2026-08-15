@@ -47,15 +47,16 @@ const RDO = {
     this.attachmentCache.set(key,rows.slice());
     return rows;
   },
-  async saveAttachment(rdo,file){
+  async saveAttachment(rdo,file,description=''){
     this.validateAttachmentFile(file);
     if(typeof Cloud!=='undefined' && Cloud.active())
-      return Cloud.uploadRdoAttachment(rdo.id,rdo.projectId,file);
+      return Cloud.uploadRdoAttachment(rdo.id,rdo.projectId,file,description);
     const id=U.id();
     const dataUrl=await this.fileDataUrl(file);
     const attachment={
       id,rdoId:String(rdo.id),projectId:String(rdo.projectId),
       fileName:String(file.name||'arquivo').slice(0,180),
+      description:String(description||'').trim().slice(0,180),
       mimeType:String(file.type||'application/octet-stream'),
       sizeBytes:Number(file.size)||0,
       dataUrl,
@@ -302,6 +303,31 @@ const RDO = {
   authorName(){
     const user=typeof Cloud!=='undefined'&&Cloud.active()?Cloud.user()||{}:{};
     return String(user.user_metadata?.full_name||user.email||'Usuário');
+  },
+  documentNumber(rdo){
+    const project=State.projects.find(item=>String(item.id)===String(rdo?.projectId));
+    const projectNumber=String(project?.proposal||rdo?.projectId||'').match(/\d+/)?.[0]||'0';
+    const date=String(rdo?.date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return `${projectNumber}-${date?.[3]||'00'}-${date?.[2]||'00'}`;
+  },
+  auditTrail(rdo){
+    if(Array.isArray(rdo?.auditTrail)&&rdo.auditTrail.length)
+      return rdo.auditTrail.filter(event=>event&&event.action&&event.at);
+    const fallback=[];
+    if(rdo?.createdAt) fallback.push({action:'created',actorName:rdo.createdBy||'Usuário',at:rdo.createdAt});
+    if(rdo?.approvedAt) fallback.push({action:'approved',actorName:rdo.approvedBy||'Usuário',at:rdo.approvedAt});
+    if(rdo?.rejectedAt) fallback.push({action:'rejected',actorName:rdo.rejectedBy||'Usuário',at:rdo.rejectedAt});
+    return fallback;
+  },
+  auditMarkup(rdo){
+    const labels={created:'Criado',edited:'Editado',submitted:'Enviado',approved:'Aprovado',rejected:'Reprovado',reopened:'Reaberto'};
+    const icons={created:'file-plus-2',edited:'pencil',submitted:'send',approved:'badge-check',rejected:'x-circle',reopened:'undo-2'};
+    const events=this.auditTrail(rdo).slice().reverse();
+    return `<section class="rdo-audit"><div class="rdo-section-title"><div><h3>Histórico interno</h3><small>Auditoria de ações no sistema. Este histórico não aparece no PDF do cliente.</small></div></div>
+      <div class="rdo-audit-list">${events.map(event=>{
+        const date=new Date(event.at); const when=isNaN(date)?'Data não informada':date.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+        return `<article><i data-lucide="${icons[event.action]||'history'}"></i><span><b>${U.esc(labels[event.action]||'Atualizado')}</b><small>${U.esc(event.actorName||'Usuário')} · ${U.esc(when)}</small></span></article>`;
+      }).join('')||'<div class="rdo-attachment-empty">Histórico indisponível para este registro antigo.</div>'}</div></section>`;
   },
   canEdit(rdo){
     if(!rdo || !['Rascunho','Devolvido'].includes(rdo.status||'Rascunho')) return false;
@@ -753,7 +779,7 @@ const RDO = {
             ...savedAttachments.map(item=>({...item,saved:true})),
             ...pendingFiles.map(item=>({
               id:item.id,fileName:item.file.name,mimeType:item.file.type,sizeBytes:item.file.size,
-              previewUrl:item.previewUrl,saved:false
+              description:item.description||'',previewUrl:item.previewUrl,saved:false
             }))
           ];
           byId('rdo-attachment-count').textContent=`${rows.length} ${rows.length===1?'anexo adicionado':'anexos adicionados'}`;
@@ -761,7 +787,7 @@ const RDO = {
             <span class="rdo-attachment-thumb ${this.isImage(item)?'image':'file'}">
               ${item.previewUrl?`<img src="${U.esc(item.previewUrl)}" alt="">`:`<i data-lucide="${this.isImage(item)?'image':'file-text'}"></i>`}
             </span>
-            <span><b>${U.esc(item.fileName||'arquivo')}</b><small>${this.isImage(item)?'Foto':'Documento'} · ${this.formatFileSize(item.sizeBytes)}</small></span>
+            <span class="rdo-attachment-copy"><b>${U.esc(item.fileName||'arquivo')}</b><input class="rdo-attachment-description" maxlength="180" value="${U.esc(item.description||'')}" placeholder="${this.isImage(item)?'Descrição da foto':'Descrição do anexo'}" data-description-${item.saved?'saved':'pending'}="${U.esc(item.id)}" aria-label="${this.isImage(item)?'Descrição da foto':'Descrição do anexo'}"><small>${this.isImage(item)?'Foto':'Documento'} · ${this.formatFileSize(item.sizeBytes)}</small></span>
             <button type="button" class="icon-btn" data-remove-${item.saved?'saved':'pending'}="${U.esc(item.id)}" aria-label="Remover ${U.esc(item.fileName||'anexo')}"><i data-lucide="x"></i></button>
           </article>`).join('')||'<div class="rdo-attachment-empty"><i data-lucide="image-plus"></i><span>Nenhuma evidência anexada.</span></div>';
           byId('rdo-attachment-list').querySelectorAll('[data-remove-pending]').forEach(button=>button.onclick=()=>{
@@ -775,6 +801,29 @@ const RDO = {
           });
           byId('rdo-attachment-list').querySelectorAll('[data-remove-saved]').forEach(button=>button.onclick=()=>{
             this.removeAttachment(existing.id,button.dataset.removeSaved);
+          });
+          byId('rdo-attachment-list').querySelectorAll('[data-description-pending]').forEach(input=>input.oninput=()=>{
+            const item=pendingFiles.find(row=>String(row.id)===String(input.dataset.descriptionPending));
+            if(item) item.description=String(input.value||'').slice(0,180);
+          });
+          byId('rdo-attachment-list').querySelectorAll('[data-description-saved]').forEach(input=>input.onchange=async()=>{
+            const item=savedAttachments.find(row=>String(row.id)===String(input.dataset.descriptionSaved));
+            if(!item) return;
+            const previous=String(item.description||''),next=String(input.value||'').trim().slice(0,180);
+            if(next===previous) return;
+            try{
+              input.disabled=true;
+              const updated=typeof Cloud!=='undefined'&&Cloud.active()
+                ? await Cloud.updateRdoAttachmentDescription(item,next)
+                : {...item,description:next};
+              if(typeof Cloud==='undefined'||!Cloud.active()) await DB.attachmentPut(updated);
+              Object.assign(item,updated,{description:next});
+              this.attachmentCache.set(String(existing.id),savedAttachments.slice());
+              UI.toast('Descrição da evidência atualizada.','success',3000);
+            }catch(err){
+              input.value=previous;
+              UI.toast('Não foi possível atualizar a descrição: '+U.esc(err.message||err),'error',6500);
+            }finally{input.disabled=false;}
           });
           U.icons();
         };
@@ -797,7 +846,7 @@ const RDO = {
                   }
                 },300000);
               }
-              pendingFiles.push({id:U.id(),file,previewUrl});
+              pendingFiles.push({id:U.id(),file,description:'',previewUrl});
             }catch(err){ UI.toast(U.esc(err.message||err),'warn',6500); }
           }
           renderAttachments();
@@ -886,7 +935,7 @@ const RDO = {
             UI.loading(true,pendingFiles.length?'Salvando diário e anexos…':'Salvando diário…');
             await this.save(rdo,'Rascunho');
             for(const pending of [...pendingFiles]){
-              const attachment=await this.saveAttachment(rdo,pending.file);
+              const attachment=await this.saveAttachment(rdo,pending.file,pending.description);
               savedAttachments.push(attachment);
               pendingFiles=pendingFiles.filter(item=>item.id!==pending.id);
             }
@@ -967,8 +1016,8 @@ const RDO = {
       }));
       if(!document.getElementById('rdo-detail-attachments')) return;
       container.innerHTML=display.map(attachment=>`<button type="button" class="rdo-evidence-card" data-attachment-id="${U.esc(attachment.id)}">
-        <span>${attachment.url?`<img src="${U.esc(attachment.url)}" alt="${U.esc(attachment.fileName)}">`:`<i data-lucide="${this.isImage(attachment)?'image':'file-text'}"></i>`}</span>
-        <b>${U.esc(attachment.fileName)}</b><small>${this.formatFileSize(attachment.sizeBytes)}</small>
+        <span>${attachment.url?`<img src="${U.esc(attachment.url)}" alt="${U.esc(attachment.description||attachment.fileName)}">`:`<i data-lucide="${this.isImage(attachment)?'image':'file-text'}"></i>`}</span>
+        <b>${U.esc(attachment.description||attachment.fileName)}</b><small>${U.esc(attachment.fileName)} · ${this.formatFileSize(attachment.sizeBytes)}</small>
       </button>`).join('');
       container.querySelectorAll('[data-attachment-id]').forEach(button=>button.onclick=()=>{
         this.previewAttachment(rdoId,button.dataset.attachmentId);
@@ -989,9 +1038,9 @@ const RDO = {
       const url=await this.attachmentUrl(attachment);
       UI.loading(false);
       UI.modal({
-        title:U.esc(attachment.fileName),
+        title:U.esc(attachment.description||attachment.fileName),
         wide:true,
-        body:`<div class="rdo-photo-preview"><img src="${U.esc(url)}" alt="${U.esc(attachment.fileName)}"></div>`,
+        body:`<div class="rdo-photo-preview"><img src="${U.esc(url)}" alt="${U.esc(attachment.description||attachment.fileName)}"></div>`,
         footer:`<button class="btn btn-ghost" onclick="RDO.downloadAttachment(${U.jsArg(rdoId)},${U.jsArg(attachmentId)})"><i data-lucide="download"></i>Baixar</button><button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
       });
     }catch(err){
@@ -1051,7 +1100,7 @@ const RDO = {
             <div><small>Cliente</small><b>${U.esc(customer.name)}</b></div>
           </div>
         </div>
-        <div class="rdo-print-number"><small>RDO</small><b>${U.esc(rdo.number||rdo.id)}</b><span>${U.esc(status||'Rascunho')}</span></div>
+        <div class="rdo-print-number"><small>RDO</small><b>${U.esc(this.documentNumber(rdo))}</b><span>${U.esc(status||'Rascunho')}</span></div>
       </header>
       <div class="rdo-print-facts">
         <span><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></span>
@@ -1061,14 +1110,14 @@ const RDO = {
       </div>
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
-        <table><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${Number(row.breakMinutes)||0} min</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table>
+        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:9%"><col style="width:22%"><col style="width:19%"><col style="width:9%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
+        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
       <section class="rdo-print-section rdo-print-evidence-section"><h2>Evidências fotográficas</h2>
-        ${images.length?`<div class="rdo-print-photos">${images.map((image,index)=>`<figure><img src="${U.esc(image.url)}" alt=""><figcaption>Foto ${String(index+1).padStart(2,'0')} · ${U.esc(image.fileName)}</figcaption></figure>`).join('')}</div>`:'<p>Nenhuma foto anexada.</p>'}
-        ${attachments.some(item=>!this.isImage(item))?`<div class="rdo-print-files"><b>Documentos anexados:</b> ${attachments.filter(item=>!this.isImage(item)).map(item=>U.esc(item.fileName)).join(' · ')}</div>`:''}
+        ${images.length?`<div class="rdo-print-photos">${images.map((image,index)=>`<figure><img src="${U.esc(image.url)}" alt=""><figcaption>Foto ${String(index+1).padStart(2,'0')} · ${U.esc(image.description||image.fileName)}</figcaption></figure>`).join('')}</div>`:'<p>Nenhuma foto anexada.</p>'}
+        ${attachments.some(item=>!this.isImage(item))?`<div class="rdo-print-files"><b>Documentos anexados:</b> ${attachments.filter(item=>!this.isImage(item)).map(item=>U.esc(item.description||item.fileName)).join(' · ')}</div>`:''}
       </section>
       <footer>Gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
       document.body.appendChild(report);
@@ -1123,6 +1172,7 @@ const RDO = {
       ${rdo.notes?`<div class="import-log"><b>Observações:</b> ${U.esc(rdo.notes)}</div>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<div class="import-log rdo-rejection-comment"><b>Motivo da reprovação:</b> ${U.esc(rdo.rejectionComment)}
         <small>${rdo.rejectedAt?`Registrado em ${U.date(rdo.rejectedAt)}`:''}${rdo.rejectedBy?` por ${U.esc(rdo.rejectedBy)}`:''}</small></div>`:''}
+      ${this.auditMarkup(rdo)}
       <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
       footer:`${this.canEdit(rdo)?`<button class="btn btn-ghost" onclick="UI.close();RDO.form(${U.jsArg(rdo.id)})"><i data-lucide="pencil"></i>Editar</button>`:''}
         ${rdo.status==='Enviado'&&!this.canReview()&&(typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos'))?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}

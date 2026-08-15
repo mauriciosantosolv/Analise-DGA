@@ -37,6 +37,8 @@ assert.match(css, /\.rdo-worker-fields label\{min-width:0/);
 assert.match(css, /\.rdo-team-search/);
 assert.match(css, /\.crew-card>span:nth-child\(2\)>b/);
 assert.match(css, /#measurement-print-report/);
+assert.match(css, /\.rdo-print-labor-table\{[^}]*table-layout:fixed/);
+assert.match(css, /\.rdo-audit-list/);
 assert.doesNotMatch(css, /var\(--(?:radius|shadow-sm|surface3)\)/);
 
 const cloud = fs.readFileSync(path.join(root, "database/cloud.js"), "utf8");
@@ -63,6 +65,7 @@ assert.match(rdo, /employeeRegistration/);
 assert.match(rdo, /roleDisplayMode/);
 assert.match(rdo, /displayRoleFor/);
 assert.match(rdo, /id="rate-active"/);
+assert.match(rdo, /description\|\|image\.fileName/);
 assert.doesNotMatch(rdo, /users-round/);
 
 const measurements = fs.readFileSync(path.join(root, "modules/medicoes/medicoes.js"), "utf8");
@@ -71,6 +74,15 @@ assert.match(measurements, /deleteRdoMeasurement/);
 assert.match(measurements, /measurementRows/);
 assert.match(measurements, /Valor total da medição/);
 assert.match(measurements, /measurement-day-total/);
+assert.match(measurements, /U\.durationMinutes\(row\.breakMinutes\)/);
+
+const dashboard = fs.readFileSync(path.join(root, "modules/dashboard/charts.js"), "utf8");
+assert.match(dashboard, /Composição calculada pela base de incidência/);
+assert.match(dashboard, /Biz\.baseRateForCategory/);
+
+const format = fs.readFileSync(path.join(root, "utils/format.js"), "utf8");
+assert.match(format, /\$\{p\.proposal\} \| \$\{p\.name\|\|''\}/);
+assert.match(format, /durationMinutes\(value\)/);
 
 const importer = fs.readFileSync(path.join(root, "js/importer.js"), "utf8");
 assert.match(importer, /labor:[\s\S]*supplier:[\s\S]*order:[\s\S]*notes:/);

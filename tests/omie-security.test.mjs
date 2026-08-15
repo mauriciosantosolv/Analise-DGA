@@ -8,6 +8,7 @@ const cloud=read('database/cloud.js');
 const index=read('index.html');
 const edge=read('supabase/functions/omie-integration/index.ts');
 const migration=read('supabase/ATUALIZACAO-v3.0.7-OMIE-HISTORICO-FILTROS.sql');
+const migration308=read('supabase/ATUALIZACAO-v3.0.8-OMIE-RDO.sql');
 
 assert(!frontend.includes('localStorage.setItem'), 'Credenciais Omie não podem ir para localStorage');
 assert(!frontend.includes('DB.put('), 'Credenciais/mapeamentos Omie não podem passar pelo banco genérico do navegador');
@@ -18,6 +19,17 @@ assert(edge.includes('clique_obras_validate_omie_cron'), 'A automação deve usa
 assert(edge.includes('clique_obras_reconcile_omie_entries'), 'Rateios removidos devem ser reconciliados antes da aplicação');
 assert(edge.includes('enforceRateLimit'), 'As ações devem ter limite de requisições');
 assert(edge.includes('safeOmieError(error)'), 'Erros devem ser sanitizados antes do log/retorno');
+assert(edge.includes('clique_obras_acquire_omie_sync_lease'), 'Cada organização deve reservar a sincronização antes de chamar o Omie');
+assert(edge.includes('last_sync_attempt_at'), 'Tentativas com erro devem respeitar o intervalo automático');
+assert(edge.includes('ConsultarCliente'), 'O fornecedor deve vir do cadastro de clientes do Omie');
+assert(edge.includes('omie_supplier_cache'), 'O catálogo de fornecedores deve usar cache privado por organização');
+assert(edge.includes('isOmieConcurrentMethodError'), 'A falha temporária de concorrência do Omie deve receber retentativa específica');
+assert(edge.includes('supplier_backfill_completed_at'), 'Fornecedores históricos devem receber um backfill único');
+assert(edge.includes('[...refreshCodes].slice(0,24)'), 'O backfill deve limitar fornecedores por execução');
+assert(edge.includes('filtrar_por_projeto:Number(projectCode)'), 'A carga histórica deve limitar as contas a pagar pelo projeto no Omie');
+assert(edge.includes('for(const projectCode of selected)'), 'As consultas históricas por projeto devem ser seriais');
+assert(edge.includes('if(needsSupplierBackfill||mode==="manual")'), 'Somente cargas históricas/manuais devem consultar por projeto');
+assert(edge.includes('rows.filter(row=>selectedSet.has'), 'A sincronização incremental deve filtrar localmente os projetos selecionados');
 assert(migration.match(/alter table public\.omie_connections force row level security/i));
 assert(migration.match(/revoke all on public\.omie_connections[\s\S]*from public, anon, authenticated/i));
 assert(migration.match(/grant execute on function public\.clique_obras_omie_credentials\(uuid\) to service_role/i));
@@ -27,5 +39,7 @@ assert(migration.includes("externalItemId"));
 assert(migration.includes("pg_advisory_xact_lock"));
 assert(migration.includes("'planning_history'"));
 assert(migration.includes('create or replace function public.clique_obras_reconcile_omie_entries'));
+assert(migration308.match(/revoke all on function public\.clique_obras_acquire_omie_sync_lease[\s\S]*from public,anon,authenticated/i));
+assert(migration308.match(/alter table public\.omie_supplier_cache force row level security/i));
 
 console.log('Omie security boundary tests passed');

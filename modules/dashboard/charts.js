@@ -147,13 +147,33 @@ Dash.drill = function(filter){
   if(filter.supplier){ rows = rows.filter(x=>x.supplier===filter.supplier); crumbs.push('Fornecedor: '+filter.supplier); }
   if(filter.month){ rows = rows.filter(x=>(x.date||'').startsWith(filter.month)); crumbs.push('Mês: '+filter.month); }
   rows.sort((a,b)=>b.value-a.value);
-  const total = rows.reduce((s,x)=>s+x.value,0);
+  const purchaseTotal = rows.reduce((s,x)=>s+x.value,0);
+  const overheadKeys=new Set(['impostos','custo administrativo','taxas','outros encargos']);
+  const categoryKey=Biz.categoryKey(filter.category||'');
+  let overheadRows=[];
+  if(overheadKeys.has(categoryKey)&&!filter.supplier&&!filter.month){
+    let projects=Biz.filteredProjects();
+    if(projectId) projects=projects.filter(project=>String(project.id)===String(projectId));
+    overheadRows=projects.map(project=>{
+      const rate=Biz.baseRateForCategory(filter.category,project);
+      const base=Number(project.saleValue)||0;
+      return {project,rate,base,value:base*rate/100};
+    }).filter(item=>item.rate>0&&item.base>0);
+  }
+  const overheadTotal=overheadRows.reduce((sum,item)=>sum+item.value,0);
+  const total = purchaseTotal+overheadTotal;
   // agrupamento por fornecedor para o próximo nível do drill
   const bySup = {};
   rows.forEach(x=>{ const k=x.supplier||'(sem fornecedor)'; bySup[k]=(bySup[k]||0)+x.value; });
   UI.modal({ title:'Drill Down — Lançamentos', wide:true, body:`
     <div class="drill-path">${crumbs.map(c=>`<span class="crumb">${U.esc(c)}</span>`).join('<i data-lucide="chevron-right" style="width:13px;height:13px"></i>')}
-      <span style="margin-left:auto"><b>${rows.length}</b> lançamentos · <b>${U.money2(total)}</b></span></div>
+      <span style="margin-left:auto"><b>${rows.length}</b> lançamentos${overheadRows.length?` + <b>${overheadRows.length}</b> cálculo(s)`:''} · <b>${U.money2(total)}</b></span></div>
+    ${overheadRows.length?`<section class="card" style="margin-bottom:14px;padding:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px"><div><b>Composição calculada pela base de incidência</b><small style="display:block;margin-top:3px;color:var(--text3)">Percentual aplicado sobre a receita contratada de cada projeto.</small></div><b>${U.money2(overheadTotal)}</b></div>
+      <div class="table-wrap"><table><thead><tr><th>Projeto</th><th class="num">Base de incidência</th><th class="num">Percentual</th><th class="num">Valor calculado</th></tr></thead><tbody>
+        ${overheadRows.map(item=>`<tr><td><b>${U.esc(U.projLabel(item.project))}</b></td><td class="num">${U.money2(item.base)}</td><td class="num"><b>${U.pct(item.rate,2)}</b></td><td class="num"><b>${U.money2(item.value)}</b></td></tr>`).join('')}
+      </tbody></table></div>
+    </section>`:''}
     ${!filter.supplier && Object.keys(bySup).length>1 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
       ${Object.entries(bySup).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([s,v])=>
         `<button class="btn btn-ghost btn-sm" onclick='Dash.drill(${U.esc(JSON.stringify({...filter, projectId, supplier:s}))})'>${U.esc(s.length>22?s.slice(0,21)+'…':s)} · ${U.money(v)}</button>`).join('')}</div>` : ''}
@@ -164,7 +184,7 @@ Dash.drill = function(filter){
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.supplier||'—')}</td>
           <td>${U.esc(x.order||'—')}</td>
           <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(x.desc||'—')}</td>
-          <td class="num"><b>${U.money2(x.value)}</b></td></tr>`;}).join('')}</tbody></table></div></div>`,
+          <td class="num"><b>${U.money2(x.value)}</b></td></tr>`;}).join('')||'<tr><td colspan="6" class="empty-state">Nenhum lançamento manual nesta categoria. O valor acima é calculado pela base de incidência.</td></tr>'}</tbody></table></div></div>`,
     footer:`<button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
 };
 

@@ -97,7 +97,12 @@ const U = {
     return Math.round((uy-ux)/86400000);
   },
 
-  projLabel(p){ return p ? `${p.proposal} — ${p.name||''}`.replace(/ — $/,'') : '—'; },
+  durationMinutes(value){
+    const total=Math.max(0,Math.round(Number(value)||0));
+    return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+  },
+
+  projLabel(p){ return p ? `${p.proposal} | ${p.name||''}`.replace(/ \| $/,'') : '—'; },
 
   initials: s => String(s||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()
 };

@@ -1,6 +1,7 @@
 export const OMIE_ENDPOINTS = Object.freeze({
   projects:'https://app.omie.com.br/api/v1/geral/projetos/',
   categories:'https://app.omie.com.br/api/v1/geral/categorias/',
+  clients:'https://app.omie.com.br/api/v1/geral/clientes/',
   payables:'https://app.omie.com.br/api/v1/financas/contapagar/'
 });
 
@@ -41,9 +42,10 @@ export function payableAllocations(payable){
   }).filter(item=>item.code&&item.value!==0);
 }
 
-export function buildPayableEntries(payables,projectMappings,categoryMappings){
+export function buildPayableEntries(payables,projectMappings,categoryMappings,supplierMappings=new Map()){
   const projects=projectMappings instanceof Map?projectMappings:new Map();
   const categories=categoryMappings instanceof Map?categoryMappings:new Map();
+  const suppliers=supplierMappings instanceof Map?supplierMappings:new Map();
   const entries=[];
   let skipped=0;
   for(const payable of Array.isArray(payables)?payables:[]){
@@ -66,7 +68,12 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings){
         category:cleanText(category.cliqueCategoryName,160),
         value:Math.abs(money(allocation.value)),
         date,
-        supplier:cleanText(payable?.nome_fornecedor??payable?.razao_social??payable?.nome_fantasia??`Fornecedor Omie ${payable?.codigo_cliente_fornecedor??''}`,180),
+        supplier:cleanText(
+          suppliers.get(String(payable?.codigo_cliente_fornecedor??''))
+          ??payable?.nome_fantasia??payable?.nome_fornecedor??payable?.razao_social
+          ??`Fornecedor Omie ${payable?.codigo_cliente_fornecedor??''}`,
+          180
+        ),
         order:cleanText(payable?.numero_documento??payable?.numero_documento_fiscal??payable?.numero_pedido,100),
         description:cleanText(payable?.observacao??payable?.descricao??'Conta a pagar Omie',500),
         status:cleanText(payable?.status_titulo,40),
@@ -77,6 +84,20 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings){
     }
   }
   return {entries,skipped};
+}
+
+export function isOmieConcurrentMethodError(value){
+  const normalized=cleanText(value instanceof Error?value.message:value,500)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return normalized.includes('ja existe uma requisicao desse metodo sendo executada')
+    ||normalized.includes('consumo redundante detectado');
+}
+
+export function omieRetryDelay(attempt,value=''){
+  const base=[1500,3000,6000][Math.max(0,Math.min(2,Number(attempt)||0))];
+  const message=cleanText(value instanceof Error?value.message:value,500);
+  const seconds=Number(message.match(/(?:aguarde|em)\s+(\d+)\s+segundos?/i)?.[1]||0);
+  return Math.min(65000,Math.max(base,seconds?1000*(seconds+1):0));
 }
 
 // Mantém todas as parcelas da mesma conta a pagar no mesmo lote. Assim, a
