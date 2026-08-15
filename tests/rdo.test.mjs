@@ -24,7 +24,8 @@ const state = {
   ],
   measurements:[],
   rdos:[],
-  settings:{rdoDailyHours:8.8,rdoShiftStart:"07:30",rdoShiftEnd:"17:18",rdoShiftBreakMinutes:60}
+  settings:{rdoDailyHours:8.8,rdoShiftStart:"07:30",rdoShiftEnd:"17:18",rdoShiftBreakMinutes:60},
+  reload:async()=>{}
 };
 const context = {
   State:state,
@@ -43,7 +44,7 @@ const context = {
     durationMinutes:value=>`${String(Math.floor((Number(value)||0)/60)).padStart(2,'0')}:${String((Number(value)||0)%60).padStart(2,'0')}`
   },
   UI:{},
-  DB:{},
+  DB:{put:async()=>{}},
   App:{},
   console
 };
@@ -113,5 +114,8 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(RDO.auditTrail({auditTrail:[{action:'edited',actorName:'Maurício',at:'2026-08-14T22:10:00Z'}]}))),
   [{action:'edited',actorName:'Maurício',at:'2026-08-14T22:10:00Z'}]
 );
+
+await assert.doesNotReject(()=>RDO.save({id:'draft-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Rascunho'));
+await assert.rejects(()=>RDO.save({id:'send-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Enviado'),/Descreva o serviço/);
 
 console.log("RDO calculation tests passed");

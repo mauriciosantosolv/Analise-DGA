@@ -343,10 +343,12 @@ const RDO = {
 
   async save(rdo,status){
     if(!rdo.projectId || !rdo.date) throw new Error('Informe o projeto e a data.');
-    if(!String(rdo.description||'').trim()) throw new Error('Descreva o serviço realizado.');
-    if(!Array.isArray(rdo.entries) || !rdo.entries.length) throw new Error('Selecione ao menos um colaborador.');
-    if(rdo.entries.some(row=>(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)<=0))
-      throw new Error('Todos os colaboradores selecionados precisam ter horas informadas.');
+    if(status==='Enviado'){
+      if(!String(rdo.description||'').trim()) throw new Error('Descreva o serviço realizado.');
+      if(!Array.isArray(rdo.entries) || !rdo.entries.length) throw new Error('Selecione ao menos um colaborador.');
+      if(rdo.entries.some(row=>(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)<=0))
+        throw new Error('Todos os colaboradores selecionados precisam ter horas informadas.');
+    }
     const allowed=new Set(this.allowedProjects().map(x=>String(x.id)));
     if(!allowed.has(String(rdo.projectId))) throw new Error('Projeto indisponível para este RDO.');
     if(status==='Enviado'){
@@ -927,7 +929,8 @@ const RDO = {
         const persist=async status=>{
           if(busy) return;
           try{
-            if(![1,2,3].every(validateStep)) return;
+            if(status==='Enviado' && ![1,2,3].every(validateStep)) return;
+            if(status==='Rascunho' && !validateStep(1)) return;
             if(status==='Enviado' && !byId('rdo-confirmation').checked)
               return UI.toast('Confirme a revisão antes de enviar.','warn',5500);
             const rdo=collect();

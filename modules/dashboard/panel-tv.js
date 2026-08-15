@@ -16,7 +16,7 @@ const DashboardPanel = {
   omieCheckedAt:0,
   omieLoading:false,
   currentData:null,
-  slideNames:['Orçado e realizado','Saúde e medições','Alertas e planejamento'],
+  slideNames:['Orçado e realizado','Monitoramento de medições','Equipes em campo'],
 
   init(){
     if(this.initialized) return;
@@ -143,10 +143,20 @@ const DashboardPanel = {
     return [...totals].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,7);
   },
 
+  entryDateTimestamp(entry){
+    const raw=String(entry&&entry.date||'').trim();
+    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return Date.UTC(Number(iso[1]),Number(iso[2])-1,Number(iso[3]));
+    const brazilian=raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if(brazilian) return Date.UTC(Number(brazilian[3]),Number(brazilian[2])-1,Number(brazilian[1]));
+    const stamp=new Date(raw||0).getTime();
+    return Number.isFinite(stamp)&&stamp>0?stamp:0;
+  },
+
   entryTimestamp(entry){
-    const numeric=Number(entry&&entry.importedAt);
-    if(Number.isFinite(numeric)&&numeric>0) return numeric;
-    for(const value of [entry&&entry.createdAt,entry&&entry.syncedAt,entry&&entry.date]){
+    for(const value of [entry&&entry.updatedAt,entry&&entry.createdAt,entry&&entry.importedAt,entry&&entry.syncedAt]){
+      const numeric=Number(value);
+      if(Number.isFinite(numeric)&&numeric>0) return numeric;
       const stamp=new Date(value||0).getTime();
       if(Number.isFinite(stamp)&&stamp>0) return stamp;
     }
@@ -155,7 +165,8 @@ const DashboardPanel = {
 
   latestEntries(purchases){
     return (Array.isArray(purchases)?purchases:[]).filter(item=>item&&item.active!==false)
-      .slice().sort((a,b)=>this.entryTimestamp(b)-this.entryTimestamp(a)).slice(0,6);
+      .slice().sort((a,b)=>this.entryDateTimestamp(b)-this.entryDateTimestamp(a)
+        ||this.entryTimestamp(b)-this.entryTimestamp(a));
   },
 
   sourceLabel(entry){
@@ -168,6 +179,83 @@ const DashboardPanel = {
     return `<tr><td>${U.date(entry.date)||'—'}</td><td><b>${U.esc(projectName)}</b><small>${U.esc(this.sourceLabel(entry))}</small></td><td><b>${U.esc(entry.supplier||'Sem fornecedor')}</b><small>${U.esc(entry.category||entry.desc||'Sem categoria')}</small></td><td class="num"><b>${U.money2(entry.value)}</b></td></tr>`;
   },
 
+  fieldSnapshot(){
+    const today=typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10);
+    const crew=(Array.isArray(State.crew)?State.crew:[])
+      .filter(item=>item&&item.recordType!=='role'&&item.active!==false)
+      .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+    const crewById=new Map(crew.map(employee=>[String(employee.id),employee]));
+    const assignments=new Map();
+    (Array.isArray(State.rdos)?State.rdos:[])
+      .filter(rdo=>rdo&&String(rdo.date||'').slice(0,10)===today&&Array.isArray(rdo.entries))
+      .slice().sort((a,b)=>this.entryTimestamp(a)-this.entryTimestamp(b))
+      .forEach(rdo=>rdo.entries.forEach(entry=>{
+        const employeeId=String(entry&&entry.employeeId||'');
+        if(employeeId&&crewById.has(employeeId)) assignments.set(employeeId,{rdo,entry});
+      }));
+    const standardHours=typeof RDO!=='undefined'&&typeof RDO.standardDailyHours==='function'?RDO.standardDailyHours():8.8;
+    const allocated=[];
+    assignments.forEach(({rdo,entry},employeeId)=>{
+      const employee=crewById.get(employeeId);
+      let rate=typeof RDO!=='undefined'&&typeof RDO.rdoRateFor==='function'
+        ?RDO.rdoRateFor(rdo.projectId,employeeId):null;
+      if(!rate&&typeof RDO!=='undefined'&&typeof RDO.baseCostFor==='function') rate=RDO.baseCostFor(employeeId);
+      const regular=Number(entry.regular)||0;
+      const overtime50=Number(entry.overtime50)||0;
+      const overtime100=Number(entry.overtime100)||0;
+      const hours=regular+overtime50+overtime100;
+      const cost=rate&&typeof RDO!=='undefined'&&typeof RDO.entryTotals==='function'
+        ?RDO.entryTotals(entry,rate).cost
+        :regular*(Number(rate&&rate.costRegular)||0)+overtime50*(Number(rate&&rate.cost50)||0)+overtime100*(Number(rate&&rate.cost100)||0);
+      const project=State.projects.find(item=>String(item.id)===String(rdo.projectId));
+      allocated.push({
+        employeeId,employeeName:employee.name||entry.employeeName||'Colaborador',
+        role:employee.internalRole||entry.internalRole||'Sem função',
+        projectId:String(rdo.projectId),projectName:project?U.projLabel(project):'Projeto não localizado',
+        rdoStatus:rdo.status||'Rascunho',hours,cost,
+        missingCost:!(Number(rate&&rate.costRegular)>0)
+      });
+    });
+    allocated.sort((a,b)=>a.projectName.localeCompare(b.projectName,'pt-BR')||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
+    const idle=crew.filter(employee=>!assignments.has(String(employee.id))).map(employee=>{
+      const base=typeof RDO!=='undefined'&&typeof RDO.baseCostFor==='function'?RDO.baseCostFor(employee.id):{costRegular:0};
+      const hourlyCost=Number(base&&base.costRegular)||0;
+      return {employeeId:String(employee.id),employeeName:employee.name||'Colaborador',role:employee.internalRole||'Sem função',hourlyCost,cost:standardHours*hourlyCost,missingCost:!(hourlyCost>0)};
+    });
+    const projectMap=new Map();
+    allocated.forEach(row=>{
+      const current=projectMap.get(row.projectId)||{name:row.projectName,count:0,cost:0};
+      current.count+=1; current.cost+=row.cost; projectMap.set(row.projectId,current);
+    });
+    const roleMap=new Map();
+    allocated.forEach(row=>roleMap.set(row.role,(roleMap.get(row.role)||0)+1));
+    return {
+      today,standardHours,allocated,idle,
+      partialCost:allocated.reduce((sum,row)=>sum+row.cost,0),
+      idleCost:idle.reduce((sum,row)=>sum+row.cost,0),
+      missingCosts:[...allocated,...idle].filter(row=>row.missingCost).length,
+      projects:[...projectMap.values()].sort((a,b)=>b.count-a.count||b.cost-a.cost),
+      roles:[...roleMap].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'pt-BR'))
+    };
+  },
+
+  fieldBars(items,{valueKey='count',secondaryKey='',label}={}){
+    const max=Math.max(1,...items.map(item=>Number(item[valueKey])||0));
+    const secondaryMax=secondaryKey?Math.max(1,...items.map(item=>Number(item[secondaryKey])||0)):1;
+    const legend=secondaryKey?'<div class="tv-field-legend"><span><i></i>Pessoas</span><span><i></i>Custo parcial</span></div>':'';
+    return `${legend}<div class="tv-field-bars">${items.map(item=>{
+      const primary=Number(item[valueKey])||0;
+      const secondary=Number(item[secondaryKey])||0;
+      return `<div class="tv-field-bar-row"><div><b>${U.esc(item.name)}</b><span>${U.esc(label?label(item):String(primary))}</span></div><div class="tv-field-bar-stack"><div class="tv-field-bar"><span style="width:${primary>0?Math.max(3,primary/max*100):0}%"></span></div>${secondaryKey?`<div class="tv-field-bar cost"><span style="width:${secondary>0?Math.max(3,secondary/secondaryMax*100):0}%"></span></div>`:''}</div></div>`;
+    }).join('')||this.empty('Nenhum apontamento de equipe para hoje.')}</div>`;
+  },
+
+  measurementRow(project,stats){
+    const pct=stats.measuredPct;
+    const visual=Math.min(100,Math.max(0,Number(pct)||0));
+    return `<div class="tv-measurement-row"><div class="tv-measurement-name"><b>${U.esc(U.projLabel(project))}</b><small>${U.esc(project.client||project.status||'')}</small></div><div class="tv-measurement-values"><span><small>Medido</small><b>${U.money(stats.measured)}</b></span><span><small>Contrato</small><b>${U.money(project.saleValue)}</b></span><span><small>Saldo</small><b>${U.money((Number(project.saleValue)||0)-(Number(stats.measured)||0))}</b></span></div><div class="tv-measurement-progress"><div><b>${U.pct(pct)}</b><small>avanço da medição</small></div><div class="tv-bar"><span style="width:${visual}%"></span></div></div></div>`;
+  },
+
   render(data){
     this.currentData=data;
     const organization=typeof Cloud!=='undefined'&&Cloud.active()?(Cloud.organization()||{}).name:'';
@@ -175,12 +263,15 @@ const DashboardPanel = {
     const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
     const selected=State.selectedProjectIds();
     const scope=selected.length===1?'1 obra selecionada':selected.length>1?`${selected.length} obras selecionadas`:'Todas as obras';
-    const activeStats=data.stats.filter(item=>item.p.status==='Em andamento');
-    const featured=(activeStats.length?activeStats:data.stats).slice().sort((a,b)=>a.s.health-b.s.health).slice(0,6);
     const allRows=data.stats.slice().sort((a,b)=>a.s.health-b.s.health);
-    const alerts=this.alerts(data,activeStats);
     const suppliers=this.topSuppliers(data.purchases);
     const latest=this.latestEntries(data.purchases);
+    const measurements=data.stats.slice().sort((a,b)=>{
+      const aPct=a.s.measuredPct==null?-1:Number(a.s.measuredPct);
+      const bPct=b.s.measuredPct==null?-1:Number(b.s.measuredPct);
+      return bPct-aPct||(Number(b.s.measured)||0)-(Number(a.s.measured)||0);
+    });
+    const field=this.fieldSnapshot();
 
     return `<section id="tv-dashboard" class="tv-dashboard" aria-label="Painel de monitoramento das obras">
       <header class="tv-header">
@@ -223,10 +314,10 @@ const DashboardPanel = {
           </div>
         </section>
 
-        <section class="tv-slide ${this.slide===1?'active':''}" data-tv-slide="1" aria-label="Saúde das obras e medições">
+        <section class="tv-slide ${this.slide===1?'active':''}" data-tv-slide="1" aria-label="Monitoramento de medições por projeto">
           <div class="tv-overview-grid">
-            <article class="tv-panel-card tv-project-health"><div class="tv-section-head"><div><small>ACOMPANHAMENTO OPERACIONAL</small><h2>Saúde financeira das obras</h2></div><span class="tv-count">${activeStats.length} em andamento</span></div>
-              <div class="tv-health-list">${featured.map(({p,s})=>this.healthRow(p,s)).join('')||this.empty('Nenhuma obra no filtro atual.')}</div>
+            <article class="tv-panel-card tv-measurement-monitor"><div class="tv-section-head"><div><small>AVANÇO POR PROJETO</small><h2>Monitoramento de Medições</h2></div><span class="tv-count">Ordem: maior avanço</span></div>
+              <div class="tv-measurement-list">${measurements.map(({p,s})=>this.measurementRow(p,s)).join('')||this.empty('Nenhum projeto no filtro atual.')}</div>
             </article>
             <article class="tv-panel-card tv-measurement-summary"><div class="tv-section-head"><div><small>MEDIÇÕES</small><h2>Andamento da receita</h2></div></div>
               <div class="tv-measurement-total"><small>Total medido</small><b>${U.money(data.measured)}</b><div class="tv-bar"><span style="width:${Math.min(100,Math.max(0,data.revenue>0?data.measured/data.revenue*100:0))}%"></span></div><small>${U.pct(data.revenue>0?data.measured/data.revenue*100:null)} da receita contratada</small></div>
@@ -235,15 +326,26 @@ const DashboardPanel = {
           </div>
         </section>
 
-        <section class="tv-slide ${this.slide===2?'active':''}" data-tv-slide="2" aria-label="Medições e alertas">
-          <div class="tv-alert-grid">
-            <article class="tv-panel-card tv-alert-card"><div class="tv-section-head"><div><small>ATENÇÃO NECESSÁRIA</small><h2>Alertas do monitoramento</h2></div><span class="tv-count ${alerts.some(item=>item.tone==='danger')?'danger':''}">${alerts.length} alerta(s)</span></div>
-              <div class="tv-alert-list">${alerts.slice(0,7).map(item=>`<div class="tv-alert tv-alert-${item.tone}"><span><i data-lucide="${item.icon}"></i></span><div><b>${U.esc(item.title)}</b><small>${U.esc(item.text)}</small></div></div>`).join('')||this.empty('Nenhum alerta financeiro no momento.')}</div>
-            </article>
-            <div class="tv-side-stack">
-              <article class="tv-panel-card"><div class="tv-section-head"><div><small>PLANEJAMENTO</small><h2>Gastos futuros</h2></div></div>${this.futureRows(data.fut)}</article>
-              <article class="tv-panel-card"><div class="tv-section-head"><div><small>MEDIÇÕES</small><h2>Fila de aprovação</h2></div></div>
-                <dl class="tv-breakdown tv-breakdown-compact"><div><dt>Aguardando aprovação</dt><dd class="${data.awaitingApproval>0?'warning':''}">${U.money(data.awaitingApproval)}</dd></div><div><dt>Aprovado</dt><dd>${U.money(data.approved)}</dd></div><div><dt>Faturado</dt><dd>${U.money(data.invoiced)}</dd></div></dl>
+        <section class="tv-slide ${this.slide===2?'active':''}" data-tv-slide="2" aria-label="Monitoramento das equipes em campo">
+          <div class="tv-field-layout">
+            <div class="tv-field-kpis">
+              ${this.renderMetric('Equipe alocada',String(field.allocated.length),'users','positive',`${field.projects.length} obra(s) com RDO hoje`)}
+              ${this.renderMetric('Colaboradores ociosos',String(field.idle.length),'user-x',field.idle.length?'warning':'positive',`Sem apontamento em RDO hoje`)}
+              ${this.renderMetric('Custo parcial em campo',U.money(field.partialCost),'badge-dollar-sign','accent','Horas do RDO × custo-hora')}
+              ${this.renderMetric('Custo da ociosidade',U.money(field.idleCost),'circle-dollar-sign',field.idleCost>0?'danger':'positive',`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h × custo-hora`)}
+            </div>
+            <div class="tv-field-grid">
+              <article class="tv-panel-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocação e custo parcial por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
+                ${this.fieldBars(field.projects,{secondaryKey:'cost',label:item=>`${item.count} pessoa(s) · ${U.money(item.cost)}`})}
+              </article>
+              <article class="tv-panel-card"><div class="tv-section-head"><div><small>COMPOSIÇÃO DA EQUIPE</small><h2>Principais funções alocadas</h2></div><span class="tv-count">${field.roles.length} função(ões)</span></div>
+                ${this.fieldBars(field.roles,{label:item=>`${item.count} pessoa(s)`})}
+              </article>
+              <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
+                <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
+              </article>
+              <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
+                <div class="tv-field-roster">${field.idle.map(row=>`<div><span><i class="tv-field-dot idle"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>${U.money(row.cost)}</b><small>${row.missingCost?'Custo-hora não cadastrado':`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h de ociosidade`}</small></span></div>`).join('')||this.empty('Nenhum colaborador ocioso hoje.')}</div>
               </article>
             </div>
           </div>
@@ -308,14 +410,15 @@ const DashboardPanel = {
       type:'bar',
       data:{
         labels:suppliers.map(item=>item.name),
-        datasets:[{data:suppliers.map(item=>item.value),backgroundColor:'#1aa7c8',borderRadius:7,borderSkipped:false,barThickness:14}]
+        datasets:[{data:suppliers.map(item=>item.value),backgroundColor:'#1aa7c8',borderRadius:6,borderSkipped:false,barThickness:10,categoryPercentage:.72,barPercentage:.86}]
       },
       options:{
-        indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:550},
+        indexAxis:'y',responsive:true,maintainAspectRatio:false,resizeDelay:80,animation:{duration:420},
+        layout:{padding:{top:1,right:4,bottom:1,left:0}},
         plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${money(context.raw)}`}}},
         scales:{
-          x:{beginAtZero:true,grid:{color:'rgba(141,152,168,.13)'},ticks:{color:'#8d98a8',font:{size:10},callback:value=>money(value)}},
-          y:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:11,weight:'600'},callback:function(value){const label=this.getLabelForValue(value);return label.length>24?`${label.slice(0,23)}…`:label;}}}
+          x:{beginAtZero:true,grid:{color:'rgba(141,152,168,.13)'},ticks:{color:'#8d98a8',font:{size:9},maxTicksLimit:4,callback:value=>money(value)}},
+          y:{grid:{display:false},ticks:{autoSkip:false,padding:6,color:'#cbd3df',font:{size:10,weight:'600'},callback:function(value){const label=this.getLabelForValue(value);return label.length>22?`${label.slice(0,21)}…`:label;}}}
         }
       }
     });
