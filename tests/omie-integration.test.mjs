@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,isOmieConcurrentMethodError,omieRetryDelay,payableAllocations,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
+import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,isOmieConcurrentMethodError,omieRetryDelay,payableAllocations,payableInclusionDate,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
 
 assert.equal(ddmmyyyyToIso('14/08/2026'),'2026-08-14');
+assert.equal(payableInclusionDate({info:{dInc:'15/08/2026'},data_entrada:'12/08/2026',data_emissao:'10/08/2026'}),'2026-08-15');
+assert.equal(payableInclusionDate({data_entrada:'14/08/2026',data_emissao:'10/08/2026'}),'2026-08-14');
 assert.deepEqual(payableAllocations({valor_documento:100,categorias:[
   {codigo_categoria:'2.01.01',percentual:60},{codigo_categoria:'2.02.02',valor:40}
 ]}),[
@@ -17,13 +19,14 @@ const categories=new Map([
   ['2.02.02',{cliqueCategoryName:'Hospedagem',enabled:true}]
 ]);
 const payables=[
-  {codigo_lancamento_omie:900,codigo_projeto:1001,valor_documento:100,codigo_categoria:'2.01.01',data_emissao:'14/08/2026',status_titulo:'EMABERTO'},
+  {codigo_lancamento_omie:900,codigo_projeto:1001,valor_documento:100,codigo_categoria:'2.01.01',info:{dInc:'15/08/2026'},data_emissao:'14/08/2026',status_titulo:'EMABERTO'},
   {codigo_lancamento_omie:901,codigo_projeto:1002,valor_documento:200,categorias:[{codigo_categoria:'2.01.01',percentual:75},{codigo_categoria:'2.02.02',percentual:25}],status_titulo:'CANCELADO'}
 ];
 const result=buildPayableEntries(payables,projects,categories);
 assert.equal(result.skipped,0);
 assert.equal(result.entries.length,3);
 assert.equal(result.entries[0].projectId,'click-815-usf');
+assert.equal(result.entries[0].date,'2026-08-15');
 assert.equal(result.entries[1].projectId,'click-815-urd');
 assert.equal(result.entries[1].value,150);
 assert.equal(result.entries[2].value,50);

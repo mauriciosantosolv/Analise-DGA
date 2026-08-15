@@ -31,6 +31,20 @@ export function isCancelledStatus(value){
   return normalized.includes('CANCEL');
 }
 
+// O campo info.dInc é a data de inclusão registrada pelo Omie. Datas como
+// emissão, entrada, previsão e vencimento descrevem o título financeiro e não
+// o momento em que ele passou a existir no Omie.
+export function payableInclusionDate(payable){
+  const info=payable&&typeof payable.info==='object'?payable.info:{};
+  return ddmmyyyyToIso(info?.dInc)
+    ||ddmmyyyyToIso(info?.data_inclusao)
+    ||ddmmyyyyToIso(payable?.data_inclusao)
+    ||ddmmyyyyToIso(payable?.data_entrada)
+    ||ddmmyyyyToIso(payable?.data_emissao)
+    ||ddmmyyyyToIso(payable?.data_previsao)
+    ||ddmmyyyyToIso(payable?.data_vencimento);
+}
+
 export function payableAllocations(payable){
   const total=money(payable?.valor_documento);
   const rateio=Array.isArray(payable?.categorias)?payable.categorias:[];
@@ -58,7 +72,7 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
     for(const allocation of allocations){
       const category=categories.get(String(allocation.code));
       if(!category||category.enabled===false){skipped++;continue;}
-      const date=ddmmyyyyToIso(payable?.data_emissao)||ddmmyyyyToIso(payable?.data_entrada)||ddmmyyyyToIso(payable?.data_previsao)||ddmmyyyyToIso(payable?.data_vencimento);
+      const date=payableInclusionDate(payable);
       entries.push({
         externalId,
         externalItemId:`${externalId}:${allocation.code}:${allocation.index}`,

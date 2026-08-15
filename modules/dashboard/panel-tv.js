@@ -1,8 +1,8 @@
 /**
  * Modo Painel/TV do dashboard.
  *
- * Camada somente de leitura: usa os mesmos números calculados em dashboard.js,
- * não altera State, Biz, DB, filtros, permissões ou configurações financeiras.
+ * Usa os mesmos números calculados em dashboard.js. Os filtros disponíveis no
+ * painel são os filtros globais já existentes; nenhum dado financeiro é gravado.
  */
 const DashboardPanel = {
   active:false,
@@ -15,7 +15,8 @@ const DashboardPanel = {
   omieState:null,
   omieCheckedAt:0,
   omieLoading:false,
-  slideNames:['Visão geral','Situação das obras','Medições e alertas'],
+  currentData:null,
+  slideNames:['Orçado e realizado','Saúde e medições','Alertas e planejamento'],
 
   init(){
     if(this.initialized) return;
@@ -96,7 +97,79 @@ const DashboardPanel = {
     return `<article class="tv-kpi tv-tone-${tone}"><div class="tv-kpi-label"><i data-lucide="${icon}"></i><span>${U.esc(label)}</span></div><b>${value}</b>${sub?`<small>${sub}</small>`:''}</article>`;
   },
 
+  option(value,selected,label=value){
+    return `<option value="${U.esc(value)}" ${String(value)===String(selected)?'selected':''}>${U.esc(label)}</option>`;
+  },
+
+  filterMarkup(){
+    const filters=State.filters||{};
+    const selected=State.selectedProjectIds();
+    const projectValue=selected.length===1?selected[0]:'';
+    const projects=State.projects.slice().sort((a,b)=>U.projLabel(a).localeCompare(U.projLabel(b),'pt-BR'));
+    const clients=[...new Set(State.projects.map(project=>project.client).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const statuses=[...new Set(State.projects.map(project=>project.status).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const types=[...new Set(State.projects.map(project=>project.type).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const hasFilters=selected.length>0||[filters.client,filters.category,filters.status,filters.type].some(Boolean);
+    return `<div class="tv-filter-bar" aria-label="Filtros do painel">
+      <span class="tv-filter-title"><i data-lucide="sliders-horizontal"></i>Filtros</span>
+      <label><span>Projeto</span><select id="tv-filter-project"><option value="">Todos os projetos</option>${selected.length>1?`<option value="" selected>${selected.length} projetos selecionados</option>`:''}${projects.map(project=>this.option(project.id,projectValue,U.projLabel(project))).join('')}</select></label>
+      <label><span>Cliente</span><select id="tv-filter-client"><option value="">Todos os clientes</option>${clients.map(client=>this.option(client,filters.client)).join('')}</select></label>
+      <label><span>Status</span><select id="tv-filter-status"><option value="">Todos os status</option>${statuses.map(status=>this.option(status,filters.status)).join('')}</select></label>
+      <label><span>Tipo</span><select id="tv-filter-type"><option value="">Todos os tipos</option>${types.map(type=>this.option(type,filters.type)).join('')}</select></label>
+      ${hasFilters?'<button type="button" class="tv-filter-clear" onclick="App.clearFilters()"><i data-lucide="filter-x"></i>Limpar</button>':''}
+    </div>`;
+  },
+
+  bindFilters(){
+    const project=document.getElementById('tv-filter-project');
+    if(project) project.onchange=()=>{
+      State.filters.project=project.value||'';
+      State.filters.projects=[];
+      if(Views.planejamento) Views.planejamento.projectFilter='';
+      App.render({resetScroll:false});
+    };
+    [['tv-filter-client','client'],['tv-filter-status','status'],['tv-filter-type','type']].forEach(([id,key])=>{
+      const element=document.getElementById(id);
+      if(element) element.onchange=()=>{State.filters[key]=element.value;App.render({resetScroll:false});};
+    });
+  },
+
+  topSuppliers(purchases){
+    const totals=new Map();
+    (Array.isArray(purchases)?purchases:[]).filter(item=>item&&item.active!==false).forEach(item=>{
+      const name=String(item.supplier||'Sem fornecedor').trim()||'Sem fornecedor';
+      totals.set(name,(totals.get(name)||0)+(Number(item.value)||0));
+    });
+    return [...totals].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,7);
+  },
+
+  entryTimestamp(entry){
+    const numeric=Number(entry&&entry.importedAt);
+    if(Number.isFinite(numeric)&&numeric>0) return numeric;
+    for(const value of [entry&&entry.createdAt,entry&&entry.syncedAt,entry&&entry.date]){
+      const stamp=new Date(value||0).getTime();
+      if(Number.isFinite(stamp)&&stamp>0) return stamp;
+    }
+    return 0;
+  },
+
+  latestEntries(purchases){
+    return (Array.isArray(purchases)?purchases:[]).filter(item=>item&&item.active!==false)
+      .slice().sort((a,b)=>this.entryTimestamp(b)-this.entryTimestamp(a)).slice(0,6);
+  },
+
+  sourceLabel(entry){
+    return {omiePayable:'Omie · conta a pagar',paidAccount:'Conta paga',labor:'Mão de obra',purchase:'Compra'}[entry&&entry.sourceType]||'Compra';
+  },
+
+  latestRow(entry){
+    const project=State.projects.find(item=>String(item.id)===String(entry.projectId));
+    const projectName=project?U.projLabel(project):'Projeto não localizado';
+    return `<tr><td>${U.date(entry.date)||'—'}</td><td><b>${U.esc(projectName)}</b><small>${U.esc(this.sourceLabel(entry))}</small></td><td><b>${U.esc(entry.supplier||'Sem fornecedor')}</b><small>${U.esc(entry.category||entry.desc||'Sem categoria')}</small></td><td class="num"><b>${U.money2(entry.value)}</b></td></tr>`;
+  },
+
   render(data){
+    this.currentData=data;
     const organization=typeof Cloud!=='undefined'&&Cloud.active()?(Cloud.organization()||{}).name:'';
     const company=organization||State.settings.companyName||'CliqueObras';
     const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
@@ -106,6 +179,8 @@ const DashboardPanel = {
     const featured=(activeStats.length?activeStats:data.stats).slice().sort((a,b)=>a.s.health-b.s.health).slice(0,6);
     const allRows=data.stats.slice().sort((a,b)=>a.s.health-b.s.health);
     const alerts=this.alerts(data,activeStats);
+    const suppliers=this.topSuppliers(data.purchases);
+    const latest=this.latestEntries(data.purchases);
 
     return `<section id="tv-dashboard" class="tv-dashboard" aria-label="Painel de monitoramento das obras">
       <header class="tv-header">
@@ -120,7 +195,7 @@ const DashboardPanel = {
       </header>
 
       <div class="tv-slides">
-        <section class="tv-slide ${this.slide===0?'active':''}" data-tv-slide="0" aria-label="Visão geral">
+        <section class="tv-slide ${this.slide===0?'active':''}" data-tv-slide="0" aria-label="Orçado, realizado, fornecedores e lançamentos">
           <div class="tv-kpi-grid">
             ${this.renderMetric('Receita contratada',U.money(data.revenue),'banknote','accent',`${data.projects.length} projeto(s) no filtro`)}
             ${this.renderMetric('Realizado',U.money(data.spent),'wallet',this.moneyTone(data.spent,false),`${U.pct(data.budgetTotal>0?data.spent/data.budgetTotal*100:null)} do orçamento`)}
@@ -129,6 +204,26 @@ const DashboardPanel = {
             ${this.renderMetric('Projetos críticos',String(data.critical.length),'siren',data.critical.length?'danger':'positive',`${data.active.length} projeto(s) em andamento`)}
             ${this.renderMetric('Gastos próximos · 7 dias',U.money(data.next7),'calendar-clock',data.next7>0?'warning':'neutral',`${data.fut.today.length+data.fut.d7.length} item(ns) planejado(s)`)}
           </div>
+          ${this.filterMarkup()}
+          <div class="tv-monitor-grid">
+            <article class="tv-panel-card tv-project-table-card"><div class="tv-section-head"><div><small>VISÃO POR PROJETO</small><h2>Orçado × realizado por obra</h2></div><span class="tv-count">Prioridade: menor saúde financeira</span></div>
+              <div class="tv-table-wrap"><table class="tv-project-table"><thead><tr><th>Projeto</th><th>Situação</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo orçado</th><th class="num">Margem</th><th>Consumo</th></tr></thead><tbody>
+                ${allRows.slice(0,10).map(({p,s})=>this.projectRow(p,s)).join('')||`<tr><td colspan="8">${this.empty('Nenhuma obra no filtro atual.')}</td></tr>`}
+              </tbody></table></div>
+              ${allRows.length>10?`<small class="tv-more">Exibindo as 10 obras que mais exigem atenção · ${allRows.length-10} outra(s) permanecem monitoradas.</small>`:''}
+            </article>
+            <div class="tv-monitor-side">
+              <article class="tv-panel-card tv-supplier-card"><div class="tv-section-head"><div><small>FORNECEDORES</small><h2>Top gastos</h2></div><span class="tv-count">${suppliers.length} fornecedor(es)</span></div>
+                ${suppliers.length?`<div class="tv-supplier-chart" id="tv-supplier-chart-wrap"><canvas id="tv-suppliers-chart" aria-label="Top gastos por fornecedores"></canvas></div><div class="tv-supplier-fallback" id="tv-supplier-fallback" hidden>${suppliers.map(item=>`<div><span>${U.esc(item.name)}</span><b>${U.money2(item.value)}</b></div>`).join('')}</div>`:this.empty('Nenhum gasto no filtro atual.')}
+              </article>
+              <article class="tv-panel-card tv-latest-card"><div class="tv-section-head"><div><small>ATUALIZAÇÃO EM TEMPO REAL</small><h2>Últimos lançamentos</h2></div><span class="tv-live"><i></i>Ao vivo</span></div>
+                <div class="tv-latest-wrap">${latest.length?`<table class="tv-latest-table"><thead><tr><th>Data</th><th>Projeto / origem</th><th>Conta / fornecedor</th><th class="num">Valor</th></tr></thead><tbody>${latest.map(entry=>this.latestRow(entry)).join('')}</tbody></table>`:this.empty('Nenhum lançamento no filtro atual.')}</div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="tv-slide ${this.slide===1?'active':''}" data-tv-slide="1" aria-label="Saúde das obras e medições">
           <div class="tv-overview-grid">
             <article class="tv-panel-card tv-project-health"><div class="tv-section-head"><div><small>ACOMPANHAMENTO OPERACIONAL</small><h2>Saúde financeira das obras</h2></div><span class="tv-count">${activeStats.length} em andamento</span></div>
               <div class="tv-health-list">${featured.map(({p,s})=>this.healthRow(p,s)).join('')||this.empty('Nenhuma obra no filtro atual.')}</div>
@@ -138,15 +233,6 @@ const DashboardPanel = {
               <dl class="tv-breakdown"><div><dt>Faturado</dt><dd>${U.money(data.invoiced)}</dd></div><div><dt>Aprovado</dt><dd>${U.money(data.approved)}</dd></div><div class="${data.awaitingApproval>0?'warning':''}"><dt>Aguardando aprovação</dt><dd>${U.money(data.awaitingApproval)}</dd></div><div><dt>Saldo a medir</dt><dd>${U.money(data.revenue-data.measured)}</dd></div></dl>
             </article>
           </div>
-        </section>
-
-        <section class="tv-slide ${this.slide===1?'active':''}" data-tv-slide="1" aria-label="Situação das obras">
-          <article class="tv-panel-card tv-project-table-card"><div class="tv-section-head"><div><small>VISÃO POR PROJETO</small><h2>Orçado, realizado e projeção</h2></div><span class="tv-count">Prioridade: obras com menor saúde</span></div>
-            <div class="tv-table-wrap"><table class="tv-project-table"><thead><tr><th>Projeto</th><th>Situação</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo orçado</th><th class="num">Margem</th><th>Consumo</th></tr></thead><tbody>
-              ${allRows.slice(0,9).map(({p,s})=>this.projectRow(p,s)).join('')||`<tr><td colspan="7">${this.empty('Nenhuma obra no filtro atual.')}</td></tr>`}
-            </tbody></table></div>
-            ${allRows.length>9?`<small class="tv-more">Exibindo as 9 obras que mais exigem atenção · ${allRows.length-9} outra(s) permanecem acompanhadas no dashboard.</small>`:''}
-          </article>
         </section>
 
         <section class="tv-slide ${this.slide===2?'active':''}" data-tv-slide="2" aria-label="Medições e alertas">
@@ -175,7 +261,7 @@ const DashboardPanel = {
 
   projectRow(project,stats){
     const tone=stats.light==='red'?'danger':stats.light==='amber'?'warning':'positive';
-    return `<tr><td><b>${U.esc(U.projLabel(project))}</b><small>${U.esc(project.client||project.status||'')}</small></td><td><span class="tv-project-state tv-state-${tone}"><i></i>${this.healthLabel(stats.light)}</span></td><td class="num">${U.money(stats.spent)}</td><td class="num">${U.money(stats.projected)}</td><td class="num ${stats.balance<0?'danger':''}">${U.money(stats.balance)}</td><td class="num ${stats.marginCurrent!=null&&stats.marginCurrent<0?'danger':''}">${U.pct(stats.marginCurrent)}</td><td><div class="tv-consumption"><span>${U.pct(stats.consumed)}</span><div class="tv-bar tv-bar-${tone}"><span style="width:${Math.min(100,Math.max(0,stats.consumed||0))}%"></span></div></div></td></tr>`;
+    return `<tr><td><b>${U.esc(U.projLabel(project))}</b><small>${U.esc(project.client||project.status||'')}</small></td><td><span class="tv-project-state tv-state-${tone}"><i></i>${this.healthLabel(stats.light)}</span></td><td class="num">${U.money(stats.budgetTotal)}</td><td class="num">${U.money(stats.spent)}</td><td class="num">${U.money(stats.projected)}</td><td class="num ${stats.balance<0?'danger':''}">${U.money(stats.balance)}</td><td class="num ${stats.marginCurrent!=null&&stats.marginCurrent<0?'danger':''}">${U.pct(stats.marginCurrent)}</td><td><div class="tv-consumption"><span>${U.pct(stats.consumed)}</span><div class="tv-bar tv-bar-${tone}"><span style="width:${Math.min(100,Math.max(0,stats.consumed||0))}%"></span></div></div></td></tr>`;
   },
 
   alerts(data,activeStats){
@@ -207,9 +293,40 @@ const DashboardPanel = {
     return `<span class="tv-status tv-status-${tone}"><i data-lucide="${connected?'wifi':'wifi-off'}"></i><span>${label}</span></span>`;
   },
 
+  renderSupplierChart(){
+    const canvas=document.getElementById('tv-suppliers-chart');
+    if(!canvas) return;
+    const suppliers=this.topSuppliers(this.currentData&&this.currentData.purchases);
+    if(typeof Chart==='undefined'){
+      canvas.hidden=true;
+      const fallback=document.getElementById('tv-supplier-fallback');
+      if(fallback) fallback.hidden=false;
+      return;
+    }
+    const money=value=>U.money2(Number(value)||0);
+    const chart=new Chart(canvas.getContext('2d'),{
+      type:'bar',
+      data:{
+        labels:suppliers.map(item=>item.name),
+        datasets:[{data:suppliers.map(item=>item.value),backgroundColor:'#1aa7c8',borderRadius:7,borderSkipped:false,barThickness:14}]
+      },
+      options:{
+        indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:550},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${money(context.raw)}`}}},
+        scales:{
+          x:{beginAtZero:true,grid:{color:'rgba(141,152,168,.13)'},ticks:{color:'#8d98a8',font:{size:10},callback:value=>money(value)}},
+          y:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:11,weight:'600'},callback:function(value){const label=this.getLabelForValue(value);return label.length>24?`${label.slice(0,23)}…`:label;}}}
+        }
+      }
+    });
+    if(typeof Dash!=='undefined') Dash.charts.tvSuppliers=chart;
+  },
+
   mount(){
     if(!this.active) return;
     this.clearTimers();
+    this.bindFilters();
+    this.renderSupplierChart();
     this.applySlide(false);
     this.updateClock();
     this.updateDataTime();

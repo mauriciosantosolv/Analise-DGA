@@ -79,7 +79,7 @@ Views.dashboard = {
     // Ele altera somente a apresentação e não grava dados nem preferências.
     if(typeof DashboardPanel!=='undefined' && DashboardPanel.active){
       $c().innerHTML=DashboardPanel.render({
-        projects,active,stats,revenue,measured,invoiced,approved,awaitingApproval,
+        projects,purchases,active,stats,revenue,measured,invoiced,approved,awaitingApproval,
         budgetTotal,spent,projected,balance,marginCurrent,profit,critical,next7,fut
       });
       DashboardPanel.mount();
