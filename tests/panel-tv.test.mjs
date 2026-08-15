@@ -11,8 +11,8 @@ const panel=read('modules/dashboard/panel-tv.js');
 const css=read('css/panel-tv.css');
 
 assert.match(html,/id="tv-mode-toggle"/);
-assert.match(html,/css\/panel-tv\.css\?v=3\.0\.8\.1/);
-assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=3\.0\.8\.1/);
+assert.match(html,/css\/panel-tv\.css\?v=3\.0\.8/);
+assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=3\.0\.8/);
 assert.match(app,/DashboardPanel\.enter\(\)/);
 assert.match(dashboard,/DashboardPanel\.render/);
 assert.match(panel,/slideNames:\['Visão geral','Situação das obras','Medições e alertas'\]/);

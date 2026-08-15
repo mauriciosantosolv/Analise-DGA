@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.8\.1"/);
+assert.match(html, /name="application-version" content="3\.0\.8"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.8\.1/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.8/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
