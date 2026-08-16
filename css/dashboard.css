@@ -110,7 +110,7 @@ kbd{background:var(--surface2);border:1px solid var(--border);border-bottom-widt
 
 .kpi-link{cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
 .kpi-link:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:var(--shadow-lg)}
-.kpi-link:focus{outline:2px solid var(--blue);outline-offset:2px}
+.kpi-link:focus{outline:none}
 
 @media(max-width:860px){
   .kpi-grid{grid-template-columns:1fr 1fr;gap:9px}

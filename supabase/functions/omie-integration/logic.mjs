@@ -26,6 +26,17 @@ export function isoToDdMmYyyy(value){
   return match?`${match[3]}/${match[2]}/${match[1]}`:'';
 }
 
+export function normalizeOmieTime(value){
+  const raw=String(value??'').trim();
+  const separated=raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  const compact=!separated&&raw.match(/^(\d{2})(\d{2})(\d{2})$/);
+  const match=separated||compact;
+  if(!match) return '';
+  const hour=Number(match[1]),minute=Number(match[2]),second=Number(match[3]||0);
+  if(hour>23||minute>59||second>59) return '';
+  return `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}`;
+}
+
 export function isCancelledStatus(value){
   const normalized=String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   return normalized.includes('CANCEL');
@@ -38,11 +49,24 @@ export function payableInclusionDate(payable){
   const info=payable&&typeof payable.info==='object'?payable.info:{};
   return ddmmyyyyToIso(info?.dInc)
     ||ddmmyyyyToIso(info?.data_inclusao)
-    ||ddmmyyyyToIso(payable?.data_inclusao)
-    ||ddmmyyyyToIso(payable?.data_entrada)
-    ||ddmmyyyyToIso(payable?.data_emissao)
-    ||ddmmyyyyToIso(payable?.data_previsao)
-    ||ddmmyyyyToIso(payable?.data_vencimento);
+    ||ddmmyyyyToIso(payable?.data_inclusao);
+}
+
+export function payableInclusionTime(payable){
+  const info=payable&&typeof payable.info==='object'?payable.info:{};
+  return normalizeOmieTime(info?.hInc??info?.hora_inclusao??payable?.hora_inclusao);
+}
+
+export function payableDates(payable){
+  const inclusionDate=payableInclusionDate(payable);
+  const inclusionTime=payableInclusionTime(payable);
+  return {
+    inclusionDate,
+    inclusionTime,
+    inclusionDateTime:inclusionDate?`${inclusionDate}T${inclusionTime||'00:00:00'}`:'',
+    dueDate:ddmmyyyyToIso(payable?.data_vencimento),
+    forecastDate:ddmmyyyyToIso(payable?.data_previsao)
+  };
 }
 
 export function payableAllocations(payable){
@@ -72,7 +96,7 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
     for(const allocation of allocations){
       const category=categories.get(String(allocation.code));
       if(!category||category.enabled===false){skipped++;continue;}
-      const date=payableInclusionDate(payable);
+      const dates=payableDates(payable);
       entries.push({
         externalId,
         externalItemId:`${externalId}:${allocation.code}:${allocation.index}`,
@@ -81,7 +105,12 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
         omieCategoryCode:String(allocation.code),
         category:cleanText(category.cliqueCategoryName,160),
         value:Math.abs(money(allocation.value)),
-        date,
+        date:dates.inclusionDate,
+        omieInclusionDate:dates.inclusionDate,
+        omieInclusionTime:dates.inclusionTime,
+        omieInclusionDateTime:dates.inclusionDateTime,
+        dueDate:dates.dueDate,
+        forecastDate:dates.forecastDate,
         supplier:cleanText(
           suppliers.get(String(payable?.codigo_cliente_fornecedor??''))
           ??payable?.nome_fantasia??payable?.nome_fornecedor??payable?.razao_social

@@ -162,25 +162,75 @@ const RDO = {
     const configured=Number((State.settings||{}).rdoDailyHours);
     return configured>0&&configured<=24?configured:8.8;
   },
-  defaultShift(){
-    const settings=State.settings||{};
-    const start=/^\d{2}:\d{2}$/.test(String(settings.rdoShiftStart||''))?settings.rdoShiftStart:'07:30';
-    const end=/^\d{2}:\d{2}$/.test(String(settings.rdoShiftEnd||''))?settings.rdoShiftEnd:'17:18';
-    const configuredBreak=Number(settings.rdoShiftBreakMinutes);
-    const breakMinutes=Number.isFinite(configuredBreak)&&configuredBreak>=0&&configuredBreak<=360?configuredBreak:60;
-    return {start,end,breakMinutes};
+  dayType(date,isHoliday=false){
+    if(isHoliday) return 'holiday';
+    const match=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!match) return 'weekday';
+    const day=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]))).getUTCDay();
+    return day===6?'saturday':day===0?'sunday':'weekday';
   },
-  workedHours(start,end,breakMinutes=0,regularLimit=this.standardDailyHours()){
-    const toMinutes=value=>{
-      const match=String(value||'').match(/^(\d{1,2}):(\d{2})$/);
-      return match ? Number(match[1])*60+Number(match[2]) : null;
-    };
-    const from=toMinutes(start), to=toMinutes(end);
-    if(from==null || to==null) return {total:0,regular:0,overtime50:0,overtime100:0};
+  dayTypeLabel(date,isHoliday=false){
+    return {holiday:'Feriado · horas a 100%',saturday:'Sábado · horas a 50%',sunday:'Domingo · horas a 100%',weekday:'Dia útil'}[this.dayType(date,isHoliday)];
+  },
+  defaultShift(date=''){
+    const settings=State.settings||{};
+    const type=this.dayType(date,false);
+    const prefix=type==='saturday'?'rdoSaturday':type==='sunday'?'rdoSunday':'rdoShift';
+    const fallbackStart=settings.rdoShiftStart||'07:30',fallbackEnd=settings.rdoShiftEnd||'17:18';
+    const start=/^\d{2}:\d{2}$/.test(String(settings[`${prefix}Start`]||''))?settings[`${prefix}Start`]:fallbackStart;
+    const end=/^\d{2}:\d{2}$/.test(String(settings[`${prefix}End`]||''))?settings[`${prefix}End`]:fallbackEnd;
+    const configuredBreak=Number(settings[`${prefix}BreakMinutes`]);
+    const weekdayBreak=Number(settings.rdoShiftBreakMinutes);
+    const fallbackBreak=Number.isFinite(weekdayBreak)&&weekdayBreak>=0&&weekdayBreak<=360?weekdayBreak:60;
+    const breakMinutes=Number.isFinite(configuredBreak)&&configuredBreak>=0&&configuredBreak<=360?configuredBreak:60;
+    return {start,end,breakMinutes:Number.isFinite(configuredBreak)?breakMinutes:fallbackBreak};
+  },
+  timeMinutes(value){
+    const match=String(value||'').match(/^(\d{1,2}):(\d{2})$/);
+    return match&&Number(match[1])<24&&Number(match[2])<60?Number(match[1])*60+Number(match[2]):null;
+  },
+  paidHours(start,end,breakMinutes=0){
+    const from=this.timeMinutes(start),to=this.timeMinutes(end);
+    if(from==null||to==null) return 0;
     let minutes=to-from;
     if(minutes<0) minutes+=24*60;
     minutes=Math.max(0,minutes-(Number(breakMinutes)||0));
-    const total=Math.round(minutes/60*100)/100;
+    return Math.round(minutes/60*100)/100;
+  },
+  plannedHoursForDate(date){
+    const holiday=(Array.isArray(State.rdos)?State.rdos:[]).some(rdo=>String(rdo.date||'').slice(0,10)===String(date)&&rdo.isHoliday===true);
+    const shift=this.defaultShift(date);
+    return this.paidHours(shift.start,shift.end,shift.breakMinutes)||this.standardDailyHours(date,holiday);
+  },
+  nightPremiumPct(){
+    const configured=Number((State.settings||{}).rdoNightPremiumPct);
+    return Number.isFinite(configured)&&configured>=0&&configured<=300?configured:20;
+  },
+  nightHours(start,end,breakMinutes=0){
+    const from=this.timeMinutes(start),clockEnd=this.timeMinutes(end);
+    const nightStart=this.timeMinutes((State.settings||{}).rdoNightStart||'22:00');
+    if(from==null||clockEnd==null||nightStart==null) return 0;
+    let duration=clockEnd-from;
+    if(duration<0) duration+=1440;
+    if(duration<=0) return 0;
+    const paid=Math.max(0,duration-(Number(breakMinutes)||0));
+    const workEnd=from+duration;
+    let overlap=0;
+    for(let offset=-1;offset<=1;offset++){
+      const windowStart=offset*1440+nightStart;
+      const windowEnd=offset*1440+29*60;
+      overlap+=Math.max(0,Math.min(workEnd,windowEnd)-Math.max(from,windowStart));
+    }
+    const adjusted=Math.min(paid,overlap*(paid/duration));
+    return Math.round(adjusted/60*100)/100;
+  },
+  workedHours(start,end,breakMinutes=0,regularLimit=this.standardDailyHours(),date='',isHoliday=false){
+    const from=this.timeMinutes(start), to=this.timeMinutes(end);
+    if(from==null || to==null) return {total:0,regular:0,overtime50:0,overtime100:0};
+    const total=this.paidHours(start,end,breakMinutes);
+    const type=this.dayType(date,isHoliday);
+    if(type==='saturday') return {total,regular:0,overtime50:total,overtime100:0};
+    if(type==='sunday'||type==='holiday') return {total,regular:0,overtime50:0,overtime100:total};
     const limit=Math.max(0,Math.min(24,Number(regularLimit)||0));
     const regular=Math.round(Math.min(limit,total)*100)/100;
     return {total,regular,overtime50:Math.round(Math.max(0,total-regular)*100)/100,overtime100:0};
@@ -262,14 +312,19 @@ const RDO = {
     const regular=Number(entry.regular)||0;
     const overtime50=Number(entry.overtime50)||0;
     const overtime100=Number(entry.overtime100)||0;
+    const nightHours=Number(entry.nightHours)||0;
+    const nightPremiumPct=Number.isFinite(Number(entry.nightPremiumPct))?Number(entry.nightPremiumPct):this.nightPremiumPct();
+    const nightCost=nightHours*(Number(rate.costRegular)||0)*nightPremiumPct/100;
     return {
       hours:regular+overtime50+overtime100,
       cost:regular*(Number(rate.costRegular)||0)
         + overtime50*(Number(rate.cost50)||0)
-        + overtime100*(Number(rate.cost100)||0),
+        + overtime100*(Number(rate.cost100)||0)
+        + nightCost,
       sale:regular*(Number(rate.saleRegular)||0)
         + overtime50*(Number(rate.sale50)||0)
-        + overtime100*(Number(rate.sale100)||0)
+        + overtime100*(Number(rate.sale100)||0),
+      nightHours,nightPremiumPct,nightCost
     };
   },
   calculate(rdo){
@@ -395,12 +450,15 @@ const RDO = {
         regular:Number(row.regular)||0,
         overtime50:Number(row.overtime50)||0,
         overtime100:Number(row.overtime100)||0,
+        nightHours:Number(row.nightHours)||0,
+        nightPremiumPct:Number(row.nightPremiumPct)||0,
         costRegular:Number(row.rate.costRegular)||0,
         cost50:Number(row.rate.cost50)||0,
         cost100:Number(row.rate.cost100)||0,
         saleRegular:Number(row.rate.saleRegular)||0,
         sale50:Number(row.rate.sale50)||0,
         sale100:Number(row.rate.sale100)||0,
+        nightCost:Math.round((Number(row.nightCost)||0)*100)/100,
         cost:Math.round(row.cost*100)/100,
         sale:Math.round(row.sale*100)/100
       })),
@@ -544,14 +602,18 @@ const RDO = {
     const crew=this.activeCrew();
     if(!projects.length) return UI.toast('Nenhum projeto foi disponibilizado para preenchimento de RDO.','warn',6500);
     if(!crew.length) return UI.toast('Cadastre a equipe antes de criar o primeiro RDO.','warn',6500);
+    const initialDate=existing?.date||U.isoDate(new Date());
+    const initialHoliday=existing?.isHoliday===true;
     const initialEntries=new Map((existing?.entries||[]).map(row=>[String(row.employeeId),row]));
-    const defaultShift=this.defaultShift();
-    const defaultHours=this.workedHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes);
-    const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,overtime100:0};
+    const defaultShift=this.defaultShift(initialDate);
+    const defaultHours=this.workedHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes,this.standardDailyHours(),initialDate,initialHoliday);
+    const defaultNightHours=this.nightHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes);
+    const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,nightHours:defaultNightHours};
     const workerCard=employee=>{
       const saved=initialEntries.get(String(employee.id));
       const selected=!!saved;
-      const row=saved||{...defaultShift,...defaultHours};
+      const row=saved||{...defaultShift,...defaultHours,nightHours:defaultNightHours};
+      const rowNightHours=Number.isFinite(Number(row.nightHours))?Number(row.nightHours):this.nightHours(row.start,row.end,row.breakMinutes);
       const searchText=U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`);
       const photo=U.safeImageSrc(employee.photo||'');
       return `<article class="rdo-worker-card ${selected?'selected':''}" data-employee-id="${U.esc(employee.id)}" data-search="${U.esc(searchText)}">
@@ -567,6 +629,7 @@ const RDO = {
           <label>Normal<input data-field="regular" type="number" min="0" max="24" step="0.25" value="${Number(row.regular)||0}"></label>
           <label>HE 50%<input data-field="overtime50" type="number" min="0" max="24" step="0.25" value="${Number(row.overtime50)||0}"></label>
           <label>HE 100%<input data-field="overtime100" type="number" min="0" max="24" step="0.25" value="${Number(row.overtime100)||0}"></label>
+          <label>Adic. noturno<input data-field="nightHours" type="number" min="0" max="24" step="0.01" value="${rowNightHours}" readonly></label>
         </div>
       </article>`;
     };
@@ -589,7 +652,8 @@ const RDO = {
             <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3><p>Defina o projeto, a data e a frente de serviço.</p></div></div>
             <div class="form-grid">
               <div><label>Projeto *</label><select id="rdo-project" ${existing?'disabled':''}>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
-              <div><label>Data do serviço *</label><input id="rdo-date" type="date" value="${U.esc(existing?.date||U.isoDate(new Date()))}"></div>
+              <div><label>Data do serviço *</label><input id="rdo-date" type="date" value="${U.esc(initialDate)}"></div>
+              <div class="full"><label class="rdo-holiday-toggle"><input id="rdo-holiday" type="checkbox" ${initialHoliday?'checked':''}><span><i data-lucide="calendar-check"></i></span><b>Este dia é feriado</b><small>Feriados são calculados integralmente como hora extra de 100%.</small></label><div class="rdo-day-type" id="rdo-day-type">${U.esc(this.dayTypeLabel(initialDate,initialHoliday))}</div></div>
               <div class="full"><label>Local / frente de serviço</label><input id="rdo-location" maxlength="180" value="${U.esc(existing?.location||'')}" placeholder="Ex.: Subestação SE-04"></div>
             </div>
             <div class="rdo-context-card"><i data-lucide="briefcase"></i><div><b>Projeto autorizado para este usuário</b><small>A lista respeita as permissões configuradas pelo administrador.</small></div><i data-lucide="check-circle-2"></i></div>
@@ -604,6 +668,7 @@ const RDO = {
               <label>Normal<input id="rdo-all-regular" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.regular)||0}"></label>
               <label>HE 50%<input id="rdo-all-50" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime50)||0}"></label>
               <label>HE 100%<input id="rdo-all-100" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime100)||0}"></label>
+              <label>Adic. noturno<input id="rdo-all-night" type="number" min="0" max="24" step="0.01" value="${Number.isFinite(Number(sharedEntry.nightHours))?Number(sharedEntry.nightHours):defaultNightHours}" readonly></label>
             </div>
             <div class="rdo-team-summary" id="rdo-team-summary"></div>
             <div class="rdo-team-search" role="search">
@@ -664,7 +729,8 @@ const RDO = {
           breakMinutes:byId('rdo-all-break').value,
           regular:byId('rdo-all-regular').value,
           overtime50:byId('rdo-all-50').value,
-          overtime100:byId('rdo-all-100').value
+          overtime100:byId('rdo-all-100').value,
+          nightHours:byId('rdo-all-night').value
         });
         const applyToCard=card=>{
           Object.entries(sharedValues()).forEach(([field,value])=>{
@@ -696,6 +762,22 @@ const RDO = {
           filterTeam();
           byId('rdo-team-search').focus();
         };
+        const currentDate=()=>byId('rdo-date').value;
+        const currentHoliday=()=>byId('rdo-holiday').checked;
+        const refreshDayType=()=>{
+          byId('rdo-day-type').textContent=this.dayTypeLabel(currentDate(),currentHoliday());
+        };
+        const recalculateCard=card=>{
+          const start=card.querySelector('[data-field="start"]').value;
+          const end=card.querySelector('[data-field="end"]').value;
+          const breakMinutes=card.querySelector('[data-field="breakMinutes"]').value;
+          const hours=this.workedHours(start,end,breakMinutes,this.standardDailyHours(),currentDate(),currentHoliday());
+          card.querySelector('[data-field="regular"]').value=hours.regular;
+          card.querySelector('[data-field="overtime50"]').value=hours.overtime50;
+          card.querySelector('[data-field="overtime100"]').value=hours.overtime100;
+          card.querySelector('[data-field="nightHours"]').value=this.nightHours(start,end,breakMinutes);
+          refreshTotal(card);
+        };
         cards.forEach(card=>{
           const checkbox=card.querySelector('.rdo-worker-select input');
           checkbox.onchange=()=>{
@@ -704,14 +786,7 @@ const RDO = {
             refreshTeamSummary();
           };
           card.querySelectorAll('[data-field="start"],[data-field="end"],[data-field="breakMinutes"]').forEach(input=>input.onchange=()=>{
-            const hours=this.workedHours(
-              card.querySelector('[data-field="start"]').value,
-              card.querySelector('[data-field="end"]').value,
-              card.querySelector('[data-field="breakMinutes"]').value
-            );
-            card.querySelector('[data-field="regular"]').value=hours.regular;
-            card.querySelector('[data-field="overtime50"]').value=hours.overtime50;
-            refreshTotal(card);
+            recalculateCard(card);
             refreshTeamSummary();
           });
           card.querySelectorAll('[data-field="regular"],[data-field="overtime50"],[data-field="overtime100"]').forEach(input=>input.oninput=()=>{
@@ -730,14 +805,27 @@ const RDO = {
           const hours=this.workedHours(
             byId('rdo-all-start').value,
             byId('rdo-all-end').value,
-            byId('rdo-all-break').value
+            byId('rdo-all-break').value,
+            this.standardDailyHours(),currentDate(),currentHoliday()
           );
           byId('rdo-all-regular').value=hours.regular;
           byId('rdo-all-50').value=hours.overtime50;
+          byId('rdo-all-100').value=hours.overtime100;
+          byId('rdo-all-night').value=this.nightHours(byId('rdo-all-start').value,byId('rdo-all-end').value,byId('rdo-all-break').value);
           applyToAll();
         };
         ['rdo-all-start','rdo-all-end','rdo-all-break'].forEach(fieldId=>byId(fieldId).onchange=recalcTemplate);
         ['rdo-all-regular','rdo-all-50','rdo-all-100'].forEach(fieldId=>byId(fieldId).oninput=applyToAll);
+        byId('rdo-holiday').onchange=()=>{refreshDayType();recalcTemplate();};
+        byId('rdo-date').onchange=()=>{
+          const shift=this.defaultShift(currentDate());
+          byId('rdo-all-start').value=shift.start;
+          byId('rdo-all-end').value=shift.end;
+          byId('rdo-all-break').value=shift.breakMinutes;
+          refreshDayType();
+          recalcTemplate();
+        };
+        refreshDayType();
 
         const collect=()=>({
           ...(existing||{
@@ -748,6 +836,9 @@ const RDO = {
           }),
           projectId:document.getElementById('rdo-project').value,
           date:document.getElementById('rdo-date').value,
+          isHoliday:document.getElementById('rdo-holiday').checked,
+          dayType:this.dayType(document.getElementById('rdo-date').value,document.getElementById('rdo-holiday').checked),
+          nightPremiumPct:this.nightPremiumPct(),
           location:document.getElementById('rdo-location').value.trim(),
           description:document.getElementById('rdo-description').value.trim(),
           notes:document.getElementById('rdo-notes').value.trim(),
@@ -770,7 +861,9 @@ const RDO = {
               breakMinutes:U.num(card.querySelector('[data-field="breakMinutes"]').value),
               regular:U.num(card.querySelector('[data-field="regular"]').value),
               overtime50:U.num(card.querySelector('[data-field="overtime50"]').value),
-              overtime100:U.num(card.querySelector('[data-field="overtime100"]').value)
+              overtime100:U.num(card.querySelector('[data-field="overtime100"]').value),
+              nightHours:U.num(card.querySelector('[data-field="nightHours"]').value),
+              nightPremiumPct:this.nightPremiumPct()
             };
           }),
           attachmentCount:savedAttachments.length+pendingFiles.length
@@ -890,11 +983,12 @@ const RDO = {
           const regular=rdo.entries.reduce((sum,row)=>sum+(Number(row.regular)||0),0);
           const extra50=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime50)||0),0);
           const extra100=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime100)||0),0);
+          const night=rdo.entries.reduce((sum,row)=>sum+(Number(row.nightHours)||0),0);
           byId('rdo-review').innerHTML=`
             <article><div><i data-lucide="calendar-days"></i><b>Informações</b><button type="button" data-review-step="1">Editar</button></div>
-              <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
+              <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Classificação</dt><dd>${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
             <article><div><i data-lucide="users"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
-              <dl><span><dt>Equipe</dt><dd>${rdo.entries.length} pessoas</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span></dl></article>
+              <dl><span><dt>Equipe</dt><dd>${rdo.entries.length} pessoas</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span><span><dt>Adic. noturno</dt><dd>${night.toLocaleString('pt-BR')}h · ${rdo.nightPremiumPct}%</dd></span></dl></article>
             <article class="full"><div><i data-lucide="file-check-2"></i><b>Serviço e evidências</b><button type="button" data-review-step="3">Editar</button></div>
               <p>${U.esc(rdo.description)}</p><span class="rdo-review-tag"><i data-lucide="paperclip"></i>${rdo.attachmentCount} ${rdo.attachmentCount===1?'anexo':'anexos'}</span></article>`;
           byId('rdo-review').querySelectorAll('[data-review-step]').forEach(button=>button.onclick=()=>showStep(Number(button.dataset.reviewStep),true));
@@ -1107,14 +1201,14 @@ const RDO = {
       </header>
       <div class="rdo-print-facts">
         <span><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></span>
-        <span><small>Data</small><b>${U.date(rdo.date)}</b></span>
+        <span><small>Data</small><b>${U.date(rdo.date)} · ${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</b></span>
         <span><small>Local</small><b>${U.esc(rdo.location||'Não informado')}</b></span>
         <span><small>Total apontado</small><b>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b></span>
       </div>
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
-        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:9%"><col style="width:22%"><col style="width:19%"><col style="width:9%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td></tr>`).join('')}</tbody></table></div>
+        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
+        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
@@ -1156,7 +1250,7 @@ const RDO = {
       wide:true,
       body:`<div class="rdo-detail-head">
         <div><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></div>
-        <div><small>Data</small><b>${U.date(rdo.date)}</b></div>
+        <div><small>Data</small><b>${U.date(rdo.date)}</b><small>${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</small></div>
         <div><small>Status</small>${this.statusTag(rdo.status)}</div>
         <div><small>Medição</small><b>${linked?'Incluído em medição':'Não medido'}</b></div>
       </div>
@@ -1167,6 +1261,7 @@ const RDO = {
         <span><small>Normal</small><b>${U.pct(row.regular||0).replace('%','h')}</b></span>
         <span><small>HE 50%</small><b>${U.pct(row.overtime50||0).replace('%','h')}</b></span>
         <span><small>HE 100%</small><b>${U.pct(row.overtime100||0).replace('%','h')}</b></span>
+        <span><small>Adic. noturno</small><b>${U.pct(row.nightHours||0).replace('%','h')}</b></span>
       </div>`).join('')}</div>
       ${showFinancial&&financial?`<div class="kpi-grid rdo-financial-summary">
         <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${U.money(financial.costTotal)}</div></div>

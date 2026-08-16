@@ -78,8 +78,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--blue) 28%, transparent);
-  outline-offset: 2px;
+  outline: none;
 }
 
 input,
@@ -106,9 +105,9 @@ textarea:hover {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--blue);
+  border-color: var(--border);
   background: var(--surface);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 11%, transparent);
+  box-shadow: none;
 }
 
 label {
@@ -1156,6 +1155,7 @@ tbody tr:last-child td {
 .company-settings-heading svg { width: 17px; height: 17px; }
 .company-settings-heading small { display: block; margin-top: 3px; color: var(--text3); line-height: 1.45; }
 .company-shift-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.company-shift-subtitle{grid-column:1/-1;display:flex;align-items:baseline;gap:8px;margin-top:5px;padding-top:9px;border-top:1px solid var(--border)}.company-shift-subtitle:first-child{margin-top:0;padding-top:0;border-top:0}.company-shift-subtitle b{font-size:.76rem}.company-shift-subtitle small{color:var(--text3);font-size:.68rem}
 .letterhead-control { display: grid; grid-template-columns: minmax(220px, 420px) 1fr; align-items: center; gap: 14px; }
 .letterhead-control > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 #cfg-letterhead-preview { display: grid; min-height: 112px; place-items: center; overflow: hidden; border: 1px dashed var(--border); border-radius: 12px; background: var(--surface2); color: var(--text3); }

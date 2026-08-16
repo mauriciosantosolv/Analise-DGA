@@ -176,10 +176,24 @@ Views.configuracoes = {
           <div class="full company-settings-section">
             <div class="company-settings-heading"><span><i data-lucide="clock-3"></i></span><div><h3>Jornada padrão dos RDOs</h3><small>Estes valores preenchem todos os colaboradores. O que exceder o limite diário será lançado como hora extra.</small></div></div>
             <div class="company-shift-grid">
+              <div class="company-shift-subtitle"><b>Segunda a sexta</b><small>Jornada normal e limite diário.</small></div>
               <div><label>Entrada padrão</label><input id="cfg-rdo-start" type="time" value="${U.esc(State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Saída padrão</label><input id="cfg-rdo-end" type="time" value="${U.esc(State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Intervalo (min)</label><input id="cfg-rdo-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Horas normais/dia</label><input id="cfg-rdo-daily-hours" type="number" min="0.25" max="24" step="0.01" value="${Number(State.settings.rdoDailyHours)||8.8}" ${canManageCompany?'':'disabled'}><small>Ex.: 8,8 horas</small></div>
+              <div class="company-shift-subtitle"><b>Sábado</b><small>Toda a jornada é classificada automaticamente como hora extra de 50%.</small></div>
+              <div><label>Entrada sábado</label><input id="cfg-rdo-saturday-start" type="time" value="${U.esc(State.settings.rdoSaturdayStart||State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Saída sábado</label><input id="cfg-rdo-saturday-end" type="time" value="${U.esc(State.settings.rdoSaturdayEnd||State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Intervalo sábado (min)</label><input id="cfg-rdo-saturday-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoSaturdayBreakMinutes))?Number(State.settings.rdoSaturdayBreakMinutes):(Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60)}" ${canManageCompany?'':'disabled'}></div>
+              <div></div>
+              <div class="company-shift-subtitle"><b>Domingo</b><small>Toda a jornada é classificada automaticamente como hora extra de 100%.</small></div>
+              <div><label>Entrada domingo</label><input id="cfg-rdo-sunday-start" type="time" value="${U.esc(State.settings.rdoSundayStart||State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Saída domingo</label><input id="cfg-rdo-sunday-end" type="time" value="${U.esc(State.settings.rdoSundayEnd||State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Intervalo domingo (min)</label><input id="cfg-rdo-sunday-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoSundayBreakMinutes))?Number(State.settings.rdoSundayBreakMinutes):(Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60)}" ${canManageCompany?'':'disabled'}></div>
+              <div></div>
+              <div class="company-shift-subtitle"><b>Adicional noturno</b><small>O período termina às 05:00. O percentual configurado incide sobre o custo-hora normal da mão de obra.</small></div>
+              <div><label>Início do adicional</label><input id="cfg-rdo-night-start" type="time" value="${U.esc(State.settings.rdoNightStart||'22:00')}" ${canManageCompany?'':'disabled'}></div>
+              <div><label>Percentual adicional</label><input id="cfg-rdo-night-premium" type="number" min="0" max="300" step="0.01" value="${Number.isFinite(Number(State.settings.rdoNightPremiumPct))?Number(State.settings.rdoNightPremiumPct):20}" ${canManageCompany?'':'disabled'}><small>Ex.: 20%</small></div>
             </div>
           </div>
           <div class="full company-settings-section">
@@ -334,7 +348,17 @@ Views.configuracoes = {
       const shiftEnd=document.getElementById('cfg-rdo-end').value;
       const shiftBreak=U.num(document.getElementById('cfg-rdo-break').value);
       const dailyHours=U.num(document.getElementById('cfg-rdo-daily-hours').value);
-      if(!shiftStart||!shiftEnd||shiftBreak<0||shiftBreak>360||dailyHours<=0||dailyHours>24)
+      const saturdayStart=document.getElementById('cfg-rdo-saturday-start').value;
+      const saturdayEnd=document.getElementById('cfg-rdo-saturday-end').value;
+      const saturdayBreak=U.num(document.getElementById('cfg-rdo-saturday-break').value);
+      const sundayStart=document.getElementById('cfg-rdo-sunday-start').value;
+      const sundayEnd=document.getElementById('cfg-rdo-sunday-end').value;
+      const sundayBreak=U.num(document.getElementById('cfg-rdo-sunday-break').value);
+      const nightStart=document.getElementById('cfg-rdo-night-start').value;
+      const nightPremium=U.num(document.getElementById('cfg-rdo-night-premium').value);
+      if(!shiftStart||!shiftEnd||!saturdayStart||!saturdayEnd||!sundayStart||!sundayEnd||!nightStart
+        ||[shiftBreak,saturdayBreak,sundayBreak].some(value=>value<0||value>360)
+        ||dailyHours<=0||dailyHours>24||nightPremium<0||nightPremium>300)
         return UI.toast('Revise a jornada padrão do RDO.','warn',5500);
       try{
         UI.loading(true,'Salvando configurações da empresa…');
@@ -346,6 +370,14 @@ Views.configuracoes = {
         await State.setSetting('rdoShiftEnd',shiftEnd);
         await State.setSetting('rdoShiftBreakMinutes',shiftBreak);
         await State.setSetting('rdoDailyHours',dailyHours);
+        await State.setSetting('rdoSaturdayStart',saturdayStart);
+        await State.setSetting('rdoSaturdayEnd',saturdayEnd);
+        await State.setSetting('rdoSaturdayBreakMinutes',saturdayBreak);
+        await State.setSetting('rdoSundayStart',sundayStart);
+        await State.setSetting('rdoSundayEnd',sundayEnd);
+        await State.setSetting('rdoSundayBreakMinutes',sundayBreak);
+        await State.setSetting('rdoNightStart',nightStart);
+        await State.setSetting('rdoNightPremiumPct',nightPremium);
         await State.setSetting('pdfLetterhead',letterhead);
         UI.loading(false);
         App.applyBranding(); App.applyStorageStatus();

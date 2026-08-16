@@ -239,7 +239,7 @@ Deno.serve(async(request:Request)=>{
         const {data:reconciled,error:reconcileError}=await admin.rpc("clique_obras_reconcile_omie_entries",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(reconcileError) throw new Error(reconcileError.message||"Falha ao reconciliar lançamentos do Omie.");
         cancelled+=Number(reconciled?.cancelled)||0;
-        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
+        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries_v3084",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(error) throw new Error(error.message||"Falha ao aplicar lançamentos do Omie.");
         imported+=Number(data?.imported)||0;updated+=Number(data?.updated)||0;cancelled+=Number(data?.cancelled)||0;unchanged+=Number(data?.unchanged)||0;
       }

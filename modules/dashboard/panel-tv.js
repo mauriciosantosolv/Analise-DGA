@@ -16,6 +16,8 @@ const DashboardPanel = {
   omieCheckedAt:0,
   omieLoading:false,
   currentData:null,
+  currentField:null,
+  fieldDate:'',
   slideNames:['Orçado e realizado','Monitoramento de medições','Equipes em campo'],
 
   init(){
@@ -134,6 +136,15 @@ const DashboardPanel = {
     });
   },
 
+  bindFieldDate(){
+    const input=document.getElementById('tv-field-date');
+    if(!input) return;
+    input.onchange=()=>{
+      this.fieldDate=input.value||'';
+      App.render({resetScroll:false});
+    };
+  },
+
   topSuppliers(purchases){
     const totals=new Map();
     (Array.isArray(purchases)?purchases:[]).filter(item=>item&&item.active!==false).forEach(item=>{
@@ -163,9 +174,22 @@ const DashboardPanel = {
     return 0;
   },
 
+  entryInclusionTimestamp(entry){
+    const date=String(entry&&entry.omieInclusionDate||entry&&entry.date||'').trim();
+    const time=String(entry&&entry.omieInclusionTime||'').trim();
+    const dateMatch=date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch=time.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if(dateMatch){
+      const base=Date.UTC(Number(dateMatch[1]),Number(dateMatch[2])-1,Number(dateMatch[3]));
+      if(timeMatch) return base+Number(timeMatch[1])*3600000+Number(timeMatch[2])*60000+Number(timeMatch[3]||0)*1000;
+      return base;
+    }
+    return this.entryDateTimestamp(entry);
+  },
+
   latestEntries(purchases){
     return (Array.isArray(purchases)?purchases:[]).filter(item=>item&&item.active!==false)
-      .slice().sort((a,b)=>this.entryDateTimestamp(b)-this.entryDateTimestamp(a)
+      .slice().sort((a,b)=>this.entryInclusionTimestamp(b)-this.entryInclusionTimestamp(a)
         ||this.entryTimestamp(b)-this.entryTimestamp(a));
   },
 
@@ -179,8 +203,8 @@ const DashboardPanel = {
     return `<tr><td>${U.date(entry.date)||'—'}</td><td><b>${U.esc(projectName)}</b><small>${U.esc(this.sourceLabel(entry))}</small></td><td><b>${U.esc(entry.supplier||'Sem fornecedor')}</b><small>${U.esc(entry.category||entry.desc||'Sem categoria')}</small></td><td class="num"><b>${U.money2(entry.value)}</b></td></tr>`;
   },
 
-  fieldSnapshot(){
-    const today=typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10);
+  fieldSnapshot(selectedDate=''){
+    const today=selectedDate||this.fieldDate||(typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10));
     const crew=(Array.isArray(State.crew)?State.crew:[])
       .filter(item=>item&&item.recordType!=='role'&&item.active!==false)
       .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
@@ -193,7 +217,9 @@ const DashboardPanel = {
         const employeeId=String(entry&&entry.employeeId||'');
         if(employeeId&&crewById.has(employeeId)) assignments.set(employeeId,{rdo,entry});
       }));
-    const standardHours=typeof RDO!=='undefined'&&typeof RDO.standardDailyHours==='function'?RDO.standardDailyHours():8.8;
+    const standardHours=typeof RDO!=='undefined'&&typeof RDO.plannedHoursForDate==='function'
+      ?RDO.plannedHoursForDate(today)
+      :typeof RDO!=='undefined'&&typeof RDO.standardDailyHours==='function'?RDO.standardDailyHours():8.8;
     const allocated=[];
     assignments.forEach(({rdo,entry},employeeId)=>{
       const employee=crewById.get(employeeId);
@@ -272,6 +298,7 @@ const DashboardPanel = {
       return bPct-aPct||(Number(b.s.measured)||0)-(Number(a.s.measured)||0);
     });
     const field=this.fieldSnapshot();
+    this.currentField=field;
 
     return `<section id="tv-dashboard" class="tv-dashboard" aria-label="Painel de monitoramento das obras">
       <header class="tv-header">
@@ -328,18 +355,19 @@ const DashboardPanel = {
 
         <section class="tv-slide ${this.slide===2?'active':''}" data-tv-slide="2" aria-label="Monitoramento das equipes em campo">
           <div class="tv-field-layout">
+            <div class="tv-field-date-bar"><span><i data-lucide="calendar-days"></i><b>Análise da equipe em campo</b><small>Selecione outro dia para comparar alocações e custos consumidos.</small></span><label><span>Data analisada</span><input id="tv-field-date" type="date" value="${U.esc(field.today)}"></label></div>
             <div class="tv-field-kpis">
-              ${this.renderMetric('Equipe alocada',String(field.allocated.length),'users','positive',`${field.projects.length} obra(s) com RDO hoje`)}
-              ${this.renderMetric('Colaboradores ociosos',String(field.idle.length),'user-x',field.idle.length?'warning':'positive',`Sem apontamento em RDO hoje`)}
+              ${this.renderMetric('Equipe alocada',String(field.allocated.length),'users','positive',`${field.projects.length} obra(s) com RDO no dia`)}
+              ${this.renderMetric('Colaboradores ociosos',String(field.idle.length),'user-x',field.idle.length?'warning':'positive',`Sem apontamento no dia selecionado`)}
               ${this.renderMetric('Custo parcial em campo',U.money(field.partialCost),'badge-dollar-sign','accent','Horas do RDO × custo-hora')}
               ${this.renderMetric('Custo da ociosidade',U.money(field.idleCost),'circle-dollar-sign',field.idleCost>0?'danger':'positive',`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h × custo-hora`)}
             </div>
             <div class="tv-field-grid">
               <article class="tv-panel-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocação e custo parcial por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
-                ${this.fieldBars(field.projects,{secondaryKey:'cost',label:item=>`${item.count} pessoa(s) · ${U.money(item.cost)}`})}
+                ${field.projects.length?'<div class="tv-field-chart"><canvas id="tv-field-allocation-chart" aria-label="Quantidade de alocações e custo parcial por obra"></canvas></div>':this.empty('Nenhuma alocação no dia selecionado.')}
               </article>
               <article class="tv-panel-card"><div class="tv-section-head"><div><small>COMPOSIÇÃO DA EQUIPE</small><h2>Principais funções alocadas</h2></div><span class="tv-count">${field.roles.length} função(ões)</span></div>
-                ${this.fieldBars(field.roles,{label:item=>`${item.count} pessoa(s)`})}
+                ${field.roles.length?'<div class="tv-role-chart"><canvas id="tv-field-roles-chart" aria-label="Principais funções alocadas"></canvas></div>':this.empty('Nenhuma função alocada no dia selecionado.')}
               </article>
               <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
                 <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
@@ -398,6 +426,7 @@ const DashboardPanel = {
   renderSupplierChart(){
     const canvas=document.getElementById('tv-suppliers-chart');
     if(!canvas) return;
+    if(typeof Dash!=='undefined'&&Dash.charts.tvSuppliers){Dash.charts.tvSuppliers.destroy();delete Dash.charts.tvSuppliers;}
     const suppliers=this.topSuppliers(this.currentData&&this.currentData.purchases);
     if(typeof Chart==='undefined'){
       canvas.hidden=true;
@@ -425,11 +454,36 @@ const DashboardPanel = {
     if(typeof Dash!=='undefined') Dash.charts.tvSuppliers=chart;
   },
 
+  renderFieldCharts(){
+    const field=this.currentField;
+    if(!field||typeof Chart==='undefined') return;
+    if(typeof Dash!=='undefined'){
+      ['tvFieldAllocation','tvFieldRoles'].forEach(key=>{if(Dash.charts[key]){Dash.charts[key].destroy();delete Dash.charts[key];}});
+    }
+    const allocationCanvas=document.getElementById('tv-field-allocation-chart');
+    if(allocationCanvas){
+      const allocation=new Chart(allocationCanvas.getContext('2d'),{
+        data:{labels:field.projects.map(item=>item.name),datasets:[
+          {type:'bar',label:'Alocações',data:field.projects.map(item=>item.count),yAxisID:'y',backgroundColor:'rgba(59,130,246,.78)',borderRadius:7,borderSkipped:false,maxBarThickness:42},
+          {type:'line',label:'Custo parcial',data:field.projects.map(item=>item.cost),yAxisID:'yCost',borderColor:'#22c55e',backgroundColor:'#22c55e',pointBackgroundColor:'#11151c',pointBorderColor:'#22c55e',pointBorderWidth:3,pointRadius:4,tension:.3}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,animation:{duration:420},plugins:{legend:{labels:{color:'#cbd3df',boxWidth:12,font:{size:10}}},tooltip:{callbacks:{label:context=>context.dataset.yAxisID==='yCost'?` ${context.dataset.label}: ${U.money2(context.raw)}`:` ${context.dataset.label}: ${context.raw}`}}},scales:{x:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:9,weight:'600'},maxRotation:0,callback:function(value){const label=this.getLabelForValue(value);return label.length>15?`${label.slice(0,14)}…`:label;}}},y:{beginAtZero:true,grace:'10%',grid:{color:'rgba(141,152,168,.12)'},ticks:{color:'#8d98a8',precision:0,font:{size:9}}},yCost:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false},ticks:{color:'#79e59a',font:{size:9},callback:value=>U.money2(value)}}}}
+      });
+      if(typeof Dash!=='undefined') Dash.charts.tvFieldAllocation=allocation;
+    }
+    const rolesCanvas=document.getElementById('tv-field-roles-chart');
+    if(rolesCanvas){
+      const palette=['#3b82f6','#22c55e','#f59e0b','#a78bfa','#22a7d6','#f472b6','#94a3b8'];
+      const roles=new Chart(rolesCanvas.getContext('2d'),{type:'doughnut',data:{labels:field.roles.map(item=>item.name),datasets:[{data:field.roles.map(item=>item.count),backgroundColor:field.roles.map((_,index)=>palette[index%palette.length]),borderColor:'#11151c',borderWidth:3,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',animation:{duration:420},plugins:{legend:{position:'right',labels:{color:'#cbd3df',boxWidth:10,boxHeight:10,padding:11,font:{size:10},generateLabels(chart){return Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item,index)=>({...item,text:`${item.text} · ${field.roles[index].count}`}));}}},tooltip:{callbacks:{label:context=>` ${context.label}: ${context.raw} pessoa(s)`}}}}});
+      if(typeof Dash!=='undefined') Dash.charts.tvFieldRoles=roles;
+    }
+  },
+
   mount(){
     if(!this.active) return;
     this.clearTimers();
     this.bindFilters();
-    this.renderSupplierChart();
+    this.bindFieldDate();
     this.applySlide(false);
     this.updateClock();
     this.updateDataTime();
@@ -474,6 +528,8 @@ const DashboardPanel = {
     document.querySelectorAll('[data-tv-dot]').forEach(element=>element.classList.toggle('active',Number(element.dataset.tvDot)===this.slide));
     const title=document.getElementById('tv-slide-title');
     if(title) title.textContent=this.slideNames[this.slide];
+    if(this.slide===0) setTimeout(()=>{if(this.active&&this.slide===0)this.renderSupplierChart();},0);
+    if(this.slide===2) setTimeout(()=>{if(this.active&&this.slide===2)this.renderFieldCharts();},0);
     if(announce){
       const dashboard=document.getElementById('tv-dashboard');
       if(dashboard){dashboard.classList.remove('tv-slide-change');void dashboard.offsetWidth;dashboard.classList.add('tv-slide-change');}

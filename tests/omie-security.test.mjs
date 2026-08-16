@@ -9,6 +9,7 @@ const index=read('index.html');
 const edge=read('supabase/functions/omie-integration/index.ts');
 const migration=read('supabase/ATUALIZACAO-v3.0.7-OMIE-HISTORICO-FILTROS.sql');
 const migration308=read('supabase/ATUALIZACAO-v3.0.8-OMIE-RDO.sql');
+const migration3084=read('supabase/ATUALIZACAO-v3.0.8.4-OMIE-JORNADA.sql');
 
 assert(!frontend.includes('localStorage.setItem'), 'Credenciais Omie não podem ir para localStorage');
 assert(!frontend.includes('DB.put('), 'Credenciais/mapeamentos Omie não podem passar pelo banco genérico do navegador');
@@ -27,6 +28,7 @@ assert(edge.includes('isOmieConcurrentMethodError'), 'A falha temporária de con
 assert(edge.includes('supplier_backfill_completed_at'), 'Fornecedores históricos devem receber um backfill único');
 assert(edge.includes('[...refreshCodes].slice(0,24)'), 'O backfill deve limitar fornecedores por execução');
 assert(edge.includes('filtrar_por_projeto:Number(projectCode)'), 'A carga histórica deve limitar as contas a pagar pelo projeto no Omie');
+assert(edge.includes('clique_obras_apply_omie_entries_v3084'), 'A aplicação deve preservar os campos temporais independentes da conta');
 assert(edge.includes('for(const projectCode of selected)'), 'As consultas históricas por projeto devem ser seriais');
 assert(edge.includes('if(needsSupplierBackfill||mode==="manual")'), 'Somente cargas históricas/manuais devem consultar por projeto');
 assert(edge.includes('rows.filter(row=>selectedSet.has'), 'A sincronização incremental deve filtrar localmente os projetos selecionados');
@@ -41,5 +43,10 @@ assert(migration.includes("'planning_history'"));
 assert(migration.includes('create or replace function public.clique_obras_reconcile_omie_entries'));
 assert(migration308.match(/revoke all on function public\.clique_obras_acquire_omie_sync_lease[\s\S]*from public,anon,authenticated/i));
 assert(migration308.match(/alter table public\.omie_supplier_cache force row level security/i));
+assert(migration3084.includes("'omieInclusionTime'"));
+assert(migration3084.includes("'dueDate'"));
+assert(migration3084.includes("'forecastDate'"));
+assert(migration3084.match(/revoke all on function public\.clique_obras_apply_omie_entries_v3084[\s\S]*from public,anon,authenticated/i));
+assert(migration3084.match(/grant execute on function public\.clique_obras_apply_omie_entries_v3084[\s\S]*to service_role/i));
 
 console.log('Omie security boundary tests passed');

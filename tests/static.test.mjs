@@ -61,6 +61,9 @@ assert.match(rdo, /\['2','Equipe e horas','user'\]/);
 assert.match(rdo, /Buscar por matrícula, nome ou cargo/);
 assert.match(rdo, /rolesForm\(\)/);
 assert.match(rdo, /rdoDailyHours/);
+assert.match(rdo, /id="rdo-holiday"/);
+assert.match(rdo, /dayTypeLabel/);
+assert.match(rdo, /rdoNightPremiumPct/);
 assert.match(rdo, /employeeRegistration/);
 assert.match(rdo, /roleDisplayMode/);
 assert.match(rdo, /displayRoleFor/);
@@ -107,6 +110,10 @@ assert.match(exports, /stationeryMarkup/);
 
 const configuration = fs.readFileSync(path.join(root, "modules/configuracoes/configuracoes.js"), "utf8");
 assert.match(configuration, /cfg-rdo-daily-hours/);
+assert.match(configuration, /cfg-rdo-saturday-start/);
+assert.match(configuration, /cfg-rdo-sunday-start/);
+assert.match(configuration, /cfg-rdo-night-start/);
+assert.match(configuration, /cfg-rdo-night-premium/);
 assert.match(configuration, /cfg-letterhead-btn/);
 assert.match(configuration, /pdfLetterhead/);
 assert.match(configuration, /companyCnpj/);
@@ -120,6 +127,12 @@ assert.match(premium, /--bg: #f4f4f5/);
 assert.match(premium, /--text: #27272a/);
 assert.match(premium, /#company-settings-card[\s\S]*grid-column: 1 \/ -1/);
 assert.match(premium, /#ticker-projects[\s\S]*grid-template-columns: repeat\(3/);
+assert.match(premium, /\[tabindex\]:focus-visible[\s\S]*outline: none/);
+
+const reports = fs.readFileSync(path.join(root, "modules/relatorios/relatorios.js"), "utf8");
+assert.match(reports, /Histórico de Alocações/);
+assert.match(reports, /allocationHistoryRows/);
+assert.match(reports, /Entrada:row\.start/);
 
 const lucide = fs.readFileSync(path.join(root, "assets/vendor/lucide.min.js"), "utf8");
 assert.match(lucide, /createIcons/);

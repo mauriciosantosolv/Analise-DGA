@@ -41,7 +41,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 ::-webkit-scrollbar-track{background:transparent}
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:.93rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 11px;outline:none;transition:border .15s,box-shadow .15s;width:100%}
-input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 14%,transparent)}
+input:focus,select:focus,textarea:focus{border-color:var(--border);box-shadow:none}
 label{font-size:.8rem;font-weight:600;color:var(--text2);display:block;margin-bottom:5px}
 h1{font-size:1.35rem;font-weight:700}
 h2{font-size:1.05rem;font-weight:700}

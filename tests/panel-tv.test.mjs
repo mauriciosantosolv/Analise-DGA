@@ -12,9 +12,11 @@ const css=read('css/panel-tv.css');
 
 assert.match(html,/id="tv-mode-toggle"/);
 assert.doesNotMatch(html,/id="tv-mode-toggle"[^>]*\shidden/);
-assert.match(html,/css\/panel-tv\.css\?v=3\.0\.8\.3/);
-assert.match(html,/modules\/rdo\/rdo\.js\?v=3\.0\.8\.3/);
-assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=3\.0\.8\.3/);
+assert.match(html,/meta name="application-version" content="3\.0\.8\.4"/);
+assert.match(html,/css\/panel-tv\.css\?v=3\.0\.8\.4/);
+assert.match(html,/modules\/rdo\/rdo\.js\?v=3\.0\.8\.4/);
+assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=3\.0\.8\.4/);
+assert.doesNotMatch(html,/3\.0\.8\.3\.1/);
 assert.match(app,/DashboardPanel\.enter\(\)/);
 assert.match(dashboard,/DashboardPanel\.render/);
 assert.match(dashboard,/projects,purchases,active,stats/);
@@ -29,6 +31,10 @@ assert.match(panel,/Últimos lançamentos/);
 assert.match(panel,/Monitoramento de Medições/);
 assert.match(panel,/Custo parcial em campo/);
 assert.match(panel,/Custo da ociosidade/);
+assert.match(panel,/id="tv-field-date"/);
+assert.match(panel,/id="tv-field-allocation-chart"/);
+assert.match(panel,/id="tv-field-roles-chart"/);
+assert.match(panel,/type:'doughnut'/);
 assert.match(panel,/renderSupplierChart/);
 assert.doesNotMatch(panel,/Alertas do monitoramento/);
 assert.doesNotMatch(panel,/State\.setSetting|DB\.(?:put|add|remove|clear)|Biz\.[A-Za-z]+\s*=/);
@@ -70,16 +76,18 @@ const stats={budgetTotal:1000,spent:400,projected:100,balance:500,marginCurrent:
 const rendered=context.TestPanel.render({
   projects:[project],purchases:[
     {id:'x1',projectId:'p1',supplier:'Fornecedor antigo',category:'Material',value:125,date:'2026-08-14',importedAt:999,sourceType:'omiePayable'},
-    {id:'x2',projectId:'p1',supplier:'Fornecedor novo',category:'Material',value:150,date:'2026-08-15',importedAt:1,sourceType:'omiePayable'}
+    {id:'x2',projectId:'p1',supplier:'Fornecedor novo cedo',category:'Material',value:150,date:'2026-08-15',omieInclusionDate:'2026-08-15',omieInclusionTime:'08:30:00',importedAt:999,sourceType:'omiePayable'},
+    {id:'x3',projectId:'p1',supplier:'Fornecedor novo tarde',category:'Material',value:175,date:'2026-08-15',omieInclusionDate:'2026-08-15',omieInclusionTime:'16:45:00',importedAt:1,sourceType:'omiePayable'}
   ],active:[project],stats:[{p:project,s:{...stats,measured:700,measuredPct:35}}],revenue:2000,measured:700,invoiced:200,
   approved:300,awaitingApproval:200,budgetTotal:1000,spent:400,projected:100,balance:500,
   marginCurrent:20,profit:1500,critical:[],next7:100,fut:{today:[],d7:[],d15:[],d30:[]}
 });
 assert.match(rendered,/DGA Energia/);
 assert.match(rendered,/798 \| Obra teste/);
-assert.match(rendered,/Fornecedor novo/);
+assert.match(rendered,/Fornecedor novo tarde/);
 assert.match(rendered,/Omie · conta a pagar/);
-assert.ok(rendered.indexOf('Fornecedor novo')<rendered.indexOf('Fornecedor antigo'),'lançamentos devem ser ordenados pela data efetiva, não pela hora de importação');
+assert.ok(rendered.indexOf('Fornecedor novo tarde')<rendered.indexOf('Fornecedor novo cedo'),'lançamentos do mesmo dia devem usar info.hInc');
+assert.ok(rendered.indexOf('Fornecedor novo cedo')<rendered.indexOf('Fornecedor antigo'),'lançamentos devem ser ordenados pela data efetiva, não pela hora de importação');
 const field=context.TestPanel.fieldSnapshot();
 assert.equal(field.allocated.length,1);
 assert.equal(field.idle.length,1);
