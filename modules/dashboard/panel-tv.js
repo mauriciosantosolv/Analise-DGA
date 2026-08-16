@@ -209,20 +209,34 @@ const DashboardPanel = {
       .filter(item=>item&&item.recordType!=='role'&&item.active!==false)
       .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     const crewById=new Map(crew.map(employee=>[String(employee.id),employee]));
-    const assignments=new Map();
+    const occupancy=new Map();
     (Array.isArray(State.rdos)?State.rdos:[])
       .filter(rdo=>rdo&&String(rdo.date||'').slice(0,10)===today&&Array.isArray(rdo.entries))
       .slice().sort((a,b)=>this.entryTimestamp(a)-this.entryTimestamp(b))
       .forEach(rdo=>rdo.entries.forEach(entry=>{
         const employeeId=String(entry&&entry.employeeId||'');
-        if(employeeId&&crewById.has(employeeId)) assignments.set(employeeId,{rdo,entry});
+        if(employeeId&&crewById.has(employeeId)) occupancy.set(employeeId,{rdo,entry});
       }));
     const standardHours=typeof RDO!=='undefined'&&typeof RDO.plannedHoursForDate==='function'
       ?RDO.plannedHoursForDate(today)
       :typeof RDO!=='undefined'&&typeof RDO.standardDailyHours==='function'?RDO.standardDailyHours():8.8;
     const allocated=[];
-    assignments.forEach(({rdo,entry},employeeId)=>{
+    const absent=[];
+    occupancy.forEach(({rdo,entry},employeeId)=>{
       const employee=crewById.get(employeeId);
+      const isAbsent=typeof RDO!=='undefined'&&typeof RDO.isAbsent==='function'
+        ?RDO.isAbsent(entry)
+        :String(entry&&entry.attendanceStatus||'').toLowerCase()==='absent';
+      const project=State.projects.find(item=>String(item.id)===String(rdo.projectId));
+      if(isAbsent){
+        absent.push({
+          employeeId,employeeName:employee.name||entry.employeeName||'Colaborador',
+          role:employee.internalRole||entry.internalRole||'Sem função',
+          projectId:String(rdo.projectId),projectName:project?U.projLabel(project):'Projeto não localizado',
+          rdoStatus:rdo.status||'Rascunho'
+        });
+        return;
+      }
       let rate=typeof RDO!=='undefined'&&typeof RDO.rdoRateFor==='function'
         ?RDO.rdoRateFor(rdo.projectId,employeeId):null;
       if(!rate&&typeof RDO!=='undefined'&&typeof RDO.baseCostFor==='function') rate=RDO.baseCostFor(employeeId);
@@ -233,7 +247,6 @@ const DashboardPanel = {
       const cost=rate&&typeof RDO!=='undefined'&&typeof RDO.entryTotals==='function'
         ?RDO.entryTotals(entry,rate).cost
         :regular*(Number(rate&&rate.costRegular)||0)+overtime50*(Number(rate&&rate.cost50)||0)+overtime100*(Number(rate&&rate.cost100)||0);
-      const project=State.projects.find(item=>String(item.id)===String(rdo.projectId));
       allocated.push({
         employeeId,employeeName:employee.name||entry.employeeName||'Colaborador',
         role:employee.internalRole||entry.internalRole||'Sem função',
@@ -243,37 +256,26 @@ const DashboardPanel = {
       });
     });
     allocated.sort((a,b)=>a.projectName.localeCompare(b.projectName,'pt-BR')||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
-    const idle=crew.filter(employee=>!assignments.has(String(employee.id))).map(employee=>{
+    absent.sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'pt-BR'));
+    const idle=crew.filter(employee=>!occupancy.has(String(employee.id))).map(employee=>{
       const base=typeof RDO!=='undefined'&&typeof RDO.baseCostFor==='function'?RDO.baseCostFor(employee.id):{costRegular:0};
       const hourlyCost=Number(base&&base.costRegular)||0;
       return {employeeId:String(employee.id),employeeName:employee.name||'Colaborador',role:employee.internalRole||'Sem função',hourlyCost,cost:standardHours*hourlyCost,missingCost:!(hourlyCost>0)};
     });
     const projectMap=new Map();
     allocated.forEach(row=>{
-      const current=projectMap.get(row.projectId)||{name:row.projectName,count:0,cost:0};
+      const project=State.projects.find(item=>String(item.id)===String(row.projectId));
+      const projectNumber=String(project&&project.proposal||'Sem número');
+      const current=projectMap.get(row.projectId)||{name:projectNumber,count:0,cost:0};
       current.count+=1; current.cost+=row.cost; projectMap.set(row.projectId,current);
     });
-    const roleMap=new Map();
-    allocated.forEach(row=>roleMap.set(row.role,(roleMap.get(row.role)||0)+1));
     return {
-      today,standardHours,allocated,idle,
+      today,standardHours,allocated,absent,idle,
       partialCost:allocated.reduce((sum,row)=>sum+row.cost,0),
       idleCost:idle.reduce((sum,row)=>sum+row.cost,0),
       missingCosts:[...allocated,...idle].filter(row=>row.missingCost).length,
-      projects:[...projectMap.values()].sort((a,b)=>b.count-a.count||b.cost-a.cost),
-      roles:[...roleMap].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'pt-BR'))
+      projects:[...projectMap.values()].sort((a,b)=>b.count-a.count||b.cost-a.cost)
     };
-  },
-
-  fieldBars(items,{valueKey='count',secondaryKey='',label}={}){
-    const max=Math.max(1,...items.map(item=>Number(item[valueKey])||0));
-    const secondaryMax=secondaryKey?Math.max(1,...items.map(item=>Number(item[secondaryKey])||0)):1;
-    const legend=secondaryKey?'<div class="tv-field-legend"><span><i></i>Pessoas</span><span><i></i>Custo parcial</span></div>':'';
-    return `${legend}<div class="tv-field-bars">${items.map(item=>{
-      const primary=Number(item[valueKey])||0;
-      const secondary=Number(item[secondaryKey])||0;
-      return `<div class="tv-field-bar-row"><div><b>${U.esc(item.name)}</b><span>${U.esc(label?label(item):String(primary))}</span></div><div class="tv-field-bar-stack"><div class="tv-field-bar"><span style="width:${primary>0?Math.max(3,primary/max*100):0}%"></span></div>${secondaryKey?`<div class="tv-field-bar cost"><span style="width:${secondary>0?Math.max(3,secondary/secondaryMax*100):0}%"></span></div>`:''}</div></div>`;
-    }).join('')||this.empty('Nenhum apontamento de equipe para hoje.')}</div>`;
   },
 
   measurementRow(project,stats){
@@ -363,14 +365,14 @@ const DashboardPanel = {
               ${this.renderMetric('Custo da ociosidade',U.money(field.idleCost),'circle-dollar-sign',field.idleCost>0?'danger':'positive',`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h × custo-hora`)}
             </div>
             <div class="tv-field-grid">
-              <article class="tv-panel-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocação e custo parcial por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
-                ${field.projects.length?'<div class="tv-field-chart"><canvas id="tv-field-allocation-chart" aria-label="Quantidade de alocações e custo parcial por obra"></canvas></div>':this.empty('Nenhuma alocação no dia selecionado.')}
-              </article>
-              <article class="tv-panel-card"><div class="tv-section-head"><div><small>COMPOSIÇÃO DA EQUIPE</small><h2>Principais funções alocadas</h2></div><span class="tv-count">${field.roles.length} função(ões)</span></div>
-                ${field.roles.length?'<div class="tv-role-chart"><canvas id="tv-field-roles-chart" aria-label="Principais funções alocadas"></canvas></div>':this.empty('Nenhuma função alocada no dia selecionado.')}
+              <article class="tv-panel-card tv-field-allocation-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocações por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
+                ${field.projects.length?`<div class="tv-field-allocation-content"><div class="tv-field-chart"><canvas id="tv-field-allocation-chart" aria-label="Quantidade de alocações por número da obra"></canvas></div><div class="tv-field-cost-table-wrap"><table class="tv-field-cost-table"><thead><tr><th>Obra</th><th>Alocados</th><th>Custo parcial</th></tr></thead><tbody>${field.projects.map(item=>`<tr><td><b>${U.esc(item.name)}</b></td><td>${item.count}</td><td>${U.money(item.cost)}</td></tr>`).join('')}</tbody></table></div></div>`:this.empty('Nenhuma alocação no dia selecionado.')}
               </article>
               <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
                 <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
+              </article>
+              <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><small>AUSÊNCIAS</small><h2>Faltas registradas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s)</span></div>
+                <div class="tv-field-roster">${field.absent.map(row=>`<div><span><i class="tv-field-dot absent"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>Falta</b><small>${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhuma falta registrada no dia.')}</div>
               </article>
               <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
                 <div class="tv-field-roster">${field.idle.map(row=>`<div><span><i class="tv-field-dot idle"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>${U.money(row.cost)}</b><small>${row.missingCost?'Custo-hora não cadastrado':`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h de ociosidade`}</small></span></div>`).join('')||this.empty('Nenhum colaborador ocioso hoje.')}</div>
@@ -458,24 +460,18 @@ const DashboardPanel = {
     const field=this.currentField;
     if(!field||typeof Chart==='undefined') return;
     if(typeof Dash!=='undefined'){
-      ['tvFieldAllocation','tvFieldRoles'].forEach(key=>{if(Dash.charts[key]){Dash.charts[key].destroy();delete Dash.charts[key];}});
+      if(Dash.charts.tvFieldAllocation){Dash.charts.tvFieldAllocation.destroy();delete Dash.charts.tvFieldAllocation;}
     }
     const allocationCanvas=document.getElementById('tv-field-allocation-chart');
     if(allocationCanvas){
       const allocation=new Chart(allocationCanvas.getContext('2d'),{
+        type:'bar',
         data:{labels:field.projects.map(item=>item.name),datasets:[
-          {type:'bar',label:'Alocações',data:field.projects.map(item=>item.count),yAxisID:'y',backgroundColor:'rgba(59,130,246,.78)',borderRadius:7,borderSkipped:false,maxBarThickness:42},
-          {type:'line',label:'Custo parcial',data:field.projects.map(item=>item.cost),yAxisID:'yCost',borderColor:'#22c55e',backgroundColor:'#22c55e',pointBackgroundColor:'#11151c',pointBorderColor:'#22c55e',pointBorderWidth:3,pointRadius:4,tension:.3}
+          {label:'Alocações',data:field.projects.map(item=>item.count),backgroundColor:'rgba(59,130,246,.82)',borderRadius:7,borderSkipped:false,maxBarThickness:48}
         ]},
-        options:{responsive:true,maintainAspectRatio:false,animation:{duration:420},plugins:{legend:{labels:{color:'#cbd3df',boxWidth:12,font:{size:10}}},tooltip:{callbacks:{label:context=>context.dataset.yAxisID==='yCost'?` ${context.dataset.label}: ${U.money2(context.raw)}`:` ${context.dataset.label}: ${context.raw}`}}},scales:{x:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:9,weight:'600'},maxRotation:0,callback:function(value){const label=this.getLabelForValue(value);return label.length>15?`${label.slice(0,14)}…`:label;}}},y:{beginAtZero:true,grace:'10%',grid:{color:'rgba(141,152,168,.12)'},ticks:{color:'#8d98a8',precision:0,font:{size:9}}},yCost:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false},ticks:{color:'#79e59a',font:{size:9},callback:value=>U.money2(value)}}}}
+        options:{responsive:true,maintainAspectRatio:false,animation:{duration:420},plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${context.raw} pessoa(s)`}}},scales:{x:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:10,weight:'700'},maxRotation:0}},y:{beginAtZero:true,grace:'10%',grid:{color:'rgba(141,152,168,.12)'},ticks:{color:'#8d98a8',precision:0,font:{size:9}}}}}
       });
       if(typeof Dash!=='undefined') Dash.charts.tvFieldAllocation=allocation;
-    }
-    const rolesCanvas=document.getElementById('tv-field-roles-chart');
-    if(rolesCanvas){
-      const palette=['#3b82f6','#22c55e','#f59e0b','#a78bfa','#22a7d6','#f472b6','#94a3b8'];
-      const roles=new Chart(rolesCanvas.getContext('2d'),{type:'doughnut',data:{labels:field.roles.map(item=>item.name),datasets:[{data:field.roles.map(item=>item.count),backgroundColor:field.roles.map((_,index)=>palette[index%palette.length]),borderColor:'#11151c',borderWidth:3,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',animation:{duration:420},plugins:{legend:{position:'right',labels:{color:'#cbd3df',boxWidth:10,boxHeight:10,padding:11,font:{size:10},generateLabels(chart){return Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item,index)=>({...item,text:`${item.text} · ${field.roles[index].count}`}));}}},tooltip:{callbacks:{label:context=>` ${context.label}: ${context.raw} pessoa(s)`}}}}});
-      if(typeof Dash!=='undefined') Dash.charts.tvFieldRoles=roles;
     }
   },
 

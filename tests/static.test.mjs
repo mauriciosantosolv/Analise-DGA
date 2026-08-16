@@ -45,6 +45,8 @@ const cloud = fs.readFileSync(path.join(root, "database/cloud.js"), "utf8");
 for (const store of ["rdos", "crew", "labor_rates", "rdo_financial"]) {
   assert.match(cloud, new RegExp(`'${store}'`));
 }
+assert.match(cloud, /occupiedRdoEmployees/);
+assert.match(cloud, /clique_obras_rdo_occupied_employees/);
 
 const auth = fs.readFileSync(path.join(root, "js/auth-ui.js"), "utf8");
 assert.match(auth, /assets\/logo-clique\.png/);
@@ -57,6 +59,9 @@ assert.match(rdo, /customer\.logo/);
 assert.match(rdo, /currentStep===4/);
 assert.match(rdo, /id="rdo-team-search"/);
 assert.match(rdo, /const selected=!!saved/);
+assert.match(rdo, /Registrar falta/);
+assert.match(rdo, /occupiedEmployees/);
+assert.match(rdo, /allocationConflicts/);
 assert.match(rdo, /\['2','Equipe e horas','user'\]/);
 assert.match(rdo, /Buscar por matrícula, nome ou cargo/);
 assert.match(rdo, /rolesForm\(\)/);
@@ -132,7 +137,8 @@ assert.match(premium, /\[tabindex\]:focus-visible[\s\S]*outline: none/);
 const reports = fs.readFileSync(path.join(root, "modules/relatorios/relatorios.js"), "utf8");
 assert.match(reports, /Histórico de Alocações/);
 assert.match(reports, /allocationHistoryRows/);
-assert.match(reports, /Entrada:row\.start/);
+assert.match(reports, /'Situação':row\.situation/);
+assert.match(reports, /row\.situation==='Falta'/);
 
 const lucide = fs.readFileSync(path.join(root, "assets/vendor/lucide.min.js"), "utf8");
 assert.match(lucide, /createIcons/);

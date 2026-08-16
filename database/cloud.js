@@ -669,6 +669,21 @@ const Cloud = (() => {
     return out;
   }
 
+  async function occupiedRdoEmployees(date,excludeRdoId=''){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return [];
+    const rows=await request('/rest/v1/rpc/clique_obras_rdo_occupied_employees',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        p_organization_id:organization().id,
+        p_date:String(date||'').slice(0,10),
+        p_exclude_rdo_id:String(excludeRdoId||'')||null
+      })
+    }) || [];
+    return [...new Set(rows.map(row=>String(row&&row.employee_id||'')).filter(Boolean))];
+  }
+
   async function measurementLinks(projectId=''){
     await ensureFresh();
     if(!organization() || !canViewStore('measurements')) return [];
@@ -1100,6 +1115,7 @@ const Cloud = (() => {
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
+    occupiedRdoEmployees,
     omieRequest,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,
     profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,

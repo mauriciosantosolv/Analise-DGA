@@ -141,7 +141,17 @@ assert.deepEqual(
   [{action:'edited',actorName:'Maurício',at:'2026-08-14T22:10:00Z'}]
 );
 
-await assert.doesNotReject(()=>RDO.save({id:'draft-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Rascunho'));
-await assert.rejects(()=>RDO.save({id:'send-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Enviado'),/Descreva o serviço/);
+state.rdos=[{id:'other-rdo',projectId:'p-hh',date:'2026-08-17',status:'Rascunho',entries:[{employeeId:'e-1',attendanceStatus:'present'}]}];
+assert.equal(RDO.occupiedEmployees('2026-08-17').has('e-1'),true);
+assert.equal(RDO.occupiedEmployees('2026-08-17','other-rdo').has('e-1'),false);
+await assert.rejects(()=>RDO.save({id:'conflict-rdo',projectId:'p-obra',date:'2026-08-17',description:'',entries:[{employeeId:'e-1',employeeName:'João',regular:8}]},'Rascunho'),/outro RDO/);
+await assert.doesNotReject(()=>RDO.save({id:'other-rdo',projectId:'p-hh',date:'2026-08-17',description:'',entries:[{employeeId:'e-1',regular:8}]},'Rascunho'));
+state.rdos=[];
+assert.equal(RDO.isAbsent({attendanceStatus:'absent'}),true);
+assert.equal(RDO.calculate({projectId:'p-hh',entries:[{employeeId:'sem-custo',attendanceStatus:'absent'}]}).rows.length,0);
+await assert.doesNotReject(()=>RDO.save({id:'absence-rdo',projectId:'p-obra',date:'2026-08-17',description:'Registro de equipe',entries:[{employeeId:'e-2',employeeName:'Maria',attendanceStatus:'absent',regular:0,overtime50:0,overtime100:0}]},'Enviado'));
+
+await assert.rejects(()=>RDO.save({id:'draft-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Rascunho'),/registre uma falta/);
+await assert.rejects(()=>RDO.save({id:'send-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Enviado'),/registre uma falta/);
 
 console.log("RDO calculation tests passed");

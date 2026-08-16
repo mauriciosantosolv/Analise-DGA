@@ -155,6 +155,37 @@ const RDO = {
   activeCrew(){
     return this.crewMembers().filter(x=>x.active!==false).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   },
+  isAbsent(entry){
+    return String(entry&&entry.attendanceStatus||'').toLowerCase()==='absent';
+  },
+  occupiedEmployees(date,excludeRdoId=''){
+    const targetDate=String(date||'').slice(0,10);
+    const excluded=String(excludeRdoId||'');
+    const occupied=new Map();
+    (Array.isArray(State.rdos)?State.rdos:[]).forEach(rdo=>{
+      if(!rdo || String(rdo.id||'')===excluded || String(rdo.date||'').slice(0,10)!==targetDate) return;
+      (Array.isArray(rdo.entries)?rdo.entries:[]).forEach(entry=>{
+        const employeeId=String(entry&&entry.employeeId||'');
+        if(employeeId && !occupied.has(employeeId)) occupied.set(employeeId,{rdo,entry});
+      });
+    });
+    return occupied;
+  },
+  allocationConflicts(date,rdoId,entries=[]){
+    const occupied=this.occupiedEmployees(date,rdoId);
+    return (Array.isArray(entries)?entries:[]).map(entry=>{
+      const employeeId=String(entry&&entry.employeeId||'');
+      const conflict=occupied.get(employeeId);
+      if(!conflict) return null;
+      const employee=this.crewMembers().find(item=>String(item.id)===employeeId)||{};
+      return {
+        employeeId,
+        employeeName:employee.name||entry.employeeName||'Colaborador',
+        rdoId:String(conflict.rdo.id||''),
+        projectId:String(conflict.rdo.projectId||'')
+      };
+    }).filter(Boolean);
+  },
   linkedRdoIds(){
     return new Set(State.measurements.flatMap(m=>Array.isArray(m.rdoIds)?m.rdoIds.map(String):[]));
   },
@@ -285,7 +316,7 @@ const RDO = {
   },
   hhConfigurationIssues(projectId,entries=[]){
     if(!this.isHhProject(projectId)) return [];
-    return entries.map(entry=>{
+    return entries.filter(entry=>!this.isAbsent(entry)).map(entry=>{
       const employee=this.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
       const rate=this.rateFor(projectId,entry.employeeId);
       const role=rate?.roleDisplayMode==='internal' ? employee.internalRole : rate?.commercialRole;
@@ -328,7 +359,7 @@ const RDO = {
     };
   },
   calculate(rdo){
-    const rows=(rdo.entries||[]).map(entry=>{
+    const rows=(rdo.entries||[]).filter(entry=>!this.isAbsent(entry)).map(entry=>{
       const employee=State.crew.find(x=>String(x.id)===String(entry.employeeId))||{};
       const rate=this.rdoRateFor(rdo.projectId,entry.employeeId);
       const totals=rate?this.entryTotals(entry,rate):{hours:0,cost:0,sale:0};
@@ -398,14 +429,20 @@ const RDO = {
 
   async save(rdo,status){
     if(!rdo.projectId || !rdo.date) throw new Error('Informe o projeto e a data.');
+    if(!Array.isArray(rdo.entries) || !rdo.entries.length)
+      throw new Error('Selecione ao menos um colaborador ou registre uma falta.');
     if(status==='Enviado'){
       if(!String(rdo.description||'').trim()) throw new Error('Descreva o serviço realizado.');
-      if(!Array.isArray(rdo.entries) || !rdo.entries.length) throw new Error('Selecione ao menos um colaborador.');
-      if(rdo.entries.some(row=>(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)<=0))
+      if(rdo.entries.some(row=>!this.isAbsent(row)&&(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)<=0))
         throw new Error('Todos os colaboradores selecionados precisam ter horas informadas.');
     }
     const allowed=new Set(this.allowedProjects().map(x=>String(x.id)));
     if(!allowed.has(String(rdo.projectId))) throw new Error('Projeto indisponível para este RDO.');
+    const conflicts=this.allocationConflicts(rdo.date,rdo.id,rdo.entries);
+    if(conflicts.length){
+      const names=conflicts.map(item=>item.employeeName).join(', ');
+      throw new Error(`${names} já ${conflicts.length===1?'está registrado':'estão registrados'} em outro RDO nesta data. Atualize a tela antes de continuar.`);
+    }
     if(status==='Enviado'){
       const issues=this.hhConfigurationIssues(rdo.projectId,rdo.entries);
       if(issues.length){
@@ -608,19 +645,20 @@ const RDO = {
     const defaultShift=this.defaultShift(initialDate);
     const defaultHours=this.workedHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes,this.standardDailyHours(),initialDate,initialHoliday);
     const defaultNightHours=this.nightHours(defaultShift.start,defaultShift.end,defaultShift.breakMinutes);
-    const sharedEntry=(existing?.entries||[])[0]||{...defaultShift,...defaultHours,nightHours:defaultNightHours};
+    const sharedEntry=(existing?.entries||[]).find(entry=>!this.isAbsent(entry))||{...defaultShift,...defaultHours,nightHours:defaultNightHours};
     const workerCard=employee=>{
       const saved=initialEntries.get(String(employee.id));
-      const selected=!!saved;
+      const absent=this.isAbsent(saved);
+      const selected=!!saved&&!absent;
       const row=saved||{...defaultShift,...defaultHours,nightHours:defaultNightHours};
       const rowNightHours=Number.isFinite(Number(row.nightHours))?Number(row.nightHours):this.nightHours(row.start,row.end,row.breakMinutes);
       const searchText=U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`);
       const photo=U.safeImageSrc(employee.photo||'');
-      return `<article class="rdo-worker-card ${selected?'selected':''}" data-employee-id="${U.esc(employee.id)}" data-search="${U.esc(searchText)}">
+      return `<article class="rdo-worker-card ${selected?'selected':''} ${absent?'absent':''}" data-employee-id="${U.esc(employee.id)}" data-search="${U.esc(searchText)}" data-attendance-status="${absent?'absent':selected?'present':'none'}">
         <div class="rdo-worker-head">
           <label class="rdo-worker-select"><input type="checkbox" ${selected?'checked':''}>${photo?`<img class="employee-avatar" src="${U.esc(photo)}" alt="">`:`<span class="avatar-ph">${U.initials(employee.name||'CO')}</span>`}
             <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}</small></span></label>
-          <span class="rdo-worker-total">${U.pct((Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)).replace('%','h')}</span>
+          <span class="rdo-worker-actions"><button type="button" class="rdo-absence-toggle" aria-pressed="${absent?'true':'false'}"><i data-lucide="user-x"></i><span>${absent?'Falta registrada':'Registrar falta'}</span></button><span class="rdo-worker-total">${absent?'Falta':U.pct((Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)).replace('%','h')}</span></span>
         </div>
         <div class="rdo-worker-fields">
           <label>Entrada<input data-field="start" type="time" value="${U.esc(row.start||defaultShift.start)}"></label>
@@ -671,6 +709,7 @@ const RDO = {
               <label>Adic. noturno<input id="rdo-all-night" type="number" min="0" max="24" step="0.01" value="${Number.isFinite(Number(sharedEntry.nightHours))?Number(sharedEntry.nightHours):defaultNightHours}" readonly></label>
             </div>
             <div class="rdo-team-summary" id="rdo-team-summary"></div>
+            <div class="rdo-team-availability" id="rdo-team-availability" hidden><i data-lucide="shield-check"></i><span></span></div>
             <div class="rdo-team-search" role="search">
               <i data-lucide="search"></i>
               <input id="rdo-team-search" type="search" autocomplete="off" spellcheck="false" placeholder="Pesquisar por matrícula, nome ou função" aria-label="Pesquisar colaborador por matrícula, nome ou função">
@@ -717,11 +756,27 @@ const RDO = {
         let pendingFiles=[];
         let savedAttachments=[];
         let busy=false;
+        let availabilityRevision=0;
         const byId=id=>document.getElementById(id);
+        const isAbsentCard=card=>String(card.dataset.attendanceStatus)==='absent';
+        const isPresentCard=card=>card.querySelector('.rdo-worker-select input').checked&&!isAbsentCard(card);
 
         const refreshTotal=card=>{
           const total=['regular','overtime50','overtime100'].reduce((sum,key)=>sum+U.num(card.querySelector(`[data-field="${key}"]`).value),0);
-          card.querySelector('.rdo-worker-total').textContent=`${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h`;
+          card.querySelector('.rdo-worker-total').textContent=isAbsentCard(card)?'Falta':`${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h`;
+        };
+        const setAttendance=(card,status)=>{
+          const normalized=['present','absent'].includes(status)?status:'none';
+          const checkbox=card.querySelector('.rdo-worker-select input');
+          const absenceButton=card.querySelector('.rdo-absence-toggle');
+          card.dataset.attendanceStatus=normalized;
+          checkbox.checked=normalized==='present';
+          card.classList.toggle('selected',normalized==='present');
+          card.classList.toggle('absent',normalized==='absent');
+          card.querySelectorAll('.rdo-worker-fields input').forEach(input=>input.disabled=normalized==='absent');
+          absenceButton.setAttribute('aria-pressed',normalized==='absent'?'true':'false');
+          absenceButton.querySelector('span').textContent=normalized==='absent'?'Falta registrada':'Registrar falta';
+          refreshTotal(card);
         };
         const sharedValues=()=>({
           start:byId('rdo-all-start').value,
@@ -733,25 +788,28 @@ const RDO = {
           nightHours:byId('rdo-all-night').value
         });
         const applyToCard=card=>{
+          if(isAbsentCard(card)) return;
           Object.entries(sharedValues()).forEach(([field,value])=>{
             card.querySelector(`[data-field="${field}"]`).value=value;
           });
           refreshTotal(card);
         };
         const refreshTeamSummary=()=>{
-          const selected=cards.filter(card=>card.querySelector('.rdo-worker-select input').checked);
+          const selected=cards.filter(isPresentCard);
+          const absent=cards.filter(isAbsentCard);
           const hours=selected.reduce((sum,card)=>sum+['regular','overtime50','overtime100'].reduce(
             (total,key)=>total+U.num(card.querySelector(`[data-field="${key}"]`).value),0
           ),0);
-          byId('rdo-team-summary').innerHTML=`<span><b>${selected.length}</b> colaboradores selecionados</span><span><b>${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b> no total</span>`;
+          byId('rdo-team-summary').innerHTML=`<span><b>${selected.length}</b> alocado(s)</span><span><b>${absent.length}</b> falta(s)</span><span><b>${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b> no total</span>`;
         };
         const filterTeam=()=>{
           const query=U.norm(byId('rdo-team-search').value);
           let visible=0;
           cards.forEach(card=>{
             const matches=!query || String(card.dataset.search||'').includes(query);
-            card.hidden=!matches;
-            if(matches) visible++;
+            const available=card.dataset.unavailable!=='true';
+            card.hidden=!matches||!available;
+            if(matches&&available) visible++;
           });
           byId('rdo-team-search-clear').classList.toggle('visible',!!query);
           byId('rdo-team-search-empty').hidden=visible!==0;
@@ -764,6 +822,37 @@ const RDO = {
         };
         const currentDate=()=>byId('rdo-date').value;
         const currentHoliday=()=>byId('rdo-holiday').checked;
+        const refreshAvailability=async()=>{
+          const revision=++availabilityRevision;
+          const occupied=this.occupiedEmployees(currentDate(),existing?.id||'');
+          if(typeof Cloud!=='undefined'&&Cloud.active()&&typeof Cloud.occupiedRdoEmployees==='function'){
+            try{
+              const remoteIds=await Cloud.occupiedRdoEmployees(currentDate(),existing?.id||'');
+              if(revision!==availabilityRevision) return;
+              remoteIds.forEach(employeeId=>{
+                if(!occupied.has(String(employeeId))) occupied.set(String(employeeId),{remote:true});
+              });
+            }catch(err){
+              if(revision!==availabilityRevision) return;
+            }
+          }
+          let unavailable=0;
+          cards.forEach(card=>{
+            const conflict=occupied.get(String(card.dataset.employeeId));
+            card.dataset.unavailable=conflict?'true':'false';
+            if(conflict){
+              unavailable++;
+              if(isPresentCard(card)||isAbsentCard(card)) setAttendance(card,'none');
+            }
+          });
+          const notice=byId('rdo-team-availability');
+          notice.hidden=unavailable===0;
+          notice.querySelector('span').textContent=unavailable===1
+            ?'1 colaborador já está registrado em outro RDO nesta data e foi ocultado.'
+            :`${unavailable} colaboradores já estão registrados em outros RDOs nesta data e foram ocultados.`;
+          filterTeam();
+          refreshTeamSummary();
+        };
         const refreshDayType=()=>{
           byId('rdo-day-type').textContent=this.dayTypeLabel(currentDate(),currentHoliday());
         };
@@ -781,8 +870,12 @@ const RDO = {
         cards.forEach(card=>{
           const checkbox=card.querySelector('.rdo-worker-select input');
           checkbox.onchange=()=>{
-            card.classList.toggle('selected',checkbox.checked);
+            setAttendance(card,checkbox.checked?'present':'none');
             if(checkbox.checked) applyToCard(card);
+            refreshTeamSummary();
+          };
+          card.querySelector('.rdo-absence-toggle').onclick=()=>{
+            setAttendance(card,isAbsentCard(card)?'none':'absent');
             refreshTeamSummary();
           };
           card.querySelectorAll('[data-field="start"],[data-field="end"],[data-field="breakMinutes"]').forEach(input=>input.onchange=()=>{
@@ -793,10 +886,11 @@ const RDO = {
             refreshTotal(card);
             refreshTeamSummary();
           });
+          setAttendance(card,card.dataset.attendanceStatus);
           refreshTotal(card);
         });
         const applyToAll=()=>{
-          cards.filter(card=>card.querySelector('.rdo-worker-select input').checked).forEach(card=>{
+          cards.filter(isPresentCard).forEach(card=>{
             applyToCard(card);
           });
           refreshTeamSummary();
@@ -817,12 +911,13 @@ const RDO = {
         ['rdo-all-start','rdo-all-end','rdo-all-break'].forEach(fieldId=>byId(fieldId).onchange=recalcTemplate);
         ['rdo-all-regular','rdo-all-50','rdo-all-100'].forEach(fieldId=>byId(fieldId).oninput=applyToAll);
         byId('rdo-holiday').onchange=()=>{refreshDayType();recalcTemplate();};
-        byId('rdo-date').onchange=()=>{
+        byId('rdo-date').onchange=async()=>{
           const shift=this.defaultShift(currentDate());
           byId('rdo-all-start').value=shift.start;
           byId('rdo-all-end').value=shift.end;
           byId('rdo-all-break').value=shift.breakMinutes;
           refreshDayType();
+          await refreshAvailability();
           recalcTemplate();
         };
         refreshDayType();
@@ -842,8 +937,9 @@ const RDO = {
           location:document.getElementById('rdo-location').value.trim(),
           description:document.getElementById('rdo-description').value.trim(),
           notes:document.getElementById('rdo-notes').value.trim(),
-          entries:cards.filter(card=>card.querySelector('.rdo-worker-select input').checked).map(card=>{
+          entries:cards.filter(card=>isPresentCard(card)||isAbsentCard(card)).map(card=>{
             const employee=State.crew.find(x=>String(x.id)===String(card.dataset.employeeId))||{};
+            const absent=isAbsentCard(card);
             const rate=State.laborRates.find(item=>
               String(item.projectId)===String(document.getElementById('rdo-project').value)
               && String(item.employeeId)===String(card.dataset.employeeId)
@@ -856,13 +952,14 @@ const RDO = {
               internalRole:employee.internalRole||'',
               commercialRole:rate?.commercialRole||'',
               roleDisplayMode:rate?.roleDisplayMode==='internal'?'internal':'client',
-              start:card.querySelector('[data-field="start"]').value,
-              end:card.querySelector('[data-field="end"]').value,
-              breakMinutes:U.num(card.querySelector('[data-field="breakMinutes"]').value),
-              regular:U.num(card.querySelector('[data-field="regular"]').value),
-              overtime50:U.num(card.querySelector('[data-field="overtime50"]').value),
-              overtime100:U.num(card.querySelector('[data-field="overtime100"]').value),
-              nightHours:U.num(card.querySelector('[data-field="nightHours"]').value),
+              attendanceStatus:absent?'absent':'present',
+              start:absent?'':card.querySelector('[data-field="start"]').value,
+              end:absent?'':card.querySelector('[data-field="end"]').value,
+              breakMinutes:absent?0:U.num(card.querySelector('[data-field="breakMinutes"]').value),
+              regular:absent?0:U.num(card.querySelector('[data-field="regular"]').value),
+              overtime50:absent?0:U.num(card.querySelector('[data-field="overtime50"]').value),
+              overtime100:absent?0:U.num(card.querySelector('[data-field="overtime100"]').value),
+              nightHours:absent?0:U.num(card.querySelector('[data-field="nightHours"]').value),
               nightPremiumPct:this.nightPremiumPct()
             };
           }),
@@ -952,15 +1049,16 @@ const RDO = {
         byId('rdo-file-input').onchange=event=>{ queueFiles([...event.target.files]); event.target.value=''; };
         byId('rdo-description').oninput=()=>{ byId('rdo-description-count').textContent=byId('rdo-description').value.length; };
 
-        const selectedCards=()=>cards.filter(card=>card.querySelector('.rdo-worker-select input').checked);
+        const selectedCards=()=>cards.filter(isPresentCard);
+        const absentCards=()=>cards.filter(isAbsentCard);
         const validateStep=step=>{
           if(step===1 && (!byId('rdo-project').value||!byId('rdo-date').value)){
             UI.toast('Informe o projeto e a data do serviço.','warn');
             return false;
           }
           if(step===2){
-            if(!selectedCards().length){
-              UI.toast('Selecione ao menos um colaborador.','warn');
+            if(!selectedCards().length&&!absentCards().length){
+              UI.toast('Selecione ao menos um colaborador ou registre uma falta.','warn');
               return false;
             }
             if(selectedCards().some(card=>['regular','overtime50','overtime100'].reduce(
@@ -980,15 +1078,17 @@ const RDO = {
         const updateReview=()=>{
           const rdo=collect();
           const project=projects.find(item=>String(item.id)===String(rdo.projectId));
-          const regular=rdo.entries.reduce((sum,row)=>sum+(Number(row.regular)||0),0);
-          const extra50=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime50)||0),0);
-          const extra100=rdo.entries.reduce((sum,row)=>sum+(Number(row.overtime100)||0),0);
-          const night=rdo.entries.reduce((sum,row)=>sum+(Number(row.nightHours)||0),0);
+          const present=rdo.entries.filter(row=>!this.isAbsent(row));
+          const absent=rdo.entries.filter(row=>this.isAbsent(row));
+          const regular=present.reduce((sum,row)=>sum+(Number(row.regular)||0),0);
+          const extra50=present.reduce((sum,row)=>sum+(Number(row.overtime50)||0),0);
+          const extra100=present.reduce((sum,row)=>sum+(Number(row.overtime100)||0),0);
+          const night=present.reduce((sum,row)=>sum+(Number(row.nightHours)||0),0);
           byId('rdo-review').innerHTML=`
             <article><div><i data-lucide="calendar-days"></i><b>Informações</b><button type="button" data-review-step="1">Editar</button></div>
               <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Classificação</dt><dd>${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
             <article><div><i data-lucide="users"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
-              <dl><span><dt>Equipe</dt><dd>${rdo.entries.length} pessoas</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span><span><dt>Adic. noturno</dt><dd>${night.toLocaleString('pt-BR')}h · ${rdo.nightPremiumPct}%</dd></span></dl></article>
+              <dl><span><dt>Alocados</dt><dd>${present.length} pessoas</dd></span><span><dt>Faltas</dt><dd>${absent.length}</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span><span><dt>Adic. noturno</dt><dd>${night.toLocaleString('pt-BR')}h · ${rdo.nightPremiumPct}%</dd></span></dl></article>
             <article class="full"><div><i data-lucide="file-check-2"></i><b>Serviço e evidências</b><button type="button" data-review-step="3">Editar</button></div>
               <p>${U.esc(rdo.description)}</p><span class="rdo-review-tag"><i data-lucide="paperclip"></i>${rdo.attachmentCount} ${rdo.attachmentCount===1?'anexo':'anexos'}</span></article>`;
           byId('rdo-review').querySelectorAll('[data-review-step]').forEach(button=>button.onclick=()=>showStep(Number(button.dataset.reviewStep),true));
@@ -1024,7 +1124,7 @@ const RDO = {
           if(busy) return;
           try{
             if(status==='Enviado' && ![1,2,3].every(validateStep)) return;
-            if(status==='Rascunho' && !validateStep(1)) return;
+            if(status==='Rascunho' && ![1,2].every(validateStep)) return;
             if(status==='Enviado' && !byId('rdo-confirmation').checked)
               return UI.toast('Confirme a revisão antes de enviar.','warn',5500);
             const rdo=collect();
@@ -1059,6 +1159,7 @@ const RDO = {
         };
         byId('rdo-save-draft').onclick=()=>persist('Rascunho');
         byId('rdo-submit').onclick=()=>persist('Enviado');
+        await refreshAvailability();
         refreshTeamSummary();
         renderAttachments();
         showStep(1,true);
@@ -1208,7 +1309,9 @@ const RDO = {
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
         <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')}</tbody></table></div>
+        <tbody>${(rdo.entries||[]).map(row=>this.isAbsent(row)
+          ?`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td><b>FALTA</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`
+          :`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
@@ -1255,13 +1358,13 @@ const RDO = {
         <div><small>Medição</small><b>${linked?'Incluído em medição':'Não medido'}</b></div>
       </div>
       <div class="card rdo-description-card"><h3>Serviço realizado</h3><p>${U.esc(rdo.description||'—')}</p>${rdo.location?`<small>${U.esc(rdo.location)}</small>`:''}</div>
-      <div class="rdo-detail-workers">${(rdo.entries||[]).map(row=>`<div>
+      <div class="rdo-detail-workers">${(rdo.entries||[]).map(row=>`<div class="${this.isAbsent(row)?'absent':''}">
         <span class="avatar-ph">${U.initials(row.employeeName||'CO')}</span>
         <span><b>${U.esc(row.employeeName||'Colaborador')}</b><small>${U.esc(this.displayRoleFor(rdo.projectId,row,(financial?.rows||[]).find(item=>String(item.employeeId)===String(row.employeeId)))||'')}</small></span>
-        <span><small>Normal</small><b>${U.pct(row.regular||0).replace('%','h')}</b></span>
-        <span><small>HE 50%</small><b>${U.pct(row.overtime50||0).replace('%','h')}</b></span>
-        <span><small>HE 100%</small><b>${U.pct(row.overtime100||0).replace('%','h')}</b></span>
-        <span><small>Adic. noturno</small><b>${U.pct(row.nightHours||0).replace('%','h')}</b></span>
+        <span><small>Situação</small><b>${this.isAbsent(row)?'Falta':'Alocado'}</b></span>
+        <span><small>Normal</small><b>${this.isAbsent(row)?'—':U.pct(row.regular||0).replace('%','h')}</b></span>
+        <span><small>HE 50%</small><b>${this.isAbsent(row)?'—':U.pct(row.overtime50||0).replace('%','h')}</b></span>
+        <span><small>HE 100% / Noturno</small><b>${this.isAbsent(row)?'—':`${U.pct(row.overtime100||0).replace('%','h')} / ${U.pct(row.nightHours||0).replace('%','h')}`}</b></span>
       </div>`).join('')}</div>
       ${showFinancial&&financial?`<div class="kpi-grid rdo-financial-summary">
         <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${U.money(financial.costTotal)}</div></div>

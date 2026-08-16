@@ -36,6 +36,7 @@
 .rdo-worker-list{display:grid;gap:8px;margin-top:10px}
 .rdo-worker-card{padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);opacity:.58}
 .rdo-worker-card.selected{background:var(--surface);opacity:1}
+.rdo-worker-card.absent{border-color:color-mix(in srgb,var(--red) 38%,var(--border));background:var(--red-soft);opacity:1}
 .rdo-worker-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .rdo-worker-select{display:flex;align-items:center;gap:9px;min-width:0;cursor:pointer}
 .rdo-worker-select>input{width:18px;height:18px}
@@ -43,15 +44,18 @@
 .rdo-worker-select b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rdo-worker-select small{min-width:0;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rdo-worker-total{padding:5px 9px;border-radius:999px;background:var(--surface2);color:var(--blue);font-size:.77rem;font-weight:750}
+.rdo-worker-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex:0 0 auto}.rdo-absence-toggle{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:5px 8px;border:1px solid color-mix(in srgb,var(--red) 28%,var(--border));border-radius:9px;background:transparent;color:var(--text3);font-size:.68rem;font-weight:750}.rdo-absence-toggle svg{width:14px;height:14px}.rdo-absence-toggle:hover,.rdo-absence-toggle[aria-pressed="true"]{border-color:color-mix(in srgb,var(--red) 58%,var(--border));background:var(--red-soft);color:var(--red)}.rdo-worker-card.absent .rdo-worker-total{background:color-mix(in srgb,var(--red) 12%,var(--surface));color:var(--red)}
 .rdo-worker-fields{display:none;grid-template-columns:repeat(7,minmax(80px,1fr));gap:8px;margin-top:12px}
 .rdo-team-template input[readonly],.rdo-worker-fields input[readonly]{color:var(--text2);background:var(--surface2);cursor:default}
 .rdo-worker-card.selected .rdo-worker-fields{display:grid}
+.rdo-team-availability{display:flex;align-items:center;gap:8px;margin:7px 0 3px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--blue) 24%,var(--border));border-radius:10px;background:var(--blue-soft);color:var(--text2);font-size:.72rem;line-height:1.4}.rdo-team-availability[hidden]{display:none}.rdo-team-availability svg{width:16px;height:16px;flex:0 0 auto;color:var(--blue)}
 .rdo-detail-head{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:9px;margin-bottom:12px}
 .rdo-detail-head>div{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2)}
 .rdo-detail-head small{color:var(--text3)}
 .rdo-description-card{margin-bottom:12px}.rdo-description-card p{margin:7px 0;color:var(--text2);white-space:pre-wrap}
 .rdo-detail-workers{display:grid;gap:7px}
 .rdo-detail-workers>div{display:grid;grid-template-columns:34px minmax(180px,1fr) repeat(4,82px);gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+.rdo-detail-workers>div.absent{border-color:color-mix(in srgb,var(--red) 30%,var(--border));background:var(--red-soft)}.rdo-detail-workers>div.absent>span:nth-child(3) b{color:var(--red)}
 .rdo-detail-workers span:not(.avatar-ph){display:flex;min-width:0;flex-direction:column}.rdo-detail-workers small{color:var(--text3)}
 .rdo-financial-summary{margin-top:12px}
 .crew-directory,.rate-list{display:grid;gap:9px}
@@ -215,6 +219,7 @@
   .crew-card{grid-template-columns:38px minmax(0,1fr) 34px;gap:9px;padding:11px}.crew-card>.tag{display:none}.crew-card .employee-avatar{width:38px;height:38px}
   .employee-form-photo{grid-template-columns:64px minmax(0,1fr);padding:10px}.employee-form-photo .employee-avatar.large,.employee-form-photo .avatar-ph.large{width:60px;height:60px}
   .rdo-worker-select{max-width:calc(100% - 58px)}.rdo-worker-select b,.rdo-worker-select small{max-width:100%}
+  .rdo-worker-actions{align-items:flex-end;flex-direction:column}.rdo-absence-toggle span{display:none}.rdo-absence-toggle{width:30px;justify-content:center;padding:5px}
   .rate-card{grid-template-columns:minmax(0,1fr) 20px}.rate-card>span:not(:first-child){display:none}
   .permission-projects-head{align-items:flex-start;flex-direction:column}
   .rdo-list-card{grid-template-columns:44px minmax(0,1fr) 18px}

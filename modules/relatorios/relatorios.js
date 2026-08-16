@@ -100,10 +100,13 @@ Views.relatorios = {
         const role=typeof RDO!=='undefined'&&typeof RDO.displayRoleFor==='function'
           ?RDO.displayRoleFor(rdo.projectId,entry)
           :entry.commercialRole||entry.internalRole||employee.internalRole||'';
+        const absent=typeof RDO!=='undefined'&&typeof RDO.isAbsent==='function'
+          ?RDO.isAbsent(entry)
+          :String(entry.attendanceStatus||'').toLowerCase()==='absent';
         rows.push({
           projectId:String(rdo.projectId||''),projectLabel:project?U.projLabel(project):'Projeto não localizado',
           date:String(rdo.date||''),employeeName:entry.employeeName||employee.name||'Colaborador',
-          registration:entry.employeeRegistration||employee.registration||'',role,
+          registration:entry.employeeRegistration||employee.registration||'',role,situation:absent?'Falta':'Alocado',
           start:entry.start||'',end:entry.end||'',breakMinutes:Number(entry.breakMinutes)||0,
           regular:Number(entry.regular)||0,overtime50:Number(entry.overtime50)||0,
           overtime100:Number(entry.overtime100)||0,nightHours:Number(entry.nightHours)||0,
@@ -126,12 +129,12 @@ Views.relatorios = {
     if(!source.length) return UI.toast('Nenhuma alocação encontrada para os filtros informados.','warn',5500);
     const rows=source.map(row=>({
       Projeto:row.projectLabel,Dia:U.date(row.date),Colaborador:row.employeeName,'Matrícula':row.registration,
-      'Função':row.role,Entrada:row.start,'Saída':row.end,'Intervalo':U.durationMinutes(row.breakMinutes),
+      'Função':row.role,'Situação':row.situation,Entrada:row.situation==='Falta'?'':row.start,'Saída':row.situation==='Falta'?'':row.end,'Intervalo':row.situation==='Falta'?'':U.durationMinutes(row.breakMinutes),
       'Horas normais':row.regular,'HE 50%':row.overtime50,'HE 100%':row.overtime100,
       'Adicional noturno (h)':row.nightHours,Feriado:row.holiday?'Sim':'Não','Status do RDO':row.status,'Número do RDO':row.rdoNumber
     }));
     const ws=XLSX.utils.json_to_sheet(Exports.spreadsheetRows(rows));
-    ws['!cols']=[{wch:34},{wch:12},{wch:28},{wch:14},{wch:24},{wch:10},{wch:10},{wch:12},{wch:15},{wch:11},{wch:12},{wch:21},{wch:10},{wch:18},{wch:18}];
+    ws['!cols']=[{wch:34},{wch:12},{wch:28},{wch:14},{wch:24},{wch:12},{wch:10},{wch:10},{wch:12},{wch:15},{wch:11},{wch:12},{wch:21},{wch:10},{wch:18},{wch:18}];
     if(ws['!ref']) ws['!autofilter']={ref:ws['!ref']};
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Histórico de Alocações');

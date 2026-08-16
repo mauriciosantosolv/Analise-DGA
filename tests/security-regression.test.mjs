@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="3\.0\.8\.4"/);
+assert.match(html, /name="application-version" content="4\.0"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=3\.0\.8\.4/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=4\.0/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -190,5 +190,20 @@ assert.match(v306Sql, /public=false/);
 assert.match(v306Sql, /owner_id=\(select auth\.uid\(\)\)::text/);
 assert.match(v306Sql, /with check[\s\S]*name=\(select auth\.uid\(\)\)::text \|\| '\/avatar\.jpg'/);
 assert.doesNotMatch(v306Sql, /auth\.role\(\)/);
+
+const v40Sql = read("supabase/ATUALIZACAO-v4.0-ALOCACOES-FALTAS.sql");
+assert.match(v40Sql, /pg_advisory_xact_lock/);
+assert.match(v40Sql, /hashtextextended/);
+assert.match(v40Sql, /existing\.organization_id=new\.organization_id/);
+assert.match(v40Sql, /existing\.record_id<>new\.record_id/);
+assert.match(v40Sql, /attendanceStatus','present'\) not in \('present','absent'\)/);
+assert.match(v40Sql, /security definer/);
+assert.match(v40Sql, /set search_path=''/);
+assert.match(v40Sql, /revoke all on function clique_obras_private\.validate_rdo_workforce_reservation\(\)/);
+assert.match(v40Sql, /create or replace function public\.clique_obras_rdo_occupied_employees/);
+assert.match(v40Sql, /returns table\(employee_id text\)/);
+assert.match(v40Sql, /can_view_store\(p_organization_id,'rdos'\)/);
+assert.match(v40Sql, /grant execute on function public\.clique_obras_rdo_occupied_employees\(uuid,date,text\)[\s\S]*to authenticated/);
+assert.doesNotMatch(v40Sql, /grant execute on function clique_obras_private\.validate_rdo_workforce_reservation|auth\.role\(\)|service_role/i);
 
 console.log("Security regression tests passed");

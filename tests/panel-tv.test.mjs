@@ -12,10 +12,10 @@ const css=read('css/panel-tv.css');
 
 assert.match(html,/id="tv-mode-toggle"/);
 assert.doesNotMatch(html,/id="tv-mode-toggle"[^>]*\shidden/);
-assert.match(html,/meta name="application-version" content="3\.0\.8\.4"/);
-assert.match(html,/css\/panel-tv\.css\?v=3\.0\.8\.4/);
-assert.match(html,/modules\/rdo\/rdo\.js\?v=3\.0\.8\.4/);
-assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=3\.0\.8\.4/);
+assert.match(html,/meta name="application-version" content="4\.0"/);
+assert.match(html,/css\/panel-tv\.css\?v=4\.0/);
+assert.match(html,/modules\/rdo\/rdo\.js\?v=4\.0/);
+assert.match(html,/modules\/dashboard\/panel-tv\.js\?v=4\.0/);
 assert.doesNotMatch(html,/3\.0\.8\.3\.1/);
 assert.match(app,/DashboardPanel\.enter\(\)/);
 assert.match(dashboard,/DashboardPanel\.render/);
@@ -33,8 +33,11 @@ assert.match(panel,/Custo parcial em campo/);
 assert.match(panel,/Custo da ociosidade/);
 assert.match(panel,/id="tv-field-date"/);
 assert.match(panel,/id="tv-field-allocation-chart"/);
-assert.match(panel,/id="tv-field-roles-chart"/);
-assert.match(panel,/type:'doughnut'/);
+assert.match(panel,/class="tv-field-cost-table"/);
+assert.doesNotMatch(panel,/id="tv-field-roles-chart"/);
+assert.doesNotMatch(panel,/tvFieldRoles/);
+assert.doesNotMatch(panel,/type:'doughnut'/);
+assert.match(panel,/Faltas registradas/);
 assert.match(panel,/renderSupplierChart/);
 assert.doesNotMatch(panel,/Alertas do monitoramento/);
 assert.doesNotMatch(panel,/State\.setSetting|DB\.(?:put|add|remove|clear)|Biz\.[A-Za-z]+\s*=/);
@@ -69,9 +72,13 @@ const project={id:'p1',proposal:'798',name:'Obra teste',client:'Cliente',status:
 context.State.projects=[project];
 context.State.crew=[
   {id:'e1',name:'Ana Alocada',internalRole:'Eletricista',active:true},
-  {id:'e2',name:'Bruno Ocioso',internalRole:'Ajudante',active:true}
+  {id:'e2',name:'Bruno Ocioso',internalRole:'Ajudante',active:true},
+  {id:'e3',name:'Carla Ausente',internalRole:'Técnica',active:true}
 ];
-context.State.rdos=[{id:'r1',projectId:'p1',date:'2026-08-15',status:'Rascunho',updatedAt:'2026-08-15T10:00:00Z',entries:[{employeeId:'e1',regular:8,overtime50:0,overtime100:0}]}];
+context.State.rdos=[{id:'r1',projectId:'p1',date:'2026-08-15',status:'Rascunho',updatedAt:'2026-08-15T10:00:00Z',entries:[
+  {employeeId:'e1',regular:8,overtime50:0,overtime100:0,attendanceStatus:'present'},
+  {employeeId:'e3',regular:0,overtime50:0,overtime100:0,attendanceStatus:'absent'}
+]}];
 const stats={budgetTotal:1000,spent:400,projected:100,balance:500,marginCurrent:20,consumed:40,health:100,light:'green'};
 const rendered=context.TestPanel.render({
   projects:[project],purchases:[
@@ -90,11 +97,14 @@ assert.ok(rendered.indexOf('Fornecedor novo tarde')<rendered.indexOf('Fornecedor
 assert.ok(rendered.indexOf('Fornecedor novo cedo')<rendered.indexOf('Fornecedor antigo'),'lançamentos devem ser ordenados pela data efetiva, não pela hora de importação');
 const field=context.TestPanel.fieldSnapshot();
 assert.equal(field.allocated.length,1);
+assert.equal(field.absent.length,1);
 assert.equal(field.idle.length,1);
 assert.equal(field.partialCost,80);
 assert.equal(field.idleCost,176);
+assert.equal(field.projects[0].name,'798');
 assert.match(rendered,/Ana Alocada/);
 assert.match(rendered,/Bruno Ocioso/);
+assert.match(rendered,/Carla Ausente/);
 assert.equal((rendered.match(/data-tv-slide="/g)||[]).length,3);
 
 console.log('TV panel tests passed');
