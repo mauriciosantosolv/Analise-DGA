@@ -47,8 +47,9 @@ export function isCancelledStatus(value){
 // o momento em que ele passou a existir no Omie.
 export function payableInclusionDate(payable){
   const info=payable&&typeof payable.info==='object'?payable.info:{};
-  return ddmmyyyyToIso(info?.dInc)
+  return ddmmyyyyToIso(info?.dInc??info?.dinc)
     ||ddmmyyyyToIso(info?.data_inclusao)
+    ||ddmmyyyyToIso(info?.dataInclusao)
     ||ddmmyyyyToIso(payable?.data_inclusao);
 }
 
@@ -80,10 +81,12 @@ export function payableAllocations(payable){
   }).filter(item=>item.code&&item.value!==0);
 }
 
-export function buildPayableEntries(payables,projectMappings,categoryMappings,supplierMappings=new Map()){
+export function buildPayableEntries(payables,projectMappings,categoryMappings,supplierMappings=new Map(),options={}){
   const projects=projectMappings instanceof Map?projectMappings:new Map();
   const categories=categoryMappings instanceof Map?categoryMappings:new Map();
   const suppliers=supplierMappings instanceof Map?supplierMappings:new Map();
+  const today=/^\d{4}-\d{2}-\d{2}$/.test(String(options.today||''))
+    ?String(options.today):new Date().toISOString().slice(0,10);
   const entries=[];
   let skipped=0;
   for(const payable of Array.isArray(payables)?payables:[]){
@@ -91,12 +94,18 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
     const projectCode=cleanText(payable?.codigo_projeto,60);
     const project=projects.get(projectCode);
     if(!externalId||!project||project.enabled===false){skipped++;continue;}
+    const dates=payableDates(payable);
+    const active=!isCancelledStatus(payable?.status_titulo);
+    // Títulos ativos sem info.dInc não recebem uma data aproximada. Usar
+    // vencimento/previsão aqui faria o painel apresentar datas futuras como se
+    // fossem inclusões. Cancelamentos continuam sendo processados para que uma
+    // conta já importada possa ser reconciliada mesmo em respostas incompletas.
+    if(active&&(!dates.inclusionDate||dates.inclusionDate>today)){skipped++;continue;}
     const allocations=payableAllocations(payable);
     if(!allocations.length){skipped++;continue;}
     for(const allocation of allocations){
       const category=categories.get(String(allocation.code));
       if(!category||category.enabled===false){skipped++;continue;}
-      const dates=payableDates(payable);
       entries.push({
         externalId,
         externalItemId:`${externalId}:${allocation.code}:${allocation.index}`,
@@ -120,7 +129,7 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
         order:cleanText(payable?.numero_documento??payable?.numero_documento_fiscal??payable?.numero_pedido,100),
         description:cleanText(payable?.observacao??payable?.descricao??'Conta a pagar Omie',500),
         status:cleanText(payable?.status_titulo,40),
-        active:!isCancelledStatus(payable?.status_titulo),
+        active,
         sourceType:'omiePayable',
         externalSource:'omie'
       });

@@ -28,7 +28,7 @@ const payables=[
   {codigo_lancamento_omie:900,codigo_projeto:1001,valor_documento:100,codigo_categoria:'2.01.01',info:{dInc:'15/08/2026',hInc:'14:35:20'},data_previsao:'20/08/2026',data_vencimento:'30/08/2026',status_titulo:'EMABERTO'},
   {codigo_lancamento_omie:901,codigo_projeto:1002,valor_documento:200,categorias:[{codigo_categoria:'2.01.01',percentual:75},{codigo_categoria:'2.02.02',percentual:25}],status_titulo:'CANCELADO'}
 ];
-const result=buildPayableEntries(payables,projects,categories);
+const result=buildPayableEntries(payables,projects,categories,new Map(),{today:'2026-08-17'});
 assert.equal(result.skipped,0);
 assert.equal(result.entries.length,3);
 assert.equal(result.entries[0].projectId,'click-815-usf');
@@ -46,13 +46,19 @@ assert.notEqual(result.entries[0].externalItemId,result.entries[1].externalItemI
 const suppliers=new Map([['24040','Depósito Aurora']]);
 const fantasy=buildPayableEntries([{
   codigo_lancamento_omie:902,codigo_projeto:1001,codigo_cliente_fornecedor:24040,
-  nome_fornecedor:'Razão Social Antiga',valor_documento:75,codigo_categoria:'2.01.01'
-}],projects,categories,suppliers);
+  nome_fornecedor:'Razão Social Antiga',valor_documento:75,codigo_categoria:'2.01.01',info:{dInc:'16/08/2026'}
+}],projects,categories,suppliers,{today:'2026-08-17'});
 assert.equal(fantasy.entries[0].supplier,'Depósito Aurora');
 
-const unmapped=buildPayableEntries([{codigo_lancamento_omie:1,codigo_projeto:999,valor_documento:10,codigo_categoria:'2.01.01'}],projects,categories);
+const unmapped=buildPayableEntries([{codigo_lancamento_omie:1,codigo_projeto:999,valor_documento:10,codigo_categoria:'2.01.01'}],projects,categories,new Map(),{today:'2026-08-17'});
 assert.equal(unmapped.entries.length,0);
 assert.equal(unmapped.skipped,1);
+const invalidDates=buildPayableEntries([
+  {codigo_lancamento_omie:903,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01'},
+  {codigo_lancamento_omie:904,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01',info:{dInc:'30/08/2026'}}
+],projects,categories,new Map(),{today:'2026-08-17'});
+assert.equal(invalidDates.entries.length,0);
+assert.equal(invalidDates.skipped,2);
 assert.equal(safeOmieError('app_secret=super-segredo app_key=abc123'),'credencial protegida chave protegida');
 assert.equal(isOmieConcurrentMethodError('ERROR: Já existe uma requisição desse método sendo executada e você pode tentar novamente.'),true);
 assert.equal(isOmieConcurrentMethodError('ERROR: Consumo redundante detectado. Aguarde 56 segundos para tentar novamente.'),true);

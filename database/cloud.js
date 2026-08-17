@@ -337,7 +337,7 @@ const Cloud = (() => {
   }
   function canViewStore(store){
     if(!configured()) return true;
-    const permissionStore=store==='planning_history'?'planning':store;
+    const permissionStore=store==='planning_history'?'planning':store==='workforce_status'?'rdos':store;
     return fullAccess() || permissionList('view').includes(permissionStore);
   }
   function canEditStore(store){
@@ -792,6 +792,30 @@ const Cloud = (() => {
     return body;
   }
 
+  async function approveRdo(rdoId,financial){
+    await ensureFresh();
+    if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
+    return request('/rest/v1/rpc/clique_obras_approve_rdo_v401',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        target_organization_id:organization().id,
+        target_rdo_id:String(rdoId),
+        target_financial:financial
+      })
+    });
+  }
+
+  async function repairRdoCosts(){
+    await ensureFresh();
+    if(!organization() || !fullAccess()) throw new Error('Reparação de custos de RDO indisponível.');
+    return request('/rest/v1/rpc/clique_obras_repair_rdo_costs_v401',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({target_organization_id:organization().id})
+    });
+  }
+
   function attachmentRow(row={}){
     return {
       id:String(row.id||''),
@@ -1114,7 +1138,7 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
-    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting,
+    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
     occupiedRdoEmployees,
     omieRequest,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,

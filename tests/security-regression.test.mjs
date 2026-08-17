@@ -13,11 +13,11 @@ const sha256 = relative => crypto
   .digest("hex");
 
 const html = read("index.html");
-assert.match(html, /name="application-version" content="4\.0"/);
+assert.match(html, /name="application-version" content="4\.0\.1"/);
 assert.match(html, /<title>CliqueObras<\/title>/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
-assert.match(html, /modules\/rdo\/rdo\.js\?v=4\.0/);
+assert.match(html, /modules\/rdo\/rdo\.js\?v=4\.0\.1/);
 assert.match(html, /script-src-elem 'self'/);
 assert.match(html, /frame-src 'none'/);
 
@@ -205,5 +205,20 @@ assert.match(v40Sql, /returns table\(employee_id text\)/);
 assert.match(v40Sql, /can_view_store\(p_organization_id,'rdos'\)/);
 assert.match(v40Sql, /grant execute on function public\.clique_obras_rdo_occupied_employees\(uuid,date,text\)[\s\S]*to authenticated/);
 assert.doesNotMatch(v40Sql, /grant execute on function clique_obras_private\.validate_rdo_workforce_reservation|auth\.role\(\)|service_role/i);
+
+const v401Sql = read("supabase/ATUALIZACAO-v4.0.1-RDO-FOLGAS-OMIE.sql");
+assert.match(v401Sql, /'workforce_status'/);
+assert.match(v401Sql, /validate_workforce_status_v401/);
+assert.match(v401Sql, /pg_advisory_xact_lock/);
+assert.match(v401Sql, /create or replace function public\.clique_obras_approve_rdo_v401/);
+assert.match(v401Sql, /create or replace function public\.clique_obras_repair_rdo_costs_v401/);
+assert.match(v401Sql, /create or replace function public\.clique_obras_apply_omie_entries_v401/);
+assert.match(v401Sql, /As linhas financeiras não correspondem aos colaboradores presentes no RDO/);
+assert.match(v401Sql, /inclusion_date>\(pg_catalog\.now\(\) at time zone 'America\/Sao_Paulo'\)::date/);
+assert.match(v401Sql, /revoke all on function public\.clique_obras_approve_rdo_v401[\s\S]*from public,anon/);
+assert.match(v401Sql, /grant execute on function public\.clique_obras_approve_rdo_v401[\s\S]*to authenticated/);
+assert.match(v401Sql, /revoke all on function public\.clique_obras_apply_omie_entries_v401[\s\S]*from public,anon,authenticated/);
+assert.match(v401Sql, /grant execute on function public\.clique_obras_apply_omie_entries_v401[\s\S]*to service_role/);
+assert.doesNotMatch(v401Sql, /auth\.role\(\)|grant execute on function clique_obras_private\.validate_workforce_status_v401/);
 
 console.log("Security regression tests passed");

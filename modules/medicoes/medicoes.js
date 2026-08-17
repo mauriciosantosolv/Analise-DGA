@@ -240,7 +240,8 @@ Views.medicoes = {
       const rdo=State.rdos.find(item=>String(item.id)===String(rdoId));
       const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdoId));
       if(!rdo) return [];
-      return (rdo.entries||[]).map(entry=>{
+      return (rdo.entries||[]).filter(entry=>!(typeof RDO.isAbsent==='function'
+        ?RDO.isAbsent(entry):String(entry.attendanceStatus||'').toLowerCase()==='absent')).map(entry=>{
         const snapshot=(financial?.rows||[]).find(row=>String(row.employeeId)===String(entry.employeeId));
         const employee=RDO.crewMembers().find(item=>String(item.id)===String(entry.employeeId))||{};
         const roleDisplayMode=snapshot?.roleDisplayMode||entry.roleDisplayMode||'client';

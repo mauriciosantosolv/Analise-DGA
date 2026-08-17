@@ -22,11 +22,11 @@ const App = {
   viewStores:{
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
-    planejamento:['planning','planning_history'], rdos:['rdos'], medicoes:['measurements'],
+    planejamento:['planning','planning_history'], rdos:['rdos','workforce_status'], medicoes:['measurements'],
     colaboradores:['crew'], valoreshh:['labor_rates','rdo_financial'], clientes:['clients'],
     categorias:['categories'], basecalculo:['settings'],
-    relatorios:['projects','budgets','purchases','planning','measurements'],
-    backup:['projects','budgets','purchases','planning','planning_history','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial']
+    relatorios:['projects','budgets','purchases','planning','measurements','rdos','crew','workforce_status'],
+    backup:['projects','budgets','purchases','planning','planning_history','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial','workforce_status']
   },
   primaryStore(view=State.view){
     return ({projetos:'projects',orcamentos:'budgets',financeiro:'purchases',
@@ -325,8 +325,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.0 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.0 · dados locais';
+      el.textContent=`v4.0.1 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.0.1 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -475,8 +475,44 @@ const App = {
     rq.onerror = () => alert('Não foi possível abrir o banco de dados.');
   },
 
+  async repairApprovedRdoCostsV401(){
+    if(State.settings.rdoCostRepairV401===true) return 0;
+    const cloudActive=typeof Cloud!=='undefined'&&Cloud.active();
+    if(cloudActive&&!['owner','admin'].includes(Cloud.role())) return 0;
+    let repaired=0;
+    if(cloudActive){
+      repaired=Number(await Cloud.repairRdoCosts())||0;
+      await DB.syncFromCloud();
+      await State.reload();
+    }else{
+      for(const rdo of State.rdos.filter(item=>item&&item.status==='Aprovado')){
+        const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
+        const costTotal=Math.round((Number(financial&&financial.costTotal)||0)*100)/100;
+        if(!(costTotal>0)) continue;
+        const purchaseId=`rdo-cost-${rdo.id}`;
+        const existing=State.purchases.find(item=>String(item.id)===purchaseId);
+        const valid=existing&&String(existing.projectId)===String(rdo.projectId)
+          &&String(existing.category)==='Mão de Obra'
+          &&String(existing.sourceRdoId)===String(rdo.id)
+          &&Math.abs((Number(existing.value)||0)-costTotal)<=0.01;
+        if(valid) continue;
+        await DB.put('purchases',{
+          id:purchaseId,projectId:String(rdo.projectId),date:rdo.date,
+          category:'Mão de Obra',desc:`Custo da mão de obra · ${rdo.number||rdo.id}`,
+          supplier:'Equipe própria',value:costTotal,source:'rdo-cost',sourceType:'labor',
+          sourceRdoId:String(rdo.id),abatido:false,createdAt:Date.now(),repairedByVersion:'4.0.1'
+        });
+        repaired++;
+      }
+      if(repaired) await State.reload();
+    }
+    await State.setSetting('rdoCostRepairV401',true);
+    return repaired;
+  },
+
   async init(){
    try{
+    let repairedRdoCosts=0;
     UI.loading(true, 'Carregando banco de dados…');
     // Bibliotecas de CDN ausentes (sem internet/bloqueio) não podem travar o sistema
     const missing = [];
@@ -500,6 +536,9 @@ const App = {
       this.lastCloudRefresh=Date.now();
     }
     await State.reload();
+    try{ repairedRdoCosts=await this.repairApprovedRdoCostsV401(); }catch(error){
+      if(typeof console!=='undefined') console.warn('A reparação de custos dos RDOs será tentada novamente no próximo acesso.',error);
+    }
     try{ await State.ensurePlanningHistory(); }catch(error){
       if(typeof console!=='undefined') console.warn('Histórico do planejamento será normalizado na próxima sincronização.',error);
     }
@@ -524,6 +563,7 @@ const App = {
           categories:State.categories, measurements:State.measurements,
           rdos:State.rdos, crew:State.crew, labor_rates:State.laborRates,
           rdo_financial:State.rdoFinancial, planning_history:State.planningHistory,
+          workforce_status:State.workforceStatus,
           settings:Object.entries(State.settings).filter(([k]) => !['companyLogo','pdfLetterhead'].includes(k)).map(([id, value]) => ({id, value})) });
         if(snap.length < 4500000){
           localStorage.setItem('ccf_snap', snap);
@@ -532,6 +572,7 @@ const App = {
       }
     }catch(e){}
     UI.loading(false);
+    if(repairedRdoCosts>0) setTimeout(()=>UI.toast(`${repairedRdoCosts} custo(s) de RDO aprovado foram restaurados no realizado.`, 'success', 8500),350);
     if(missing.length) setTimeout(() => UI.toast('Bibliotecas não carregadas: ' + missing.join(', ') + '. Verifique sua conexão com a internet e recarregue a página.', 'warn', 10000), 600);
     this.applyNavigationPermissions();
     document.querySelectorAll('.nav-item[data-view]').forEach(b => b.onclick = () => this.go(b.dataset.view));

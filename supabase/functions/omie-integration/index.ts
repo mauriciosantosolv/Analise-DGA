@@ -189,7 +189,7 @@ Deno.serve(async(request:Request)=>{
     try{
       const creds=await credentials(orgId);
       const [{data:connection,error:connectionError},{data:projectRows,error:projectError},{data:categoryRows,error:categoryError}]=await Promise.all([
-        admin.from("omie_connections").select("initial_sync_date,last_sync_at,supplier_backfill_completed_at,created_by,auto_sync").eq("organization_id",orgId).eq("active",true).maybeSingle(),
+        admin.from("omie_connections").select("initial_sync_date,last_sync_at,supplier_backfill_completed_at,inclusion_backfill_completed_at,created_by,auto_sync").eq("organization_id",orgId).eq("active",true).maybeSingle(),
         admin.from("omie_project_mappings").select("omie_project_code,omie_project_name,clique_project_id,enabled").eq("organization_id",orgId).eq("enabled",true),
         admin.from("omie_category_mappings").select("omie_category_code,clique_category_name,enabled").eq("organization_id",orgId).eq("enabled",true)
       ]);
@@ -207,9 +207,16 @@ Deno.serve(async(request:Request)=>{
       // A primeira execução da v3.0.8 relê o período completo uma única vez
       // para substituir os fornecedores genéricos já importados.
       const needsSupplierBackfill=!connection.supplier_backfill_completed_at;
-      const incremental=mode==="automatic"&&connection.last_sync_at&&!needsSupplierBackfill
+      // A v4.0.1 também força uma releitura histórica única para substituir
+      // datas antigas gravadas como vencimento/previsão pela inclusão info.dInc.
+      const needsInclusionBackfill=!connection.inclusion_backfill_completed_at;
+      const needsHistoricalBackfill=needsSupplierBackfill||needsInclusionBackfill;
+      const incremental=mode==="automatic"&&connection.last_sync_at&&!needsHistoricalBackfill
         ?new Date(new Date(connection.last_sync_at).getTime()-3*86400000).toISOString().slice(0,10):initial;
-      const today=new Date().toISOString().slice(0,10);
+      const todayParts=Object.fromEntries(new Intl.DateTimeFormat("en-US",{
+        timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"
+      }).formatToParts(new Date()).map(part=>[part.type,part.value]));
+      const today=`${todayParts.year}-${todayParts.month}-${todayParts.day}`;
       const selectedSet=new Set(selected);
       const basePayableFilter={
         apenas_importado_api:"N",filtrar_por_data_de:isoToDdMmYyyy(incremental),filtrar_por_data_ate:isoToDdMmYyyy(today),filtrar_apenas_inclusao:"N",filtrar_apenas_alteracao:"N",exibir_obs:"S"
@@ -220,7 +227,7 @@ Deno.serve(async(request:Request)=>{
       // limitada; as chamadas são estritamente seriais e protegidas pelo
       // lease da organização. Na rotina incremental curta, uma única consulta
       // continua sendo mais eficiente e o recorte é feito localmente.
-      if(needsSupplierBackfill||mode==="manual"){
+      if(needsHistoricalBackfill||mode==="manual"){
         for(const projectCode of selected){
           const rows=await pagedOmie(OMIE_ENDPOINTS.payables,"ListarContasPagar","conta_pagar_cadastro",{
             ...basePayableFilter,filtrar_por_projeto:Number(projectCode)
@@ -232,22 +239,24 @@ Deno.serve(async(request:Request)=>{
         payables.push(...rows.filter(row=>selectedSet.has(cleanText(row.codigo_projeto,60))));
       }
       const suppliers=await supplierDirectory(orgId,payables,creds);
-      const built=buildPayableEntries(payables,projectMap,categoryMap,suppliers.names);
+      const built=buildPayableEntries(payables,projectMap,categoryMap,suppliers.names,{today});
       const supplierBackfillComplete=suppliers.complete&&selected.length===allowed.size;
+      const inclusionBackfillComplete=selected.length===allowed.size;
       let imported=0,updated=0,cancelled=0,unchanged=0;
       for(const batch of batchPayableEntries(built.entries,500)){
         const {data:reconciled,error:reconcileError}=await admin.rpc("clique_obras_reconcile_omie_entries",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(reconcileError) throw new Error(reconcileError.message||"Falha ao reconciliar lançamentos do Omie.");
         cancelled+=Number(reconciled?.cancelled)||0;
-        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries_v3084",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
+        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries_v401",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(error) throw new Error(error.message||"Falha ao aplicar lançamentos do Omie.");
         imported+=Number(data?.imported)||0;updated+=Number(data?.updated)||0;cancelled+=Number(data?.cancelled)||0;unchanged+=Number(data?.unchanged)||0;
       }
       const finishedAt=new Date().toISOString();
       await Promise.all([
-        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete}}).eq("id",runId),
+        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,inclusionBackfillComplete}}).eq("id",runId),
         admin.from("omie_connections").update({last_sync_at:finishedAt,last_sync_status:"success",last_sync_error:null,
-          supplier_backfill_completed_at:connection.supplier_backfill_completed_at||(supplierBackfillComplete?finishedAt:null),updated_at:finishedAt}).eq("organization_id",orgId)
+          supplier_backfill_completed_at:connection.supplier_backfill_completed_at||(supplierBackfillComplete?finishedAt:null),
+          inclusion_backfill_completed_at:connection.inclusion_backfill_completed_at||(inclusionBackfillComplete?finishedAt:null),updated_at:finishedAt}).eq("organization_id",orgId)
       ]);
       return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length};
     }catch(error){

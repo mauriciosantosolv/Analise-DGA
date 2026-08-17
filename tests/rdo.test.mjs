@@ -24,6 +24,7 @@ const state = {
   ],
   measurements:[],
   rdos:[],
+  workforceStatus:[],
   settings:{rdoDailyHours:8.8,rdoShiftStart:"07:30",rdoShiftEnd:"17:18",rdoShiftBreakMinutes:60,
     rdoSaturdayStart:"08:00",rdoSaturdayEnd:"13:00",rdoSaturdayBreakMinutes:0,
     rdoSundayStart:"08:00",rdoSundayEnd:"12:00",rdoSundayBreakMinutes:0,
@@ -116,7 +117,7 @@ const operational = RDO.calculate({
   projectId:"p-obra",
   entries:[{employeeId:"e-2",regular:8,overtime50:0,overtime100:0}]
 });
-assert.equal(operational.missingRates.length,0);
+assert.equal(operational.missingRates.length,1);
 assert.equal(operational.costTotal,0);
 assert.equal(operational.saleTotal,0);
 assert.deepEqual(JSON.parse(JSON.stringify(RDO.hhConfigurationIssues("p-obra",[{employeeId:"e-2"}]))),[]);
@@ -148,8 +149,14 @@ await assert.rejects(()=>RDO.save({id:'conflict-rdo',projectId:'p-obra',date:'20
 await assert.doesNotReject(()=>RDO.save({id:'other-rdo',projectId:'p-hh',date:'2026-08-17',description:'',entries:[{employeeId:'e-1',regular:8}]},'Rascunho'));
 state.rdos=[];
 assert.equal(RDO.isAbsent({attendanceStatus:'absent'}),true);
+assert.equal(RDO.visibleEntries({entries:[{employeeId:'e-1'},{employeeId:'e-2',attendanceStatus:'absent'}]}).length,1);
 assert.equal(RDO.calculate({projectId:'p-hh',entries:[{employeeId:'sem-custo',attendanceStatus:'absent'}]}).rows.length,0);
 await assert.doesNotReject(()=>RDO.save({id:'absence-rdo',projectId:'p-obra',date:'2026-08-17',description:'Registro de equipe',entries:[{employeeId:'e-2',employeeName:'Maria',attendanceStatus:'absent',regular:0,overtime50:0,overtime100:0}]},'Enviado'));
+
+state.workforceStatus=[{id:'day-off:2026-08-18:e-2',date:'2026-08-18',employeeId:'e-2',status:'day_off'}];
+assert.equal(RDO.occupiedEmployees('2026-08-18').has('e-2'),true);
+await assert.rejects(()=>RDO.save({id:'day-off-conflict',projectId:'p-obra',date:'2026-08-18',description:'',entries:[{employeeId:'e-2',employeeName:'Maria',regular:8}]},'Rascunho'),/está de folga/);
+state.workforceStatus=[];
 
 await assert.rejects(()=>RDO.save({id:'draft-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Rascunho'),/registre uma falta/);
 await assert.rejects(()=>RDO.save({id:'send-1',projectId:'p-obra',date:'2026-08-15',description:'',entries:[]},'Enviado'),/registre uma falta/);

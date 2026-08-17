@@ -12,10 +12,10 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 5;
+  const NAME = 'ccf_obras', VERSION = 6;
   const STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
-    'rdos','crew','labor_rates','rdo_financial','planning_history'
+    'rdos','crew','labor_rates','rdo_financial','planning_history','workforce_status'
   ];
   const LOCAL_STORES = [...STORES,'rdo_attachments'];
   let db = null;
@@ -37,6 +37,15 @@ const DB = (() => {
   const localBulkPut = (store,objs) => new Promise((res,rej)=>{ const t = db.transaction(store,'readwrite'), s=t.objectStore(store); objs.forEach(o=>s.put(o)); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); });
   const localDel = (store,id) => new Promise((res,rej)=>{ const r = tx(store,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
   const localClear = store => new Promise((res,rej)=>{ const r = tx(store,'readwrite').clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const approveRdoLocal = (financial,purchase,rdo) => new Promise((res,rej)=>{
+    const transaction=db.transaction(['rdo_financial','purchases','rdos'],'readwrite');
+    transaction.objectStore('rdo_financial').put(financial);
+    transaction.objectStore('purchases').put(purchase);
+    transaction.objectStore('rdos').put(rdo);
+    transaction.oncomplete=()=>res({financial,purchase,rdo});
+    transaction.onerror=()=>rej(transaction.error||new Error('Falha ao aprovar o RDO localmente.'));
+    transaction.onabort=()=>rej(transaction.error||new Error('A aprovação local do RDO foi cancelada.'));
+  });
   function assertCanEdit(store){
     if(typeof Cloud!=='undefined' && Cloud.active()) Cloud.assertCanEdit(store);
   }
@@ -117,7 +126,7 @@ const DB = (() => {
   const attachmentPut = obj => localPut('rdo_attachments',obj);
   const attachmentDel = id => localDel('rdo_attachments',id);
   return {
-    open, all, put, bulkPut, del, clear, clearLocalCache, syncFromCloud, uploadLocalToCloud,
+    open, all, put, bulkPut, del, clear, clearLocalCache, syncFromCloud, uploadLocalToCloud, approveRdoLocal,
     attachmentAll, attachmentPut, attachmentDel, STORES, LOCAL_STORES
   };
 })();
@@ -125,17 +134,17 @@ const DB = (() => {
 /* ===== Estado em memória (cache do banco, recarregado após cada mutação) ===== */
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
-  rdos:[], crew:[], laborRates:[], rdoFinancial:[], planningHistory:[], rdoAttachments:[],
+  rdos:[], crew:[], laborRates:[], rdoFinancial:[], planningHistory:[], workforceStatus:[], rdoAttachments:[],
   filters:{ project:'', projects:[], client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
-    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial,planningHistory,attachments] = await Promise.all([
+    const [p,b,c,pl,cl,cat,st,me,rdos,crew,rates,financial,planningHistory,workforceStatus,attachments] = await Promise.all([
       ...DB.STORES.map(s=>DB.all(s)),
       DB.attachmentAll()
     ]);
     this.projects=p; this.budgets=b; this.purchases=c; this.planning=pl; this.clients=cl; this.categories=cat; this.measurements=me;
     this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial;
-    this.planningHistory=planningHistory; this.rdoAttachments=attachments;
+    this.planningHistory=planningHistory; this.workforceStatus=workforceStatus; this.rdoAttachments=attachments;
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
   async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; },

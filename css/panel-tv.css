@@ -5,6 +5,7 @@
 .tv-mode-toggle{width:auto;padding:0 12px;gap:7px;font-weight:700}
 .tv-mode-toggle span{font-size:.78rem}
 #tv-mode-toggle[hidden]{display:none!important}
+.tv-field-dot.day-off{background:#8b5cf6;box-shadow:0 0 9px rgba(139,92,246,.68)}
 
 body.tv-mode{overflow:hidden;background:#090c11}
 body.tv-mode #app{display:grid;grid-template-columns:1fr;width:100vw;height:100vh;height:100dvh}

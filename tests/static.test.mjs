@@ -47,6 +47,13 @@ for (const store of ["rdos", "crew", "labor_rates", "rdo_financial"]) {
 }
 assert.match(cloud, /occupiedRdoEmployees/);
 assert.match(cloud, /clique_obras_rdo_occupied_employees/);
+assert.match(cloud, /clique_obras_approve_rdo_v401/);
+assert.match(cloud, /clique_obras_repair_rdo_costs_v401/);
+
+const database = fs.readFileSync(path.join(root, "database/indexeddb.js"), "utf8");
+assert.match(database, /VERSION = 6/);
+assert.match(database, /'workforce_status'/);
+assert.match(database, /approveRdoLocal/);
 
 const auth = fs.readFileSync(path.join(root, "js/auth-ui.js"), "utf8");
 assert.match(auth, /assets\/logo-clique\.png/);
@@ -60,6 +67,9 @@ assert.match(rdo, /currentStep===4/);
 assert.match(rdo, /id="rdo-team-search"/);
 assert.match(rdo, /const selected=!!saved/);
 assert.match(rdo, /Registrar falta/);
+assert.match(rdo, /Controlar folgas/);
+assert.match(rdo, /dayOffForm/);
+assert.match(rdo, /visibleEntries/);
 assert.match(rdo, /occupiedEmployees/);
 assert.match(rdo, /allocationConflicts/);
 assert.match(rdo, /\['2','Equipe e horas','user'\]/);
@@ -101,6 +111,7 @@ assert.match(importer, /projectParts:splitProject/);
 
 const app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
 assert.match(app, /previousScroll/);
+assert.match(app, /repairApprovedRdoCostsV401/);
 assert.doesNotMatch(app, /document\.getElementById\('content'\)\.scrollTop = 0/);
 
 const costs = fs.readFileSync(path.join(root, "modules/custos/custos.js"), "utf8");
@@ -138,7 +149,9 @@ const reports = fs.readFileSync(path.join(root, "modules/relatorios/relatorios.j
 assert.match(reports, /Histórico de Alocações/);
 assert.match(reports, /allocationHistoryRows/);
 assert.match(reports, /'Situação':row\.situation/);
-assert.match(reports, /row\.situation==='Falta'/);
+assert.match(reports, /\['Falta','Folga','Ocioso'\]\.includes\(row\.situation\)/);
+assert.match(reports, /situation:'Ocioso'[\s\S]*regular:8\.8/);
+assert.match(reports, /situation:'Folga'[\s\S]*regular:0/);
 
 const lucide = fs.readFileSync(path.join(root, "assets/vendor/lucide.min.js"), "utf8");
 assert.match(lucide, /createIcons/);

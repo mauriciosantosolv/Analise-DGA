@@ -15,6 +15,12 @@
 .rdo-team,.rdo-hours{align-items:flex-end}.rdo-status{align-items:flex-start;gap:5px}
 .rdo-form{display:grid;gap:18px}
 .rdo-team-section{padding-top:4px}
+.workforce-status-list{display:grid;gap:8px;max-height:460px;margin-top:14px;overflow:auto}
+.workforce-status-list .check-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer}
+.workforce-status-list .check-item>input{width:18px;height:18px;flex:0 0 auto}
+.workforce-status-list .check-item>span{display:flex;min-width:0;flex-direction:column}
+.workforce-status-list .check-item small{margin-top:2px;color:var(--text3)}
+.workforce-status-list .check-item.disabled{opacity:.58;cursor:not-allowed}
 .rdo-section-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:10px}
 .rdo-section-title h3{margin:0}.rdo-section-title small{display:block;margin-top:3px;color:var(--text3)}
 .rdo-team-template{

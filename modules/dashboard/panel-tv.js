@@ -175,7 +175,7 @@ const DashboardPanel = {
   },
 
   entryInclusionTimestamp(entry){
-    const date=String(entry&&entry.omieInclusionDate||entry&&entry.date||'').trim();
+    const date=this.entryInclusionDate(entry);
     const time=String(entry&&entry.omieInclusionTime||'').trim();
     const dateMatch=date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     const timeMatch=time.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
@@ -185,6 +185,18 @@ const DashboardPanel = {
       return base;
     }
     return this.entryDateTimestamp(entry);
+  },
+
+  entryInclusionDate(entry){
+    const isOmie=entry&&(entry.externalSource==='omie'||entry.sourceType==='omiePayable');
+    const omieDate=String(entry&&entry.omieInclusionDate||'').trim();
+    const today=(typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10));
+    if(/^\d{4}-\d{2}-\d{2}$/.test(omieDate)&&(!isOmie||omieDate<=today)) return omieDate;
+    if(!isOmie) return String(entry&&entry.date||'').trim();
+    const timestamp=this.entryTimestamp(entry);
+    if(timestamp>0) return new Date(timestamp).toISOString().slice(0,10);
+    const raw=String(entry&&entry.date||'').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(raw)&&raw<=today?raw:'';
   },
 
   latestEntries(purchases){
@@ -200,7 +212,7 @@ const DashboardPanel = {
   latestRow(entry){
     const project=State.projects.find(item=>String(item.id)===String(entry.projectId));
     const projectName=project?U.projLabel(project):'Projeto não localizado';
-    return `<tr><td>${U.date(entry.date)||'—'}</td><td><b>${U.esc(projectName)}</b><small>${U.esc(this.sourceLabel(entry))}</small></td><td><b>${U.esc(entry.supplier||'Sem fornecedor')}</b><small>${U.esc(entry.category||entry.desc||'Sem categoria')}</small></td><td class="num"><b>${U.money2(entry.value)}</b></td></tr>`;
+    return `<tr><td>${U.date(this.entryInclusionDate(entry))||'—'}</td><td><b>${U.esc(projectName)}</b><small>${U.esc(this.sourceLabel(entry))}</small></td><td><b>${U.esc(entry.supplier||'Sem fornecedor')}</b><small>${U.esc(entry.category||entry.desc||'Sem categoria')}</small></td><td class="num"><b>${U.money2(entry.value)}</b></td></tr>`;
   },
 
   fieldSnapshot(selectedDate=''){
@@ -217,6 +229,13 @@ const DashboardPanel = {
         const employeeId=String(entry&&entry.employeeId||'');
         if(employeeId&&crewById.has(employeeId)) occupancy.set(employeeId,{rdo,entry});
       }));
+    const dayOff=(Array.isArray(State.workforceStatus)?State.workforceStatus:[])
+      .filter(item=>item&&item.status==='day_off'&&String(item.date||'').slice(0,10)===today)
+      .map(item=>{
+        const employee=crewById.get(String(item.employeeId))||{};
+        return {employeeId:String(item.employeeId||''),employeeName:item.employeeName||employee.name||'Colaborador',role:item.internalRole||employee.internalRole||'Sem função'};
+      }).filter(item=>item.employeeId&&crewById.has(item.employeeId));
+    const dayOffIds=new Set(dayOff.map(item=>item.employeeId));
     const standardHours=typeof RDO!=='undefined'&&typeof RDO.plannedHoursForDate==='function'
       ?RDO.plannedHoursForDate(today)
       :typeof RDO!=='undefined'&&typeof RDO.standardDailyHours==='function'?RDO.standardDailyHours():8.8;
@@ -257,7 +276,7 @@ const DashboardPanel = {
     });
     allocated.sort((a,b)=>a.projectName.localeCompare(b.projectName,'pt-BR')||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
     absent.sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'pt-BR'));
-    const idle=crew.filter(employee=>!occupancy.has(String(employee.id))).map(employee=>{
+    const idle=crew.filter(employee=>!occupancy.has(String(employee.id))&&!dayOffIds.has(String(employee.id))).map(employee=>{
       const base=typeof RDO!=='undefined'&&typeof RDO.baseCostFor==='function'?RDO.baseCostFor(employee.id):{costRegular:0};
       const hourlyCost=Number(base&&base.costRegular)||0;
       return {employeeId:String(employee.id),employeeName:employee.name||'Colaborador',role:employee.internalRole||'Sem função',hourlyCost,cost:standardHours*hourlyCost,missingCost:!(hourlyCost>0)};
@@ -270,7 +289,7 @@ const DashboardPanel = {
       current.count+=1; current.cost+=row.cost; projectMap.set(row.projectId,current);
     });
     return {
-      today,standardHours,allocated,absent,idle,
+      today,standardHours,allocated,absent,dayOff,idle,
       partialCost:allocated.reduce((sum,row)=>sum+row.cost,0),
       idleCost:idle.reduce((sum,row)=>sum+row.cost,0),
       missingCosts:[...allocated,...idle].filter(row=>row.missingCost).length,
@@ -337,7 +356,7 @@ const DashboardPanel = {
                 ${suppliers.length?`<div class="tv-supplier-chart" id="tv-supplier-chart-wrap"><canvas id="tv-suppliers-chart" aria-label="Top gastos por fornecedores"></canvas></div><div class="tv-supplier-fallback" id="tv-supplier-fallback" hidden>${suppliers.map(item=>`<div><span>${U.esc(item.name)}</span><b>${U.money2(item.value)}</b></div>`).join('')}</div>`:this.empty('Nenhum gasto no filtro atual.')}
               </article>
               <article class="tv-panel-card tv-latest-card"><div class="tv-section-head"><div><small>ATUALIZAÇÃO EM TEMPO REAL</small><h2>Últimos lançamentos</h2></div><span class="tv-live"><i></i>Ao vivo</span></div>
-                <div class="tv-latest-wrap">${latest.length?`<table class="tv-latest-table"><thead><tr><th>Data</th><th>Projeto / origem</th><th>Conta / fornecedor</th><th class="num">Valor</th></tr></thead><tbody>${latest.map(entry=>this.latestRow(entry)).join('')}</tbody></table>`:this.empty('Nenhum lançamento no filtro atual.')}</div>
+                <div class="tv-latest-wrap">${latest.length?`<table class="tv-latest-table"><thead><tr><th>Data de inclusão</th><th>Projeto / origem</th><th>Conta / fornecedor</th><th class="num">Valor</th></tr></thead><tbody>${latest.map(entry=>this.latestRow(entry)).join('')}</tbody></table>`:this.empty('Nenhum lançamento no filtro atual.')}</div>
               </article>
             </div>
           </div>
@@ -371,8 +390,8 @@ const DashboardPanel = {
               <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
                 <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
               </article>
-              <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><small>AUSÊNCIAS</small><h2>Faltas registradas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s)</span></div>
-                <div class="tv-field-roster">${field.absent.map(row=>`<div><span><i class="tv-field-dot absent"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>Falta</b><small>${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhuma falta registrada no dia.')}</div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><small>AUSÊNCIAS</small><h2>Faltas e folgas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s) · ${field.dayOff.length} folga(s)</span></div>
+                <div class="tv-field-roster">${field.absent.map(row=>`<div><span><i class="tv-field-dot absent"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>Falta</b><small>${U.esc(row.rdoStatus)}</small></span></div>`).join('')}${field.dayOff.map(row=>`<div><span><i class="tv-field-dot day-off"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>Folga</b><small>Sem carga horária</small></span></div>`).join('')||(!field.absent.length?this.empty('Nenhuma falta ou folga registrada no dia.'):'')}</div>
               </article>
               <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
                 <div class="tv-field-roster">${field.idle.map(row=>`<div><span><i class="tv-field-dot idle"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>${U.money(row.cost)}</b><small>${row.missingCost?'Custo-hora não cadastrado':`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h de ociosidade`}</small></span></div>`).join('')||this.empty('Nenhum colaborador ocioso hoje.')}</div>

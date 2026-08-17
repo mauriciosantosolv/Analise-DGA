@@ -78,17 +78,28 @@ Views.relatorios = {
   },
   allocationHistoryForm(){
     const projects=State.projects.slice().sort((a,b)=>U.projLabel(a).localeCompare(U.projLabel(b),'pt-BR'));
+    const today=U.isoDate(new Date());
     UI.modal({title:'Histórico de Alocações',body:`
-      <p style="color:var(--text2);margin-bottom:14px">O arquivo será organizado por projeto, data e colaborador.</p>
+      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, ociosos e folgas. O período é obrigatório para apurar corretamente quem ficou ocioso.</p>
       <div class="form-grid">
         <div class="full"><label>Projeto</label><select id="allocation-project"><option value="">Todos os projetos</option>${projects.map(project=>`<option value="${U.esc(project.id)}">${U.esc(U.projLabel(project))}</option>`).join('')}</select></div>
-        <div><label>Data inicial</label><input id="allocation-date-from" type="date"></div>
-        <div><label>Data final</label><input id="allocation-date-to" type="date"></div>
-        <div class="full"><label>Status do RDO</label><select id="allocation-status"><option value="">Todos os status</option><option>Rascunho</option><option>Enviado</option><option>Aprovado</option><option>Devolvido</option></select></div>
+        <div><label>Data inicial *</label><input id="allocation-date-from" type="date" value="${U.esc(today)}"></div>
+        <div><label>Data final *</label><input id="allocation-date-to" type="date" value="${U.esc(today)}"></div>
+        <div class="full"><label>Status do RDO</label><select id="allocation-status"><option value="">Todos os status</option><option>Rascunho</option><option>Enviado</option><option>Aprovado</option><option>Devolvido</option></select><small>Ao filtrar um status, o arquivo mostra apenas alocações e faltas vinculadas aos RDOs correspondentes.</small></div>
       </div>`,footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" onclick="Views.relatorios.exportAllocationHistory()"><i data-lucide="download"></i>Exportar Excel</button>`});
+  },
+  allocationHistoryDates(filters={}){
+    const from=String(filters.dateFrom||''),to=String(filters.dateTo||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to) return [];
+    const start=new Date(`${from}T00:00:00Z`),end=new Date(`${to}T00:00:00Z`);
+    const days=Math.floor((end-start)/86400000)+1;
+    if(days<1||days>366) return [];
+    return Array.from({length:days},(_,index)=>new Date(start.getTime()+index*86400000).toISOString().slice(0,10));
   },
   allocationHistoryRows(filters={}){
     const rows=[];
+    const occupied=new Set();
+    const key=(date,employeeId)=>`${String(date||'').slice(0,10)}|${String(employeeId||'')}`;
     (Array.isArray(State.rdos)?State.rdos:[]).forEach(rdo=>{
       const project=State.projects.find(item=>String(item.id)===String(rdo.projectId));
       if(filters.projectId&&String(rdo.projectId)!==String(filters.projectId)) return;
@@ -96,6 +107,8 @@ Views.relatorios = {
       if(filters.dateTo&&String(rdo.date||'')>filters.dateTo) return;
       if(filters.status&&String(rdo.status||'Rascunho')!==filters.status) return;
       (Array.isArray(rdo.entries)?rdo.entries:[]).forEach(entry=>{
+        const employeeId=String(entry.employeeId||'');
+        if(!employeeId) return;
         const employee=State.crew.find(item=>String(item.id)===String(entry.employeeId))||{};
         const role=typeof RDO!=='undefined'&&typeof RDO.displayRoleFor==='function'
           ?RDO.displayRoleFor(rdo.projectId,entry)
@@ -104,6 +117,7 @@ Views.relatorios = {
           ?RDO.isAbsent(entry)
           :String(entry.attendanceStatus||'').toLowerCase()==='absent';
         rows.push({
+          employeeId,
           projectId:String(rdo.projectId||''),projectLabel:project?U.projLabel(project):'Projeto não localizado',
           date:String(rdo.date||''),employeeName:entry.employeeName||employee.name||'Colaborador',
           registration:entry.employeeRegistration||employee.registration||'',role,situation:absent?'Falta':'Alocado',
@@ -112,9 +126,36 @@ Views.relatorios = {
           overtime100:Number(entry.overtime100)||0,nightHours:Number(entry.nightHours)||0,
           holiday:rdo.isHoliday===true,status:rdo.status||'Rascunho',rdoNumber:rdo.number||rdo.id||''
         });
+        occupied.add(key(rdo.date,employeeId));
       });
     });
-    return rows.sort((a,b)=>a.projectLabel.localeCompare(b.projectLabel,'pt-BR')||a.date.localeCompare(b.date)||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
+    if(!filters.projectId&&!filters.status){
+      (Array.isArray(State.workforceStatus)?State.workforceStatus:[]).filter(item=>item&&item.status==='day_off').forEach(item=>{
+        const date=String(item.date||'').slice(0,10),employeeId=String(item.employeeId||'');
+        if(!employeeId||occupied.has(key(date,employeeId))) return;
+        if(filters.dateFrom&&date<filters.dateFrom) return;
+        if(filters.dateTo&&date>filters.dateTo) return;
+        const employee=State.crew.find(row=>String(row.id)===employeeId)||{};
+        rows.push({
+          employeeId,projectId:'',projectLabel:'',date,
+          employeeName:item.employeeName||employee.name||'Colaborador',registration:item.employeeRegistration||employee.registration||'',
+          role:item.internalRole||employee.internalRole||'',situation:'Folga',start:'',end:'',breakMinutes:0,
+          regular:0,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+        });
+        occupied.add(key(date,employeeId));
+      });
+      const activeCrew=(Array.isArray(State.crew)?State.crew:[]).filter(item=>item&&item.recordType!=='role'&&item.active!==false);
+      this.allocationHistoryDates(filters).forEach(date=>activeCrew.forEach(employee=>{
+        const employeeId=String(employee.id||'');
+        if(!employeeId||occupied.has(key(date,employeeId))) return;
+        rows.push({
+          employeeId,projectId:'',projectLabel:'',date,employeeName:employee.name||'Colaborador',registration:employee.registration||'',
+          role:employee.internalRole||'',situation:'Ocioso',start:'',end:'',breakMinutes:0,
+          regular:8.8,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+        });
+      }));
+    }
+    return rows.sort((a,b)=>a.date.localeCompare(b.date)||a.projectLabel.localeCompare(b.projectLabel,'pt-BR')||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
   },
   exportAllocationHistory(){
     const filters={
@@ -123,13 +164,17 @@ Views.relatorios = {
       dateTo:document.getElementById('allocation-date-to')?.value||'',
       status:document.getElementById('allocation-status')?.value||''
     };
-    if(filters.dateFrom&&filters.dateTo&&filters.dateFrom>filters.dateTo)
+    if(!filters.dateFrom||!filters.dateTo)
+      return UI.toast('Informe a data inicial e a data final.','warn',5500);
+    if(filters.dateFrom>filters.dateTo)
       return UI.toast('A data inicial não pode ser posterior à data final.','warn',5500);
+    if(!this.allocationHistoryDates(filters).length)
+      return UI.toast('O período do relatório deve ter no máximo 366 dias.','warn',6000);
     const source=this.allocationHistoryRows(filters);
     if(!source.length) return UI.toast('Nenhuma alocação encontrada para os filtros informados.','warn',5500);
     const rows=source.map(row=>({
       Projeto:row.projectLabel,Dia:U.date(row.date),Colaborador:row.employeeName,'Matrícula':row.registration,
-      'Função':row.role,'Situação':row.situation,Entrada:row.situation==='Falta'?'':row.start,'Saída':row.situation==='Falta'?'':row.end,'Intervalo':row.situation==='Falta'?'':U.durationMinutes(row.breakMinutes),
+      'Função':row.role,'Situação':row.situation,Entrada:['Falta','Folga','Ocioso'].includes(row.situation)?'':row.start,'Saída':['Falta','Folga','Ocioso'].includes(row.situation)?'':row.end,'Intervalo':['Falta','Folga','Ocioso'].includes(row.situation)?'':U.durationMinutes(row.breakMinutes),
       'Horas normais':row.regular,'HE 50%':row.overtime50,'HE 100%':row.overtime100,
       'Adicional noturno (h)':row.nightHours,Feriado:row.holiday?'Sim':'Não','Status do RDO':row.status,'Número do RDO':row.rdoNumber
     }));
@@ -139,6 +184,6 @@ Views.relatorios = {
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Histórico de Alocações');
     XLSX.writeFile(wb,`historico-alocacoes-${U.isoDate(new Date())}.xlsx`);
-    UI.close(); UI.toast(`${rows.length} alocação(ões) exportada(s).`,'success',5000);
+    UI.close(); UI.toast(`${rows.length} registro(s) de equipe exportado(s).`,'success',5000);
   }
 };

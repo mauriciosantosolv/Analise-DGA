@@ -158,6 +158,17 @@ const RDO = {
   isAbsent(entry){
     return String(entry&&entry.attendanceStatus||'').toLowerCase()==='absent';
   },
+  visibleEntries(rdo){
+    return (Array.isArray(rdo&&rdo.entries)?rdo.entries:[]).filter(entry=>!this.isAbsent(entry));
+  },
+  dayOffs(date=''){
+    const target=String(date||'').slice(0,10);
+    return (Array.isArray(State.workforceStatus)?State.workforceStatus:[])
+      .filter(item=>item&&item.status==='day_off'&&String(item.date||'').slice(0,10)===target);
+  },
+  dayOffRecordId(date,employeeId){
+    return `day-off:${String(date||'').slice(0,10)}:${String(employeeId||'')}`;
+  },
   occupiedEmployees(date,excludeRdoId=''){
     const targetDate=String(date||'').slice(0,10);
     const excluded=String(excludeRdoId||'');
@@ -168,6 +179,10 @@ const RDO = {
         const employeeId=String(entry&&entry.employeeId||'');
         if(employeeId && !occupied.has(employeeId)) occupied.set(employeeId,{rdo,entry});
       });
+    });
+    this.dayOffs(targetDate).forEach(item=>{
+      const employeeId=String(item.employeeId||'');
+      if(employeeId&&!occupied.has(employeeId)) occupied.set(employeeId,{workforceStatus:item});
     });
     return occupied;
   },
@@ -181,8 +196,9 @@ const RDO = {
       return {
         employeeId,
         employeeName:employee.name||entry.employeeName||'Colaborador',
-        rdoId:String(conflict.rdo.id||''),
-        projectId:String(conflict.rdo.projectId||'')
+        rdoId:String(conflict.rdo?.id||''),
+        projectId:String(conflict.rdo?.projectId||''),
+        situation:conflict.workforceStatus?'Folga':'Outro RDO'
       };
     }).filter(Boolean);
   },
@@ -378,7 +394,7 @@ const RDO = {
       hours:rows.reduce((sum,row)=>sum+row.hours,0),
       costTotal:rows.reduce((sum,row)=>sum+row.cost,0),
       saleTotal:rows.reduce((sum,row)=>sum+row.sale,0),
-      missingRates:rows.filter(row=>!row.rate)
+      missingRates:rows.filter(row=>!row.rate||!(Number(row.rate.costRegular)>0))
     };
   },
   statusTag(status){
@@ -427,6 +443,71 @@ const RDO = {
     return editable || approvedByAdmin;
   },
 
+  dayOffForm(selectedDate=''){
+    if(!this.fullAccess()) return UI.toast('Somente a equipe administrativa pode controlar folgas.','warn',6500);
+    const date=/^\d{4}-\d{2}-\d{2}$/.test(String(selectedDate))?String(selectedDate):U.isoDate(new Date());
+    const crew=this.activeCrew();
+    if(!crew.length) return UI.toast('Cadastre colaboradores ativos antes de controlar folgas.','warn',6000);
+    const current=new Map(this.dayOffs(date).map(item=>[String(item.employeeId),item]));
+    const rdoOccupancy=new Map();
+    (Array.isArray(State.rdos)?State.rdos:[]).filter(rdo=>String(rdo.date||'').slice(0,10)===date).forEach(rdo=>{
+      (Array.isArray(rdo.entries)?rdo.entries:[]).forEach(entry=>{
+        const employeeId=String(entry.employeeId||'');
+        if(employeeId&&!rdoOccupancy.has(employeeId)) rdoOccupancy.set(employeeId,{rdo,entry});
+      });
+    });
+    UI.modal({
+      title:'Controle administrativo de folgas',
+      wide:true,
+      body:`<div class="form-grid"><div><label>Dia selecionado</label><input id="day-off-date" type="date" value="${U.esc(date)}"></div><div class="import-log"><b>Regra:</b> folga não gera horas nem custo e não pode coexistir com alocação ou falta no mesmo dia.</div></div>
+        <div class="workforce-status-list">${crew.map(employee=>{
+          const occupied=rdoOccupancy.get(String(employee.id));
+          const checked=current.has(String(employee.id));
+          const detail=occupied
+            ?`${this.isAbsent(occupied.entry)?'Falta registrada':'Alocado'} · ${this.projectLabel(occupied.rdo.projectId)}`
+            :checked?'Folga registrada':'Disponível para marcação';
+          return `<label class="check-item ${occupied?'disabled':''}"><input type="checkbox" data-day-off-employee="${U.esc(employee.id)}" ${checked?'checked':''} ${occupied?'disabled':''}><span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(detail)}</small></span></label>`;
+        }).join('')}</div>`,
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="day-off-save"><i data-lucide="calendar-check"></i>Salvar folgas</button>',
+      onOpen:()=>{
+        document.getElementById('day-off-date').onchange=event=>{
+          const next=event.target.value;
+          if(!next) return;
+          UI.close();
+          setTimeout(()=>this.dayOffForm(next),0);
+        };
+        document.getElementById('day-off-save').onclick=async()=>{
+          const selected=new Set([...document.querySelectorAll('[data-day-off-employee]:checked')].map(input=>String(input.dataset.dayOffEmployee)));
+          try{
+            UI.loading(true,'Salvando folgas…');
+            for(const employee of crew){
+              const employeeId=String(employee.id);
+              const existing=current.get(employeeId);
+              if(selected.has(employeeId)&&!existing){
+                const now=new Date().toISOString();
+                await DB.put('workforce_status',{
+                  id:this.dayOffRecordId(date,employeeId),date,employeeId,
+                  employeeName:employee.name||'Colaborador',employeeRegistration:employee.registration||'',
+                  internalRole:employee.internalRole||'',status:'day_off',
+                  createdAt:now,createdBy:this.authorName(),updatedAt:now,updatedBy:this.authorName()
+                });
+              }else if(!selected.has(employeeId)&&existing){
+                await DB.del('workforce_status',existing.id);
+              }
+            }
+            await State.reload();
+            UI.loading(false); UI.closeAll();
+            UI.toast('Folgas do dia atualizadas.','success',5000);
+            App.render();
+          }catch(err){
+            UI.loading(false);
+            UI.toast('Não foi possível salvar as folgas: '+U.esc(err.message||err),'error',7500);
+          }
+        };
+      }
+    });
+  },
+
   async save(rdo,status){
     if(!rdo.projectId || !rdo.date) throw new Error('Informe o projeto e a data.');
     if(!Array.isArray(rdo.entries) || !rdo.entries.length)
@@ -441,7 +522,10 @@ const RDO = {
     const conflicts=this.allocationConflicts(rdo.date,rdo.id,rdo.entries);
     if(conflicts.length){
       const names=conflicts.map(item=>item.employeeName).join(', ');
-      throw new Error(`${names} já ${conflicts.length===1?'está registrado':'estão registrados'} em outro RDO nesta data. Atualize a tela antes de continuar.`);
+      const hasDayOff=conflicts.some(item=>item.situation==='Folga');
+      throw new Error(hasDayOff
+        ?`${names} ${conflicts.length===1?'está de folga':'estão de folga'} nesta data. Remova a folga antes de incluir no RDO.`
+        :`${names} já ${conflicts.length===1?'está registrado':'estão registrados'} em outro RDO nesta data. Atualize a tela antes de continuar.`);
     }
     if(status==='Enviado'){
       const issues=this.hhConfigurationIssues(rdo.projectId,rdo.entries);
@@ -512,31 +596,29 @@ const RDO = {
       supplier:'Equipe própria',
       value:financial.costTotal,
       source:'rdo-cost',
+      sourceType:'labor',
       sourceRdoId:String(rdo.id),
       abatido:false,
       createdAt:Date.now()
     };
     try{
       UI.loading(true,'Aprovando diário…');
-      await DB.put('rdo_financial',financial);
-      if(financial.costTotal>0){
-        if(typeof Cloud!=='undefined' && Cloud.active())
-          await Cloud.ensureRdoCostPosting(rdo.id,rdo.projectId,purchaseId,financial.costTotal);
-        await DB.put('purchases',purchase);
+      if(typeof Cloud!=='undefined' && Cloud.active()){
+        await Cloud.approveRdo(rdo.id,financial);
+        await DB.syncFromCloud();
+      }else{
+        await DB.approveRdoLocal(financial,purchase,{
+          ...rdo,
+          status:'Aprovado',
+          approvedAt:financial.approvedAt,
+          approvedBy:financial.approvedBy,
+          updatedAt:financial.approvedAt
+        });
       }
-      await DB.put('rdos',{
-        ...rdo,
-        status:'Aprovado',
-        approvedAt:financial.approvedAt,
-        approvedBy:financial.approvedBy,
-        updatedAt:financial.approvedAt
-      });
       await State.reload();
       UI.loading(false);
       UI.closeAll();
-      UI.toast(financial.costTotal>0
-        ? 'RDO aprovado. O custo da mão de obra entrou no realizado do projeto.'
-        : 'RDO aprovado. Nenhum custo foi lançado para este projeto operacional.','success',7000);
+      UI.toast('RDO aprovado. O custo da mão de obra entrou no realizado do projeto.','success',7000);
       App.render();
     }catch(err){
       UI.loading(false);
@@ -1187,7 +1269,7 @@ const RDO = {
         <small>${U.esc(rdo.number||'Diário de Obra')}</small>
         <h2>Diário enviado para aprovação</h2>
         <p>O registro ficou disponível para revisão do responsável e está bloqueado para edição enquanto aguarda aprovação.</p>
-        <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users"></i>${(rdo.entries||[]).length} colaboradores</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
+        <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users"></i>${this.visibleEntries(rdo).length} colaboradores presentes</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
       </section>`,
       footer:`<button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
         <button class="btn btn-primary" onclick="UI.closeAll()"><i data-lucide="list"></i>Voltar aos diários</button>`,
@@ -1283,7 +1365,8 @@ const RDO = {
       const customer=this.projectClient(rdo.projectId);
       const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
       const snapshotFor=employeeId=>(financial?.rows||[]).find(row=>String(row.employeeId)===String(employeeId))||null;
-      const total=(rdo.entries||[]).reduce(
+      const visibleEntries=this.visibleEntries(rdo);
+      const total=visibleEntries.reduce(
         (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
       );
       const status={
@@ -1309,9 +1392,7 @@ const RDO = {
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
         <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
-        <tbody>${(rdo.entries||[]).map(row=>this.isAbsent(row)
-          ?`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td><b>FALTA</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`
-          :`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')}</tbody></table></div>
+        <tbody>${visibleEntries.map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')||'<tr><td colspan="10">Nenhum colaborador presente neste diário.</td></tr>'}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}
@@ -1358,14 +1439,14 @@ const RDO = {
         <div><small>Medição</small><b>${linked?'Incluído em medição':'Não medido'}</b></div>
       </div>
       <div class="card rdo-description-card"><h3>Serviço realizado</h3><p>${U.esc(rdo.description||'—')}</p>${rdo.location?`<small>${U.esc(rdo.location)}</small>`:''}</div>
-      <div class="rdo-detail-workers">${(rdo.entries||[]).map(row=>`<div class="${this.isAbsent(row)?'absent':''}">
+      <div class="rdo-detail-workers">${this.visibleEntries(rdo).map(row=>`<div>
         <span class="avatar-ph">${U.initials(row.employeeName||'CO')}</span>
         <span><b>${U.esc(row.employeeName||'Colaborador')}</b><small>${U.esc(this.displayRoleFor(rdo.projectId,row,(financial?.rows||[]).find(item=>String(item.employeeId)===String(row.employeeId)))||'')}</small></span>
-        <span><small>Situação</small><b>${this.isAbsent(row)?'Falta':'Alocado'}</b></span>
-        <span><small>Normal</small><b>${this.isAbsent(row)?'—':U.pct(row.regular||0).replace('%','h')}</b></span>
-        <span><small>HE 50%</small><b>${this.isAbsent(row)?'—':U.pct(row.overtime50||0).replace('%','h')}</b></span>
-        <span><small>HE 100% / Noturno</small><b>${this.isAbsent(row)?'—':`${U.pct(row.overtime100||0).replace('%','h')} / ${U.pct(row.nightHours||0).replace('%','h')}`}</b></span>
-      </div>`).join('')}</div>
+        <span><small>Situação</small><b>Alocado</b></span>
+        <span><small>Normal</small><b>${U.pct(row.regular||0).replace('%','h')}</b></span>
+        <span><small>HE 50%</small><b>${U.pct(row.overtime50||0).replace('%','h')}</b></span>
+        <span><small>HE 100% / Noturno</small><b>${U.pct(row.overtime100||0).replace('%','h')} / ${U.pct(row.nightHours||0).replace('%','h')}</b></span>
+      </div>`).join('')||'<div class="empty">Nenhum colaborador presente neste diário.</div>'}</div>
       ${showFinancial&&financial?`<div class="kpi-grid rdo-financial-summary">
         <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${U.money(financial.costTotal)}</div></div>
         <div class="kpi accent-blue"><div class="k-label">Venda apurada</div><div class="k-value">${U.money(financial.saleTotal)}</div></div>
@@ -1413,6 +1494,7 @@ Views.rdos={
     $c().innerHTML=`<div class="toolbar rdo-page-toolbar">
       <div><h2>Diários de obra</h2><small>Acompanhe o preenchimento, as evidências e o fluxo de aprovação.</small></div>
       <div class="spacer"></div>
+      ${RDO.fullAccess()?'<button class="btn btn-ghost" onclick="RDO.dayOffForm()"><i data-lucide="calendar-off"></i>Controlar folgas</button>':''}
       ${typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos')?'<button class="btn btn-primary" onclick="RDO.form()"><i data-lucide="plus"></i>Novo RDO</button>':''}
     </div>
     <div class="kpi-grid rdo-kpis">
@@ -1438,7 +1520,7 @@ Views.rdos={
       return `<button class="rdo-list-card" onclick="RDO.detail(${U.jsArg(rdo.id)})">
         <span class="rdo-date"><b>${String(rdo.date||'').slice(8,10)||'—'}</b><small>${U.date(rdo.date)}</small></span>
         <span class="rdo-main"><b>${U.esc(rdo.number||'RDO')}</b><small>${U.esc(RDO.projectLabel(rdo.projectId))}</small><em>${U.esc(rdo.description||'')}</em></span>
-        <span class="rdo-team"><b>${(rdo.entries||[]).length}</b><small>pessoas</small></span>
+        <span class="rdo-team"><b>${RDO.visibleEntries(rdo).length}</b><small>pessoas</small></span>
         <span class="rdo-hours"><b>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>apontadas</small></span>
         <span class="rdo-status">${RDO.statusTag(rdo.status)}${linked.has(String(rdo.id))?'<small>Medido</small>':''}</span>
         <i data-lucide="chevron-right"></i>
