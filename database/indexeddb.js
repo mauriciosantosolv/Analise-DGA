@@ -12,10 +12,11 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 6;
+  const NAME = 'ccf_obras', VERSION = 7;
   const STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
-    'rdos','crew','labor_rates','rdo_financial','planning_history','workforce_status'
+    'rdos','crew','labor_rates','rdo_financial','planning_history','workforce_status',
+    'forecasts','measurement_receipts'
   ];
   const LOCAL_STORES = [...STORES,'rdo_attachments'];
   let db = null;
@@ -141,6 +142,7 @@ const DB = (() => {
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
   rdos:[], crew:[], laborRates:[], rdoFinancial:[], planningHistory:[], workforceStatus:[], rdoAttachments:[],
+  forecasts:[], measurementReceipts:[],
   filters:{ project:'', projects:[], client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
@@ -151,6 +153,9 @@ const State = {
     this.projects=p; this.budgets=b; this.purchases=c; this.planning=pl; this.clients=cl; this.categories=cat; this.measurements=me;
     this.rdos=rdos; this.crew=crew; this.laborRates=rates; this.rdoFinancial=financial;
     this.planningHistory=planningHistory; this.workforceStatus=workforceStatus; this.rdoAttachments=attachments;
+    // v4.1.0 — fluxo de caixa por medições
+    this.forecasts=await DB.all('forecasts');
+    this.measurementReceipts=await DB.all('measurement_receipts');
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
   async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; },

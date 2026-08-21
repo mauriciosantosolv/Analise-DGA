@@ -8,11 +8,41 @@
 Views.medicoes = {
   title:'Medições',
 
+  // v4.1.0 — filtros da tela. Período inicia no mês corrente.
+  periodFrom:'',
+  periodTo:'',
+  situationFilter:'',
+  statusFilter:'',
+  ensurePeriod(){
+    if(this.periodFrom&&this.periodTo) return;
+    const today=new Date();
+    this.periodFrom=U.isoDate(new Date(today.getFullYear(),today.getMonth(),1));
+    this.periodTo=U.isoDate(new Date(today.getFullYear(),today.getMonth()+1,0));
+  },
+  applyFilters(){
+    this.periodFrom=document.getElementById('md-period-from').value;
+    this.periodTo=document.getElementById('md-period-to').value;
+    this.statusFilter=document.getElementById('md-status-filter').value;
+    this.situationFilter=document.getElementById('md-situation-filter').value;
+    this.render();
+  },
+  clearFilters(){
+    this.periodFrom=''; this.periodTo=''; this.statusFilter=''; this.situationFilter='';
+    this.ensurePeriod(); this.render();
+  },
+
   canEdit(){
     return typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('measurements');
   },
   filtered(){
-    return State.measurements.filter(m=>!State.filters.project || String(m.projectId)===String(State.filters.project));
+    this.ensurePeriod();
+    return State.measurements.filter(m=>{
+      if(State.filters.project && String(m.projectId)!==String(State.filters.project)) return false;
+      if(!CashFlow.inPeriod(m.date,this.periodFrom,this.periodTo)) return false;
+      if(this.statusFilter && String(m.status||'')!==this.statusFilter) return false;
+      if(this.situationFilter && CashFlow.situation(m).key!==this.situationFilter) return false;
+      return true;
+    });
   },
   render(){
     const rows=this.filtered();
@@ -23,10 +53,22 @@ Views.medicoes = {
     const totalApproved=rows.filter(m=>U.norm(m.status).startsWith('aprova')).reduce((sum,m)=>sum+(Number(m.value)||0),0);
     const totalAwaiting=rows.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((sum,m)=>sum+(Number(m.value)||0),0);
     const totalRevenue=State.projects.filter(p=>!State.filters.project||String(p.id)===String(State.filters.project)).reduce((sum,p)=>sum+(Number(p.saleValue)||0),0);
+    const scopedProjectIds=State.filters.project?[String(State.filters.project)]:State.projects.map(p=>String(p.id));
+    const cash=CashFlow.summary(rows,scopedProjectIds,this.periodFrom,this.periodTo);
     $c().innerHTML=`<div class="toolbar">
       <div><h2>Medições e faturamento</h2><small>HH é consolidado pelos RDOs; obra e fornecimento permanecem manuais.</small></div>
       <div class="spacer"></div>
       ${this.canEdit()?'<button class="btn btn-primary" onclick="Views.medicoes.form()"><i data-lucide="plus"></i>Nova Medição</button>':''}
+      ${this.canEdit()?'<button class="btn btn-ghost" onclick="CashFlow.forecastForm()"><i data-lucide="calendar-plus"></i>Nova Previsão</button>':''}
+    </div>
+    <div class="toolbar" style="gap:10px;flex-wrap:wrap">
+      <div><label style="font-size:.72rem">De</label><input id="md-period-from" type="date" value="${U.esc(this.periodFrom)}"></div>
+      <div><label style="font-size:.72rem">Até</label><input id="md-period-to" type="date" value="${U.esc(this.periodTo)}"></div>
+      <div><label style="font-size:.72rem">Status</label><select id="md-status-filter"><option value="">Todos</option>${['Aguardando aprovação','Aprovada','Faturada'].map(status=>`<option ${status===this.statusFilter?'selected':''}>${status}</option>`).join('')}</select></div>
+      <div><label style="font-size:.72rem">Recebimento</label><select id="md-situation-filter"><option value="">Todos</option>${[['pending','Não recebida'],['partial','Recebida parcialmente'],['received','Recebida']].map(([key,label])=>`<option value="${key}" ${key===this.situationFilter?'selected':''}>${label}</option>`).join('')}</select></div>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" onclick="Views.medicoes.applyFilters()"><i data-lucide="filter"></i>Aplicar</button>
+      <button class="btn btn-ghost btn-sm" onclick="Views.medicoes.clearFilters()"><i data-lucide="rotate-ccw"></i>Limpar</button>
     </div>
     <div class="kpi-grid">
       <div class="kpi accent-blue"><div class="k-label"><i data-lucide="banknote"></i>Receita Contratada</div><div class="k-value">${U.money(totalRevenue)}</div></div>
@@ -35,31 +77,41 @@ Views.medicoes = {
       <div class="kpi accent-amber"><div class="k-label"><i data-lucide="clock-3"></i>Aguardando aprovação</div><div class="k-value">${U.money(totalAwaiting)}</div></div>
       <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-totalMeasured)}</div></div>
     </div>
+    <div class="kpi-grid">
+      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-clock"></i>Previsão de Medição</div><div class="k-value">${U.money(cash.forecastBilling)}</div><div class="k-sub">${cash.forecastBillingCount?`${cash.forecastBillingCount} previsão(ões) · a partir de ${U.date(cash.forecastBillingNext)}`:'Sem previsão no período'}</div></div>
+      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-check"></i>Previsão de Recebimento</div><div class="k-value">${U.money(cash.forecastReceipt)}</div><div class="k-sub">${cash.forecastReceiptCount?`${cash.forecastReceiptCount} previsão(ões) · a partir de ${U.date(cash.forecastReceiptNext)}`:'Sem previsão no período'}</div></div>
+      <div class="kpi accent-green"><div class="k-label"><i data-lucide="file-check-2"></i>Previsto x Faturado</div><div class="k-value">${U.money(cash.invoiced)}</div><div class="k-sub">previsto ${U.money(cash.forecastBilling)} · ${CashFlow.gapMarkup(cash.billingGap)}</div></div>
+      <div class="kpi accent-green"><div class="k-label"><i data-lucide="hand-coins"></i>Previsto x Recebido</div><div class="k-value">${U.money(cash.received)}</div><div class="k-sub">previsto ${U.money(cash.forecastReceipt)} · ${CashFlow.gapMarkup(cash.receiptGap)}</div></div>
+    </div>
     ${Object.keys(byProj).length?Object.entries(byProj).map(([projectId,items])=>{
       const project=State.projects.find(x=>String(x.id)===String(projectId));
       const measured=items.reduce((sum,m)=>sum+(Number(m.value)||0),0);
       const invoiced=items.filter(m=>U.norm(m.status).startsWith('faturad')).reduce((sum,m)=>sum+(Number(m.value)||0),0);
       const approved=items.filter(m=>U.norm(m.status).startsWith('aprova')).reduce((sum,m)=>sum+(Number(m.value)||0),0);
       const awaiting=items.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((sum,m)=>sum+(Number(m.value)||0),0);
+      const receivedProject=items.reduce((sum,m)=>sum+CashFlow.situation(m).received,0);
       const pct=project&&project.saleValue>0?measured/project.saleValue*100:null;
       return `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
           <h3>${U.esc(U.projLabel(project))}</h3>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--green)">${U.money(invoiced)} faturado</b><span class="tag tag-blue">${U.money(approved)} aprovado</span><span class="tag tag-amber">${U.money(awaiting)} aguardando</span><span class="tag ${pct!=null&&pct>=100?'tag-green':'tag-blue'}">${U.pct(pct)} medido</span></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--green)">${U.money(invoiced)} faturado</b><span class="tag tag-blue">${U.money(approved)} aprovado</span><span class="tag tag-amber">${U.money(awaiting)} aguardando</span><span class="tag tag-green">${U.money(receivedProject)} recebido</span><span class="tag ${pct!=null&&pct>=100?'tag-green':'tag-blue'}">${U.pct(pct)} medido</span></div>
         </div>
         <div class="progress" style="margin-bottom:10px"><div style="width:${Math.min(100,pct||0)}%;background:var(--green)"></div></div>
         <div class="table-scroll" style="max-height:260px"><table>
-          <thead><tr><th>Data</th><th>Referência</th><th>Origem</th><th>Status</th><th class="num">Valor Medido</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Referência</th><th>Origem</th><th>Status</th><th>Recebimento</th><th class="num">Valor Medido</th><th class="num">Recebido</th><th></th></tr></thead>
           <tbody>${items.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(m=>`<tr>
             <td>${U.date(m.date)}</td><td>${U.esc(m.ref||'—')}</td>
             <td><span class="tag tag-gray">${m.source==='rdo-hh'?`${(m.rdoIds||[]).length} RDO(s)`:'Manual'}</span></td>
             <td><span class="tag ${{Faturada:'tag-green',Aprovada:'tag-blue','Aguardando aprovação':'tag-amber'}[m.status]||'tag-gray'}">${U.esc(m.status||'—')}</span></td>
+            <td>${CashFlow.situationTag(m)}</td>
             <td class="num"><b>${U.money2(m.value)}</b></td>
-            <td><div class="table-actions">${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
+            <td class="num">${U.money2(CashFlow.situation(m).received)}</td>
+            <td><div class="table-actions">${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.receiptForm(${U.jsArg(m.id)})" title="Medição Recebida"><i data-lucide="hand-coins"></i></button>`:''}${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
           </tr>`).join('')}</tbody>
         </table></div>
+        ${CashFlow.projectForecastMarkup(projectId)}
       </div>`;
-    }).join(''):'<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição registrada.</div>'}`;
+    }).join(''):'<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição no período e filtros selecionados.</div>'}`;
     U.icons();
   },
 

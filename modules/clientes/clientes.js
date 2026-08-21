@@ -41,12 +41,13 @@ Views.clientes = {
           ${c.contact?`<i data-lucide="user" style="width:13px;height:13px"></i> ${U.esc(c.contact)}<br>`:''}
           ${c.phone?`<i data-lucide="phone" style="width:13px;height:13px"></i> ${U.esc(c.phone)}<br>`:''}
           ${c.email?`<i data-lucide="mail" style="width:13px;height:13px"></i> ${U.esc(c.email)}<br>`:''}
-          <span class="tag tag-blue" style="margin-top:6px">${projs.length} projeto(s) · ${U.money(revenue)}</span></div></div>`;
+          <span class="tag tag-blue" style="margin-top:6px">${projs.length} projeto(s) · ${U.money(revenue)}</span>
+          <span class="tag ${c.paymentTerm?'tag-gray':'tag-amber'}" style="margin-top:6px">${c.paymentTerm?`${U.esc(String(c.paymentTerm))} DDL`:'Sem condição de pagamento'}</span></div></div>`;
     }).join('') || `<div class="empty card" style="grid-column:1/-1"><i data-lucide="users"></i><br>Nenhum cliente cadastrado.</div>`;
     U.icons();
   },
   form(id){
-    const c = id ? State.clients.find(x=>x.id===id) : {name:'',cnpj:'',contact:'',phone:'',email:'',notes:'',logo:''};
+    const c = id ? State.clients.find(x=>x.id===id) : {name:'',cnpj:'',contact:'',phone:'',email:'',notes:'',logo:'',paymentTerm:30};
     UI.modal({ title:id?'Editar Cliente':'Novo Cliente', body:`
       <div class="form-grid">
         <div class="full" style="display:flex;gap:12px;align-items:center">
@@ -57,6 +58,7 @@ Views.clientes = {
         <div><label>Contato</label><input id="cl-contact" value="${U.esc(c.contact)}"></div>
         <div><label>Telefone</label><input id="cl-phone" value="${U.esc(c.phone)}"></div>
         <div class="full"><label>Email</label><input id="cl-email" value="${U.esc(c.email)}"></div>
+        <div class="full"><label>Condição de Pagamento *</label><select id="cl-term">${[30,60,90].map(days=>`<option value="${days}" ${Number(c.paymentTerm)===days?'selected':''}>${days} DDL — recebimento ${days} dias após o faturamento</option>`).join('')}</select><small>Usada para calcular a data prevista de recebimento das previsões deste cliente.</small></div>
         <div class="full"><label>Observações</label><textarea id="cl-notes" rows="2">${U.esc(c.notes)}</textarea></div>
       </div>`,
       footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.clientes.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
@@ -83,7 +85,8 @@ Views.clientes = {
       const obj = { ...(id?c:{id:U.id()}), name, logo,
         cnpj:document.getElementById('cl-cnpj').value.trim(), contact:document.getElementById('cl-contact').value.trim(),
         phone:document.getElementById('cl-phone').value.trim(), email:document.getElementById('cl-email').value.trim(),
-        notes:document.getElementById('cl-notes').value };
+        notes:document.getElementById('cl-notes').value,
+        paymentTerm:Number(document.getElementById('cl-term').value)||30 };
       await DB.put('clients', obj); await State.reload();
       UI.close(); UI.toast('Cliente salvo', 'success'); App.render();
     };
