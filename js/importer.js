@@ -312,7 +312,53 @@ const Importer = (() => {
     }
     await DB.bulkPut('purchases', records);
     await State.reload();
-    return {summary:{projects:created, added, skipped, type:'Mão de obra'},recordIds:records.map(x=>x.id)};
+    // v4.0.2 — mão de obra importada abate o planejamento pela mesma regra do
+    // RDO e da integração Omie, sem depender de confirmação manual.
+    const offset=await applyLaborPlanningOffset(records.map(x=>x.id));
+    return {summary:{projects:created, added, skipped, type:'Mão de obra', planningOffset:offset},
+      recordIds:records.map(x=>x.id), autoOffset:true};
+  }
+
+  // Abate do planejamento os custos de mão de obra recém-importados. Na nuvem a
+  // operação é atômica no banco; sem nuvem, replica a mesma regra localmente.
+  async function applyLaborPlanningOffset(recordIds){
+    const ids=(recordIds||[]).map(String).filter(Boolean);
+    const empty={offsetCount:0,applied:0,unmatched:0};
+    if(!ids.length) return empty;
+    try{
+      if(typeof Cloud!=='undefined' && Cloud.active()){
+        if(!Cloud.canEditStore('planning')) return empty;
+        const result=await Cloud.offsetLaborPlanning(ids)||empty;
+        await DB.syncFromCloud();
+        await State.reload();
+        return {offsetCount:Number(result.offsetCount)||0,
+          applied:Number(result.applied)||0,unmatched:Number(result.unmatched)||0};
+      }
+      let offsetCount=0, applied=0, unmatched=0;
+      for(const id of ids){
+        const purchase=State.purchases.find(item=>String(item.id)===id);
+        if(!purchase || !(Number(purchase.value)>0)) continue;
+        if(purchase.planningOffset || (Array.isArray(purchase.planningOffsets)&&purchase.planningOffsets.length)) continue;
+        const offset=State.planPlanningConsumption(
+          purchase.projectId,purchase.category,purchase.value,purchase.id,
+          'labor_consumed','labor','Mão de obra importada abatida do planejamento');
+        unmatched=Math.round((unmatched+offset.unmatched)*100)/100;
+        if(!(offset.applied>0)) continue;
+        for(const row of offset.planningRows) await DB.put('planning',row);
+        for(const row of offset.historyRows) await DB.put('planning_history',row);
+        await DB.put('purchases',{...purchase,planningOffsets:offset.offsets,
+          planningOffsetAmount:offset.applied,planningUnmatchedAmount:offset.unmatched,
+          abatido:true,planningOffsetAt:new Date().toISOString()});
+        offsetCount++; applied=Math.round((applied+offset.applied)*100)/100;
+      }
+      if(offsetCount) await State.reload();
+      return {offsetCount,applied,unmatched};
+    }catch(err){
+      // O abatimento nunca pode derrubar a importação já concluída.
+      if(typeof UI!=='undefined')
+        UI.toast('Os lançamentos foram importados, mas o abatimento do planejamento falhou: '+U.esc(err.message||err),'warn',9000);
+      return empty;
+    }
   }
 
 
@@ -363,6 +409,14 @@ const Importer = (() => {
     if(s.saleUpdates) lines.push(`✔ ${s.saleUpdates} valor(es) de venda atualizado(s)`);
     lines.push(`✔ ${s.added} registro(s) adicionado(s) ao banco`);
     lines.push(s.skipped.length ? `⚠ ${s.skipped.length} linha(s) ignorada(s) por dados obrigatórios ausentes ou inválidos (linhas: ${s.skipped.slice(0,15).join(', ')}${s.skipped.length>15?'…':''})` : `✔ Nenhum erro encontrado`);
+    if(s.planningOffset){
+      const offset=s.planningOffset;
+      lines.push(offset.offsetCount
+        ? `✔ ${offset.offsetCount} lançamento(s) abatido(s) automaticamente do planejamento (${U.money2(offset.applied)})`
+        : `⚠ Nenhum item planejado de mesmo projeto e categoria foi encontrado para abater`);
+      if(Number(offset.unmatched)>0)
+        lines.push(`⚠ ${U.money2(offset.unmatched)} sem saldo planejado correspondente`);
+    }
     return `<div class="import-log">${lines.map(U.esc).join('<br>')}</div>`;
   }
 
@@ -377,7 +431,9 @@ const Importer = (() => {
       UI.loading(false);
       if(res.error){ UI.modal({title:'⚠ Inconsistência na planilha', body:`<div class="import-log">${U.esc(res.error)}</div>`, footer:`<button class="btn btn-primary" onclick="UI.close()">Entendi</button>`}); return; }
       lastImportedIds=(res.recordIds||[]).slice();
-      const canOffset=lastImportedIds.length && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('planning'));
+      // Mão de obra já foi abatida automaticamente; não reoferece o vínculo manual.
+      const canOffset=!res.autoOffset && lastImportedIds.length
+        && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('planning'));
       UI.modal({title:'Resumo da Importação', body:`${renderSummary(res.summary)}${canOffset?'<p style="margin-top:12px;color:var(--text2);font-size:.84rem">Você pode vincular os novos gastos aos itens planejados de mesmo projeto e categoria.</p>':''}`, footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>${canOffset?'<button class="btn btn-primary" onclick="Importer.reconcileLast()"><i data-lucide="calendar-check"></i>Abater do planejamento</button>':''}`});
       UI.toast(`${res.summary.added} registros adicionados`, 'success');
       App.render();

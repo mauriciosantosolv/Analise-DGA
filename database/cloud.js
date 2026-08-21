@@ -653,7 +653,7 @@ const Cloud = (() => {
     if(!organization()) throw new Error('Nenhuma organização ativa.');
     const out=[]; const size=1000;
     for(let start=0;;start+=size){
-      const q=`select=store,record_id,data,updated_at&organization_id=eq.${encodeURIComponent(organization().id)}&order=updated_at.asc`;
+      const q=`select=store,record_id,data,updated_at&organization_id=eq.${encodeURIComponent(organization().id)}&order=updated_at.asc,store.asc,record_id.asc`;
       const res=await fetch(baseUrl()+'/rest/v1/app_records?'+q,{
         headers:{...authHeaders(false),Range:`${start}-${start+size-1}`}
       });
@@ -795,7 +795,7 @@ const Cloud = (() => {
   async function approveRdo(rdoId,financial){
     await ensureFresh();
     if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
-    return request('/rest/v1/rpc/clique_obras_approve_rdo_v401',{
+    return request('/rest/v1/rpc/clique_obras_approve_rdo_v402',{
       method:'POST',
       headers:authHeaders(true),
       body:JSON.stringify({
@@ -813,6 +813,49 @@ const Cloud = (() => {
       method:'POST',
       headers:authHeaders(true),
       body:JSON.stringify({target_organization_id:organization().id})
+    });
+  }
+
+  // v4.0.2 — abatimento automatico do planejamento para mao de obra.
+  async function repairRdoPlanning(){
+    await ensureFresh();
+    if(!organization() || !fullAccess())
+      throw new Error('Reparacao do abatimento de mao de obra indisponivel.');
+    return request('/rest/v1/rpc/clique_obras_repair_rdo_planning_v402',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({target_organization_id:organization().id})
+    });
+  }
+
+  async function offsetLaborPlanning(recordIds){
+    await ensureFresh();
+    const ids=[...new Set((recordIds||[]).map(String).filter(Boolean))];
+    if(!organization() || !ids.length) return {offsetCount:0,applied:0,unmatched:0};
+    if(!canEditStore('planning') || !canEditStore('purchases'))
+      throw new Error('Seu usuario nao possui permissao para abater o planejamento.');
+    return request('/rest/v1/rpc/clique_obras_offset_labor_planning_v402',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        target_organization_id:organization().id,
+        target_record_ids:ids.slice(0,2000)
+      })
+    });
+  }
+
+  async function restoreLaborPlanning(recordId){
+    await ensureFresh();
+    if(!organization() || !recordId) return 0;
+    if(!canEditStore('planning'))
+      throw new Error('Seu usuario nao possui permissao para restaurar o planejamento.');
+    return request('/rest/v1/rpc/clique_obras_restore_labor_planning_v402',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        target_organization_id:organization().id,
+        target_record_id:String(recordId)
+      })
     });
   }
 
@@ -1139,6 +1182,7 @@ const Cloud = (() => {
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
+    repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
     omieRequest,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,

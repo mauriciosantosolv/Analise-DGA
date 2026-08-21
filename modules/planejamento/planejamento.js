@@ -170,11 +170,15 @@ Views.planejamento = {
     const plan=State.planning.find(item=>String(item.id)===String(id)); if(!plan) return;
     const rows=State.planningHistory.filter(item=>String(item.planningId)===String(id))
       .sort((a,b)=>String(b.occurredAt||'').localeCompare(String(a.occurredAt||'')));
-    const labels={baseline:'Saldo inicial',created:'Criado',updated:'Alterado',consumed:'Consumido',restored:'Restaurado',omie_consumed:'Consumido pelo Omie',omie_restored:'Restaurado pelo Omie'};
+    const labels={baseline:'Saldo inicial',created:'Criado',updated:'Alterado',consumed:'Consumido',restored:'Restaurado',
+      omie_consumed:'Consumido pelo Omie',omie_restored:'Restaurado pelo Omie',
+      rdo_consumed:'Consumido por RDO aprovado',rdo_restored:'Restaurado por exclusão de RDO',
+      labor_consumed:'Consumido por mão de obra',labor_restored:'Restaurado por exclusão de mão de obra'};
+    const sources={omie:'Omie',rdo:'RDO · equipe própria',labor:'Mão de obra',migration:'Migração'};
     UI.modal({title:'Histórico do valor projetado',wide:true,body:`
       <div class="planning-history-summary"><div><small>Previsto inicial</small><b>${U.money2(plan.originalValue!==''&&plan.originalValue!=null&&Number.isFinite(Number(plan.originalValue))?Number(plan.originalValue):(Number(plan.value)||0)+(Number(plan.realizedAmount)||0))}</b></div><div><small>Consumido</small><b>${U.money2(Number(plan.realizedAmount)||0)}</b></div><div><small>Saldo projetado atual</small><b>${U.money2(plan.value)}</b></div></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:48vh"><table><thead><tr><th>Data</th><th>Evento</th><th>Origem</th><th class="num">Antes</th><th class="num">Depois</th><th class="num">Valor</th></tr></thead><tbody>
-      ${rows.map(row=>`<tr><td>${U.date(row.occurredAt)}</td><td><b>${U.esc(labels[row.action]||row.action||'Evento')}</b><br><small>${U.esc(row.description||'')}</small></td><td>${U.esc(row.source==='omie'?'Omie':'CliqueObras')}</td><td class="num">${U.money2(row.beforeValue)}</td><td class="num">${U.money2(row.afterValue)}</td><td class="num">${U.money2(row.amount)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nenhum evento registrado.</div></td></tr>'}
+      ${rows.map(row=>`<tr><td>${U.date(row.occurredAt)}</td><td><b>${U.esc(labels[row.action]||row.action||'Evento')}</b><br><small>${U.esc(row.description||'')}</small></td><td>${U.esc(sources[row.source]||'CliqueObras')}</td><td class="num">${U.money2(row.beforeValue)}</td><td class="num">${U.money2(row.afterValue)}</td><td class="num">${U.money2(row.amount)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nenhum evento registrado.</div></td></tr>'}
       </tbody></table></div></div>`,footer:'<button class="btn btn-primary" onclick="UI.close()">Fechar</button>'});
   },
   remove(id){

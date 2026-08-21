@@ -199,6 +199,10 @@ Views.financeiro = {
     }
   },
   async reversePlanningOffset(purchase){
+    // v4.0.2 — abatimentos automáticos (mão de obra e RDO) são gravados em
+    // planningOffsets. O vínculo manual continua em planningOffset.
+    if(purchase && Array.isArray(purchase.planningOffsets) && purchase.planningOffsets.length)
+      await this.reverseAutomaticPlanningOffsets(purchase);
     const offset=purchase && purchase.planningOffset;
     if(!offset || !offset.planningId || !(Number(offset.amount)>0)) return false;
     if(typeof Cloud!=='undefined' && Cloud.active() && !Cloud.canEditStore('planning'))
@@ -222,6 +226,24 @@ Views.financeiro = {
       beforeValue,afterValue:restored.value,
       description:'Planejamento restaurado após remoção do lançamento'});
     return true;
+  },
+  async reverseAutomaticPlanningOffsets(purchase){
+    const offsets=Array.isArray(purchase&&purchase.planningOffsets)?purchase.planningOffsets:[];
+    if(!offsets.length) return 0;
+    if(typeof Cloud!=='undefined' && Cloud.active() && !Cloud.canEditStore('planning'))
+      throw new Error('Este gasto abateu um planejamento, mas seu usuário não pode restaurá-lo.');
+    const isLabor=String(purchase.sourceType||'')==='labor';
+    if(typeof Cloud!=='undefined' && Cloud.active() && isLabor && String(purchase.source||'')!=='rdo-cost'){
+      const restored=Number(await Cloud.restoreLaborPlanning(purchase.id))||0;
+      await DB.syncFromCloud(); await State.reload();
+      return restored;
+    }
+    const restore=State.planPlanningRestore(offsets,purchase.id,
+      isLabor?'labor_restored':'restored',isLabor?'labor':'manual',
+      'Planejamento restaurado após remoção do custo de mão de obra');
+    for(const row of restore.planningRows) await DB.put('planning',row);
+    for(const row of restore.historyRows) await DB.put('planning_history',row);
+    return restore.restored;
   },
   showImportReconciliation(ids){
     if(typeof Cloud!=='undefined' && Cloud.active() && !Cloud.canEditStore('planning'))
@@ -315,6 +337,7 @@ Dash.showPurchase = function(id){
       <b>Valor:</b> <span style="font-size:1.1rem;font-weight:800;color:var(--blue)">${U.money2(x.value)}</span><br>
       ${x.planningOffset?`<b>Planejamento abatido:</b> <span class="tag tag-green">${U.money2(x.planningOffset.amount)}</span><br>`:''}
       ${x.externalSource==='omie'&&Number(x.planningOffsetAmount)>0?`<b>Planejamento abatido pelo Omie:</b> <span class="tag tag-green">${U.money2(x.planningOffsetAmount)}</span><br>`:''}
+      ${x.externalSource!=='omie'&&Number(x.planningOffsetAmount)>0?`<b>Planejamento abatido automaticamente:</b> <span class="tag tag-green">${U.money2(x.planningOffsetAmount)}</span>${Number(x.planningUnmatchedAmount)>0?` · <span class="tag tag-amber">sem saldo: ${U.money2(x.planningUnmatchedAmount)}</span>`:''}<br>`:''}
       ${x.externalSource==='omie'&&Number(x.planningUnmatchedAmount)>0?`<b>Sem saldo planejado correspondente:</b> <span class="tag tag-orange">${U.money2(x.planningUnmatchedAmount)}</span><br>`:''}
       <small style="color:var(--text3)">Importado de ${U.esc(x.file||'—')} em ${U.date(x.importedAt)}</small></div>`,
     footer:`${x.externalSource==='omie'?'<span style="margin-right:auto;color:var(--text3);font-size:.8rem"><i data-lucide="lock"></i> Gerenciado pela sincronização Omie</span>':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>

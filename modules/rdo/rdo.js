@@ -607,18 +607,30 @@ const RDO = {
         await Cloud.approveRdo(rdo.id,financial);
         await DB.syncFromCloud();
       }else{
+        // v4.0.2 — sem nuvem, o abatimento é calculado aqui e gravado na mesma
+        // transação local da aprovação.
+        const offset=State.planPlanningConsumption(
+          purchase.projectId,purchase.category,purchase.value,rdo.id,
+          'rdo_consumed','rdo','Custo de mão de obra do RDO abatido do planejamento');
+        Object.assign(purchase,{
+          planningOffsets:offset.offsets,
+          planningOffsetAmount:offset.applied,
+          planningUnmatchedAmount:offset.unmatched,
+          abatido:offset.applied>0,
+          planningOffsetAt:new Date().toISOString()
+        });
         await DB.approveRdoLocal(financial,purchase,{
           ...rdo,
           status:'Aprovado',
           approvedAt:financial.approvedAt,
           approvedBy:financial.approvedBy,
           updatedAt:financial.approvedAt
-        });
+        },offset.planningRows,offset.historyRows);
       }
       await State.reload();
       UI.loading(false);
       UI.closeAll();
-      UI.toast('RDO aprovado. O custo da mão de obra entrou no realizado do projeto.','success',7000);
+      UI.toast('RDO aprovado. O custo da mão de obra entrou no realizado e foi abatido do planejamento.','success',7000);
       App.render();
     }catch(err){
       UI.loading(false);
@@ -697,6 +709,14 @@ const RDO = {
           if(approved){
             const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
             const purchase=State.purchases.find(item=>String(item.sourceRdoId||'')===String(rdo.id));
+            // v4.0.2 — devolve ao planejamento o que este RDO havia abatido,
+            // antes de remover o custo realizado.
+            if(purchase && Array.isArray(purchase.planningOffsets) && purchase.planningOffsets.length){
+              const restore=State.planPlanningRestore(purchase.planningOffsets,rdo.id,
+                'rdo_restored','rdo','Planejamento restaurado após exclusão do RDO');
+              for(const row of restore.planningRows) await DB.put('planning',row);
+              for(const row of restore.historyRows) await DB.put('planning_history',row);
+            }
             if(financial) await DB.del('rdo_financial',financial.id);
             if(purchase) await DB.del('purchases',purchase.id);
           }
@@ -705,7 +725,7 @@ const RDO = {
         this.attachmentCache.delete(String(rdo.id));
         await State.reload();
         UI.loading(false);
-        UI.toast(approved?'RDO aprovado excluído e custo estornado.':'RDO excluído.','warn',6500);
+        UI.toast(approved?'RDO aprovado excluído. Custo estornado e planejamento restaurado.':'RDO excluído.','warn',6500);
         App.render();
       }catch(err){
         UI.loading(false);

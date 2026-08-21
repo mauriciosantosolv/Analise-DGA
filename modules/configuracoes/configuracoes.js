@@ -240,6 +240,13 @@ Views.configuracoes = {
         </div>
       </section>
       <section class="card settings-card settings-card-wide">
+        <h3 style="margin-bottom:8px">Mão de obra e planejamento</h3>
+        <p style="font-size:.84rem;color:var(--text2);margin-bottom:10px">A partir da versão 4.0.2 todo RDO aprovado e toda planilha de mão de obra importada abatem o planejamento automaticamente. Use o botão abaixo apenas uma vez, se quiser aplicar o mesmo abatimento aos RDOs que já estavam aprovados antes da atualização.</p>
+        <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.repairLaborPlanning()"><i data-lucide="calendar-check"></i>Abater RDOs aprovados antes da v4.0.2</button>
+        </div>
+      </section>
+      <section class="card settings-card settings-card-wide">
         <h3 style="margin-bottom:8px">Atalhos rápidos</h3>
         <div style="display:flex;gap:9px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="App.go('categorias')"><i data-lucide="tags"></i>Categorias</button>
@@ -642,6 +649,48 @@ Views.configuracoes = {
 };
 
 /* ---------- BACKUP ---------- */
+Views.configuracoes.repairLaborPlanning = async function(){
+  const cloudActive=typeof Cloud!=='undefined' && Cloud.active();
+  if(cloudActive && !['owner','admin'].includes(Cloud.role()))
+    return UI.toast('Somente proprietário ou administrador pode executar esta ação.','warn',6000);
+  UI.confirm('Aplicar o abatimento do planejamento aos RDOs já aprovados antes da versão 4.0.2?<br><br>O saldo projetado dos itens de mesmo projeto e categoria será reduzido e cada movimento ficará registrado no histórico. Cada RDO é abatido uma única vez.', async () => {
+    try{
+      UI.loading(true,'Abatendo custos de mão de obra já aprovados…');
+      let repaired=0, applied=0;
+      if(cloudActive){
+        const result=await Cloud.repairRdoPlanning()||{};
+        repaired=Number(result.repaired)||0; applied=Number(result.applied)||0;
+        await DB.syncFromCloud();
+      }else{
+        for(const purchase of State.purchases.filter(item=>String(item.source||'')==='rdo-cost')){
+          if(Array.isArray(purchase.planningOffsets)&&purchase.planningOffsets.length) continue;
+          const rdo=State.rdos.find(item=>String(item.id)===String(purchase.sourceRdoId||''));
+          if(!rdo || rdo.status!=='Aprovado' || !(Number(purchase.value)>0)) continue;
+          const offset=State.planPlanningConsumption(purchase.projectId,purchase.category,purchase.value,
+            purchase.sourceRdoId,'rdo_consumed','rdo',
+            'Custo de mão de obra do RDO abatido do planejamento (reparação v4.0.2)');
+          if(!(offset.applied>0)) continue;
+          for(const row of offset.planningRows) await DB.put('planning',row);
+          for(const row of offset.historyRows) await DB.put('planning_history',row);
+          await DB.put('purchases',{...purchase,planningOffsets:offset.offsets,
+            planningOffsetAmount:offset.applied,planningUnmatchedAmount:offset.unmatched,
+            abatido:true,planningOffsetAt:new Date().toISOString(),planningRepairedByVersion:'4.0.2'});
+          repaired++; applied=Math.round((applied+offset.applied)*100)/100;
+        }
+      }
+      await State.reload();
+      UI.loading(false);
+      UI.toast(repaired
+        ? `${repaired} RDO(s) abatido(s) do planejamento · ${U.money2(applied)}`
+        : 'Nenhum RDO aprovado pendente de abatimento.', repaired?'success':'warn', 7500);
+      App.render();
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível aplicar o abatimento: '+U.esc(err.message||err),'error',8000);
+    }
+  }, false);
+};
+
 Views.backup = {
   title:'Backup',
   render(){
