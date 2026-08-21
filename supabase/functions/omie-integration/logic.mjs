@@ -2,7 +2,8 @@ export const OMIE_ENDPOINTS = Object.freeze({
   projects:'https://app.omie.com.br/api/v1/geral/projetos/',
   categories:'https://app.omie.com.br/api/v1/geral/categorias/',
   clients:'https://app.omie.com.br/api/v1/geral/clientes/',
-  payables:'https://app.omie.com.br/api/v1/financas/contapagar/'
+  payables:'https://app.omie.com.br/api/v1/financas/contapagar/',
+  receivables:'https://app.omie.com.br/api/v1/financas/contareceber/'
 });
 
 export function cleanText(value,max=240){
@@ -138,11 +139,91 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
   return {entries,skipped};
 }
 
+// ---------------------------------------------------------------------------
+// v4.2.0 — Contas a receber.
+//
+// A regra de situacao segue exatamente a especificacao. A ordem das checagens
+// importa: "A RECEBER" contem "RECEB" e precisa ser tratada antes.
+//
+//   Recebido               -> importa o valor integral
+//   Recebido parcialmente  -> importa pendente de conferencia (ver abaixo)
+//   Atrasado               -> nao sincroniza
+//   A vencer / A receber   -> ignora
+//   Cancelado              -> ignora
+//   qualquer outro         -> nao sincroniza (padrao seguro)
+//
+// A API do Omie nao expoe o valor efetivamente baixado em recebimento parcial
+// (nem em ListarContasReceber nem em ConsultarContaReceber, onde o bloco
+// `recebimento` volta nulo). Por isso um titulo parcial entra com valor zero e
+// marcado como pendingAmount: o usuario informa o valor recebido no momento da
+// conciliacao, que ja e manual por definicao. Nenhum numero e inventado.
+export function receivableDisposition(status){
+  const normalized=cleanText(status,60)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  if(!normalized) return 'skip';
+  if(normalized.includes('CANCEL')) return 'ignore';
+  if(normalized.includes('ATRAS')) return 'skip';
+  if(normalized.includes('VENCER')||normalized==='A RECEBER') return 'ignore';
+  if(normalized.includes('PARCIAL')) return 'partial';
+  if(normalized.includes('RECEB')||normalized.includes('LIQUID')) return 'received';
+  return 'skip';
+}
+
+export function buildReceivableEntries(titles,projectMappings,customerMappings=new Map()){
+  const projects=projectMappings instanceof Map?projectMappings:new Map();
+  const customers=customerMappings instanceof Map?customerMappings:new Map();
+  const entries=[];
+  let skipped=0,ignored=0,unmapped=0;
+  for(const title of Array.isArray(titles)?titles:[]){
+    const externalId=cleanText(title?.codigo_lancamento_omie??title?.codigo_lancamento_integracao,100);
+    const projectCode=cleanText(title?.codigo_projeto,60);
+    const project=projects.get(projectCode);
+    if(!externalId||!project||project.enabled===false){unmapped++;continue;}
+    const disposition=receivableDisposition(title?.status_titulo);
+    if(disposition==='ignore'){ignored++;continue;}
+    if(disposition==='skip'){skipped++;continue;}
+    const pendingAmount=disposition==='partial';
+    const date=ddmmyyyyToIso(title?.data_vencimento)
+      ||ddmmyyyyToIso(title?.data_previsao)
+      ||ddmmyyyyToIso(title?.data_registro)
+      ||ddmmyyyyToIso(title?.data_emissao);
+    if(!date){skipped++;continue;}
+    entries.push({
+      externalId,
+      omieProjectCode:projectCode,
+      projectId:cleanText(project.cliqueProjectId,180),
+      value:pendingAmount?0:Math.abs(money(title?.valor_documento)),
+      pendingAmount,
+      date,
+      status:cleanText(title?.status_titulo,40),
+      documentNumber:cleanText(
+        title?.numero_documento_fiscal??title?.numero_documento??title?.numero_parcela,100
+      ),
+      customerName:cleanText(customers.get(String(title?.codigo_cliente_fornecedor??''))??'',180),
+      notes:cleanText(
+        `Titulo Omie ${externalId}`
+        +(title?.numero_parcela?` - parcela ${title.numero_parcela}`:'')
+        +` - vencimento ${cleanText(title?.data_vencimento,10)}`,
+        500
+      )
+    });
+  }
+  return {entries,skipped,ignored,unmapped};
+}
+
+export function chunk(items,max=500){
+  const list=Array.isArray(items)?items:[];
+  const batches=[];
+  for(let index=0;index<list.length;index+=max) batches.push(list.slice(index,index+max));
+  return batches;
+}
+
 export function isOmieConcurrentMethodError(value){
   const normalized=cleanText(value instanceof Error?value.message:value,500)
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   return normalized.includes('ja existe uma requisicao desse metodo sendo executada')
-    ||normalized.includes('consumo redundante detectado');
+    ||normalized.includes('consumo redundante detectado')
+    ||normalized.includes('too many requests');
 }
 
 export function omieRetryDelay(attempt,value=''){

@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { enforceRateLimit, json, preflight, readJson, rejectUntrustedOrigin } from "../_shared/security.ts";
-import { batchPayableEntries, buildPayableEntries, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
+import { batchPayableEntries, buildPayableEntries, buildReceivableEntries, chunk, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -123,11 +123,11 @@ Deno.serve(async(request:Request)=>{
       admin.from("omie_connections").select("app_key_hint,auto_sync,auto_interval_minutes,initial_sync_date,last_sync_at,last_sync_attempt_at,last_sync_status,last_sync_error,connected_at").eq("organization_id",orgId).maybeSingle(),
       admin.from("omie_project_mappings").select("omie_project_code,omie_project_name,clique_project_id,enabled").eq("organization_id",orgId).order("omie_project_name"),
       admin.from("omie_category_mappings").select("omie_category_code,omie_category_name,clique_category_id,clique_category_name,enabled").eq("organization_id",orgId).order("omie_category_name"),
-      admin.from("omie_sync_runs").select("imported_count,updated_count,cancelled_count,skipped_count,status,finished_at").eq("organization_id",orgId).order("started_at",{ascending:false}).limit(1)
+      admin.from("omie_sync_runs").select("imported_count,updated_count,cancelled_count,skipped_count,status,finished_at,details").eq("organization_id",orgId).order("started_at",{ascending:false}).limit(1)
     ]);
     if(connectionError) throw connectionError;
     const last=Array.isArray(runs)&&runs[0]?runs[0]:null;
-    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status}:null}};
+    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status,receivables:(last.details as any)?.receivables??null}:null}};
   }
 
   async function supplierDirectory(orgId:string,payables:Record<string,unknown>[],creds:{app_key:string;app_secret:string}){
@@ -176,6 +176,23 @@ Deno.serve(async(request:Request)=>{
       if(error) throw new Error("Não foi possível atualizar o cadastro privado de fornecedores.");
     }
     return {names:directory,complete:refreshCodes.size<=lookupCodes.length&&failures===0,lookups:lookupCodes.length};
+  }
+
+  // v4.2.0 — nomes de cliente vindos somente do cache ja existente. Nenhuma
+  // consulta extra ao Omie, para nao aumentar o volume de chamadas da rotina.
+  async function customerDirectory(orgId:string,titles:Record<string,unknown>[]){
+    const codes=[...new Set(titles.map(row=>cleanText(row.codigo_cliente_fornecedor,60)).filter(Boolean))];
+    const directory=new Map<string,string>();
+    for(let offset=0;offset<codes.length;offset+=250){
+      const {data}=await admin.from("omie_supplier_cache")
+        .select("omie_supplier_code,fantasy_name")
+        .eq("organization_id",orgId).in("omie_supplier_code",codes.slice(offset,offset+250));
+      for(const row of data||[]){
+        const name=cleanText(row.fantasy_name,180);
+        if(name) directory.set(String(row.omie_supplier_code),name);
+      }
+    }
+    return directory;
   }
 
   async function syncOrganization(orgId:string,requestedCodes:string[]|null,mode:"manual"|"automatic",triggeredBy:string){
@@ -251,14 +268,55 @@ Deno.serve(async(request:Request)=>{
         if(error) throw new Error(error.message||"Falha ao aplicar lançamentos do Omie.");
         imported+=Number(data?.imported)||0;updated+=Number(data?.updated)||0;cancelled+=Number(data?.cancelled)||0;unchanged+=Number(data?.unchanged)||0;
       }
+      // ---------------------------------------------------------------------
+      // v4.2.0 — Contas a receber, na mesma execucao (decisao D6).
+      //
+      // As chamadas passam pelo mesmo omieCall, que serializa por metodo com
+      // espacamento de 700ms e faz retry no bloqueio de metodo concorrente.
+      // O bloco fica isolado num try/catch: contas a pagar ja foram aplicadas
+      // acima e nao podem ser perdidas por uma falha aqui.
+      // ---------------------------------------------------------------------
+      const receivables:Record<string,unknown>={imported:0,updated:0,untouched:0,skipped:0,ignored:0,unmapped:0,titles:0,error:null};
+      try{
+        const baseReceivableFilter={
+          apenas_importado_api:"N",
+          filtrar_por_data_de:isoToDdMmYyyy(incremental),
+          filtrar_por_data_ate:isoToDdMmYyyy(today)
+        };
+        const titles:Record<string,unknown>[]=[];
+        for(const projectCode of selected){
+          const rows=await pagedOmie(OMIE_ENDPOINTS.receivables,"ListarContasReceber","conta_receber_cadastro",{
+            ...baseReceivableFilter,filtrar_por_projeto:Number(projectCode)
+          },creds,100);
+          titles.push(...rows);
+        }
+        receivables.titles=titles.length;
+        const customers=await customerDirectory(orgId,titles);
+        const builtReceivables=buildReceivableEntries(titles,projectMap,customers);
+        receivables.skipped=builtReceivables.skipped;
+        receivables.ignored=builtReceivables.ignored;
+        receivables.unmapped=builtReceivables.unmapped;
+        for(const batch of chunk(builtReceivables.entries,500)){
+          const {data,error}=await admin.rpc("clique_obras_apply_omie_receivables_v420",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
+          if(error) throw new Error(error.message||"Falha ao aplicar contas a receber do Omie.");
+          receivables.imported=Number(receivables.imported)+(Number(data?.imported)||0);
+          receivables.updated=Number(receivables.updated)+(Number(data?.updated)||0);
+          receivables.untouched=Number(receivables.untouched)+(Number(data?.untouched)||0);
+          receivables.skipped=Number(receivables.skipped)+(Number(data?.skipped)||0);
+        }
+      }catch(error){
+        receivables.error=safeOmieError(error);
+        console.warn("Omie receivables step failed",{organizationId:orgId,runId,message:receivables.error});
+      }
+
       const finishedAt=new Date().toISOString();
       await Promise.all([
-        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,inclusionBackfillComplete}}).eq("id",runId),
+        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,inclusionBackfillComplete,receivables}}).eq("id",runId),
         admin.from("omie_connections").update({last_sync_at:finishedAt,last_sync_status:"success",last_sync_error:null,
           supplier_backfill_completed_at:connection.supplier_backfill_completed_at||(supplierBackfillComplete?finishedAt:null),
           inclusion_backfill_completed_at:connection.inclusion_backfill_completed_at||(inclusionBackfillComplete?finishedAt:null),updated_at:finishedAt}).eq("organization_id",orgId)
       ]);
-      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length};
+      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length,receivables};
     }catch(error){
       const message=safeOmieError(error);
       const updates=[admin.from("omie_connections").update({last_sync_status:"error",last_sync_error:message,updated_at:new Date().toISOString()}).eq("organization_id",orgId)];

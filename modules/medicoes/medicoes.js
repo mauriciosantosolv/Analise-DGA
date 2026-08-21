@@ -55,11 +55,13 @@ Views.medicoes = {
     const totalRevenue=State.projects.filter(p=>!State.filters.project||String(p.id)===String(State.filters.project)).reduce((sum,p)=>sum+(Number(p.saleValue)||0),0);
     const scopedProjectIds=State.filters.project?[String(State.filters.project)]:State.projects.map(p=>String(p.id));
     const cash=CashFlow.summary(rows,scopedProjectIds,this.periodFrom,this.periodTo);
+    const pendingOmie=CashFlow.pendingOmieReceipts(State.filters.project||'').length;
     $c().innerHTML=`<div class="toolbar">
       <div><h2>Medições e faturamento</h2><small>HH é consolidado pelos RDOs; obra e fornecimento permanecem manuais.</small></div>
       <div class="spacer"></div>
       ${this.canEdit()?'<button class="btn btn-primary" onclick="Views.medicoes.form()"><i data-lucide="plus"></i>Nova Medição</button>':''}
       ${this.canEdit()?'<button class="btn btn-ghost" onclick="CashFlow.forecastForm()"><i data-lucide="calendar-plus"></i>Nova Previsão</button>':''}
+      ${this.canEdit()&&pendingOmie?`<button class="btn btn-ghost" onclick="CashFlow.reconcileQueue()"><i data-lucide="link"></i>Conciliar Omie <span class="tag tag-amber">${pendingOmie}</span></button>`:''}
     </div>
     <div class="toolbar" style="gap:10px;flex-wrap:wrap">
       <div><label style="font-size:.72rem">De</label><input id="md-period-from" type="date" value="${U.esc(this.periodFrom)}"></div>

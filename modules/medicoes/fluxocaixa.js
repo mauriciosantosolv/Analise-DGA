@@ -371,6 +371,167 @@ const CashFlow = {
       : `<span class="tag tag-amber">${U.money(Math.abs(gap))} abaixo</span>`;
   },
 
+  /* ---------- conciliação dos recebimentos vindos do Omie (v4.2.0) ---------- */
+
+  omieReceipts(){
+    return this.receipts().filter(item=>String(item.origin||'')==='omie');
+  },
+
+  // Fila de conciliação: recebimento importado que ainda não foi vinculado a
+  // uma medição nem descartado pelo usuário.
+  pendingOmieReceipts(projectId=''){
+    return this.omieReceipts().filter(item=>
+      !String(item.measurementId||'')
+      && item.dismissed!==true
+      && (!projectId||String(item.projectId)===String(projectId))
+    );
+  },
+
+  // O sistema nunca escolhe a medição sozinho. Só oferece as candidatas do
+  // mesmo projeto que ainda têm saldo a receber, em ordem de data.
+  candidateMeasurements(receipt){
+    if(!receipt) return [];
+    return State.measurements
+      .filter(item=>String(item.projectId)===String(receipt.projectId))
+      .filter(item=>this.situation(item).key!=='received')
+      .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  },
+
+  reconcileQueue(){
+    const rows=this.pendingOmieReceipts(State.filters.project||'');
+    if(!rows.length) return UI.modal({
+      title:'Recebimentos do Omie',
+      body:'<div class="empty"><i data-lucide="check-check"></i><br>Nenhum recebimento aguardando conciliação.</div>',
+      footer:'<button class="btn btn-primary" onclick="UI.close()">Fechar</button>'
+    });
+    const total=rows.reduce((sum,item)=>sum+(Number(item.value)||0),0);
+    UI.modal({title:'Recebimentos do Omie aguardando conciliação',wide:true,body:`
+      <p style="color:var(--text2);font-size:.85rem;margin-bottom:12px">Cada recebimento precisa ser vinculado manualmente à medição correspondente. O sistema não escolhe por você.</p>
+      <div class="drill-path"><span class="crumb">${rows.length} recebimento(s)</span><span style="margin-left:auto"><b>${U.money2(total)}</b></span></div>
+      <div class="table-wrap"><div class="table-scroll" style="max-height:52vh"><table>
+        <thead><tr><th>Vencimento</th><th>Projeto</th><th>Cliente / Documento</th><th>Situação no Omie</th><th class="num">Valor</th><th></th></tr></thead>
+        <tbody>${rows.map(row=>{
+          const project=State.projects.find(item=>String(item.id)===String(row.projectId));
+          return `<tr>
+            <td>${U.date(row.date)}</td>
+            <td><b>${U.esc(U.projLabel(project))}</b></td>
+            <td>${U.esc(row.customerName||'—')}<br><small style="color:var(--text3)">${U.esc(row.documentNumber||row.externalId||'')}</small></td>
+            <td><span class="tag ${row.pendingAmount?'tag-amber':'tag-blue'}">${U.esc(row.omieStatus||'—')}</span></td>
+            <td class="num">${row.pendingAmount?'<span class="tag tag-amber">a conferir</span>':`<b>${U.money2(row.value)}</b>`}</td>
+            <td><div class="table-actions">
+              <button class="btn btn-primary btn-sm" onclick="CashFlow.reconcileForm(${U.jsArg(row.id)})"><i data-lucide="link"></i>Conciliar</button>
+              <button class="btn btn-ghost btn-sm" onclick="CashFlow.dismissReceipt(${U.jsArg(row.id)})" title="Não usar este recebimento"><i data-lucide="eye-off"></i></button>
+            </div></td>
+          </tr>`;}).join('')}</tbody>
+      </table></div></div>`,
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>'
+    });
+  },
+
+  reconcileForm(receiptId){
+    if(!Views.medicoes.canEdit())
+      return UI.toast('Seu usuário não pode conciliar recebimentos.','warn',6000);
+    const receipt=this.receipts().find(item=>String(item.id)===String(receiptId));
+    if(!receipt) return;
+    const project=State.projects.find(item=>String(item.id)===String(receipt.projectId));
+    const candidates=this.candidateMeasurements(receipt);
+    if(!candidates.length) return UI.toast(`Nenhuma medição em aberto no projeto ${U.esc(U.projLabel(project))} para receber este valor.`,'warn',7500);
+    UI.modal({
+      title:'Conciliar recebimento do Omie',
+      wide:true,
+      body:`<div class="rdo-detail-head">
+        <div><small>Projeto</small><b>${U.esc(U.projLabel(project))}</b></div>
+        <div><small>Cliente</small><b>${U.esc(receipt.customerName||'—')}</b></div>
+        <div><small>Documento</small><b>${U.esc(receipt.documentNumber||receipt.externalId||'—')}</b></div>
+        <div><small>Situação no Omie</small><b>${U.esc(receipt.omieStatus||'—')}</b></div>
+      </div>
+      ${receipt.pendingAmount?`<div class="permission-banner" style="margin-bottom:12px"><i data-lucide="alert-triangle"></i><span>O Omie marcou este título como <b>recebimento parcial</b> e não informa quanto foi baixado. Confira no Omie e digite abaixo o valor efetivamente recebido.</span></div>`:''}
+      <div class="form-grid">
+        <div class="full"><label>Medição correspondente *</label><select id="rc-measurement"><option value="">Selecione...</option>${candidates.map(item=>{
+          const situation=this.situation(item);
+          return `<option value="${U.esc(item.id)}">${U.date(item.date)} · ${U.esc(item.ref||item.id)} · medido ${U.money2(item.value)} · em aberto ${U.money2(situation.open)}</option>`;
+        }).join('')}</select></div>
+        <div><label>Valor Recebido *</label><input id="rc-amount" type="number" min="0" step="0.01" value="${U.esc(receipt.pendingAmount?'':receipt.value)}"></div>
+        <div><label>Data do Recebimento *</label><input id="rc-when" type="date" value="${U.esc(receipt.date||U.isoDate(new Date()))}"></div>
+        <div class="full"><label class="check-item" style="border:none;padding:0"><input id="rc-close" type="checkbox"><span><b>Encerrar a medição com este lançamento</b><small>Marque quando o saldo restante não será recebido.</small></span></label></div>
+        <div class="full"><label>Observações</label><textarea id="rc-obs" rows="2">${U.esc(receipt.notes||'')}</textarea></div>
+      </div>
+      <div class="import-log" id="rc-diff" style="margin-top:12px" hidden></div>`,
+      footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="rc-confirm"><i data-lucide="check"></i>Medição Recebida</button>`,
+      onOpen:()=>{
+        const select=document.getElementById('rc-measurement');
+        const amount=document.getElementById('rc-amount');
+        const diff=document.getElementById('rc-diff');
+        const check=()=>{
+          const measurement=State.measurements.find(item=>String(item.id)===String(select.value));
+          const value=Math.round(U.num(amount.value)*100)/100;
+          if(!measurement||!(value>0)){ diff.hidden=true; return; }
+          const open=this.situation(measurement).open;
+          const gap=Math.round((value-open)*100)/100;
+          // Divergência é sinalizada e nunca bloqueia (item 5 da especificação).
+          if(Math.abs(gap)>0.01){
+            diff.hidden=false;
+            diff.innerHTML=gap>0
+              ? `⚠ O valor recebido é ${U.money2(gap)} <b>maior</b> que o saldo em aberto da medição (${U.money2(open)}). Você pode confirmar assim mesmo.`
+              : `⚠ O valor recebido é ${U.money2(Math.abs(gap))} <b>menor</b> que o saldo em aberto da medição (${U.money2(open)}). O restante continuará em aberto, a menos que você marque o encerramento.`;
+          }else diff.hidden=true;
+        };
+        select.onchange=check; amount.oninput=check; check();
+        document.getElementById('rc-confirm').onclick=()=>this.confirmReconcile(receiptId);
+      }
+    });
+  },
+
+  async confirmReconcile(receiptId){
+    const receipt=this.receipts().find(item=>String(item.id)===String(receiptId));
+    if(!receipt) return;
+    const measurementId=document.getElementById('rc-measurement').value;
+    const value=Math.round(U.num(document.getElementById('rc-amount').value)*100)/100;
+    const date=document.getElementById('rc-when').value;
+    if(!measurementId) return UI.toast('Selecione a medição correspondente.','warn');
+    if(!(value>0)) return UI.toast('Informe o valor efetivamente recebido.','warn');
+    if(!date) return UI.toast('Informe a data do recebimento.','warn');
+    const measurement=State.measurements.find(item=>String(item.id)===String(measurementId));
+    if(!measurement||String(measurement.projectId)!==String(receipt.projectId))
+      return UI.toast('A medição precisa pertencer ao mesmo projeto do recebimento.','warn',6500);
+    try{
+      UI.loading(true,'Conciliando recebimento…');
+      await DB.put('measurement_receipts',{
+        ...receipt,
+        measurementId:String(measurementId),
+        value,
+        date,
+        settles:document.getElementById('rc-close').checked===true,
+        pendingAmount:false,
+        reviewedByUser:true,
+        notes:document.getElementById('rc-obs').value.trim(),
+        reconciledAt:new Date().toISOString()
+      });
+      await State.reload();
+      UI.loading(false); UI.closeAll();
+      UI.toast('Recebimento conciliado com a medição.','success',6000);
+      App.render();
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível conciliar: '+U.esc(err.message||err),'error',8000);
+    }
+  },
+
+  dismissReceipt(receiptId){
+    const receipt=this.receipts().find(item=>String(item.id)===String(receiptId));
+    if(!receipt) return;
+    UI.confirm('Não usar este recebimento do Omie?<br><br>Ele sai da fila de conciliação e não volta nas próximas sincronizações. Nenhuma medição é alterada.',async()=>{
+      try{
+        await DB.put('measurement_receipts',{...receipt,dismissed:true,reviewedByUser:true,dismissedAt:new Date().toISOString()});
+        await State.reload();
+        UI.closeAll(); UI.toast('Recebimento retirado da fila.','warn',5500); App.render();
+        setTimeout(()=>this.reconcileQueue(),0);
+      }catch(err){
+        UI.toast('Não foi possível retirar da fila: '+U.esc(err.message||err),'error',7500);
+      }
+    });
+  },
+
   /* ---------- bloco de previsões dentro do card do projeto ---------- */
 
   projectForecastMarkup(projectId){
