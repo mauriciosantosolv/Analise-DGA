@@ -39,8 +39,8 @@
 .rdo-team-search button svg{width:15px;height:15px}
 .rdo-team-search-empty{display:flex;min-height:76px;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding:14px;border:1px dashed var(--border);border-radius:var(--r);color:var(--text3);font-size:.78rem}
 .rdo-team-search-empty[hidden]{display:none}.rdo-team-search-empty svg{width:18px;height:18px}
-.rdo-worker-list{display:grid;gap:8px;margin-top:10px}
-.rdo-worker-card{padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);opacity:.58}
+.rdo-worker-list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin-top:10px}
+.rdo-worker-card{min-width:0;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);opacity:.58}
 .rdo-worker-card.selected{background:var(--surface);opacity:1}
 .rdo-worker-card.absent{border-color:color-mix(in srgb,var(--red) 38%,var(--border));background:var(--red-soft);opacity:1}
 .rdo-worker-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -226,16 +226,20 @@
 @media(max-width:560px){
   .rdo-page-toolbar>.toolbar-actions{width:100%}
   .rdo-page-toolbar>.toolbar-actions .btn{width:100%;justify-content:center}
-  .rdo-team-template{grid-template-columns:1fr 1fr}
-  .rdo-worker-fields{grid-template-columns:1fr 1fr}
+  .rdo-team-template{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rdo-worker-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
   .rdo-team-template input[type="time"],.rdo-worker-fields input[type="time"]{font-variant-numeric:tabular-nums;text-align:left}
   .rdo-detail-head{grid-template-columns:1fr}
   .toolbar-actions{width:100%}.toolbar-actions .btn{flex:1;min-width:0}
   .crew-filter-panel,.rate-filter-panel{align-items:stretch;flex-direction:column}.crew-filter-panel .rdo-search{min-width:0;width:100%}
   .crew-card{grid-template-columns:38px minmax(0,1fr) 34px;gap:9px;padding:11px}.crew-card>.tag{display:none}.crew-card .employee-avatar{width:38px;height:38px}
   .employee-form-photo{grid-template-columns:64px minmax(0,1fr);padding:10px}.employee-form-photo .employee-avatar.large,.employee-form-photo .avatar-ph.large{width:60px;height:60px}
-  .rdo-worker-select{max-width:calc(100% - 58px)}.rdo-worker-select b,.rdo-worker-select small{max-width:100%}
-  .rdo-worker-actions{align-items:flex-end;flex-direction:column}.rdo-absence-toggle span{dsplay:none}.rdo-absence-toggle{width:30px;justify-content:center;padding:5px}
+  .rdo-worker-select{max-width:100%}.rdo-worker-select b,.rdo-worker-select small{max-width:100%}
+  .rdo-worker-head{flex-wrap:wrap;row-gap:9px}
+  .rdo-worker-actions{width:100%;flex:1 1 100%;align-items:center;justify-content:space-between;flex-direction:row;gap:9px}
+  .rdo-absence-toggle{width:auto;flex:1 1 auto;min-height:38px;justify-content:center;padding:7px 10px;font-size:.72rem}
+  .rdo-absence-toggle span{display:inline}
+  .rdo-worker-total{flex:0 0 auto}
   .rate-card{grid-template-columns:minmax(0,1fr) 20px}.rate-card>span:not(:first-child){display:none}
   .permission-projects-head{align-items:flex-start;flex-direction:column}
   .rdo-list-card{grid-template-columns:44px minmax(0,1fr) 18px}
