@@ -102,17 +102,17 @@ Views.dashboard = {
       ${Dash.projectBanner()}
       <div class="kpi-grid">
         ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', `Faturado: ${U.money(invoiced)} · Aprovado: ${U.money(approved)} · Aguardando aprovação: ${U.money(awaitingApproval)}`, goAction('medicoes'))}
+        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', '', goAction('medicoes'))}
         ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
         ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', goAction('orcamentos'))}
-        ${kpi('Realizado', U.money(spent), 'wallet', '', U.pct(budgetTotal>0?spent/budgetTotal*100:null)+' consumido · inclui imposto/adm', goAction('financeiro'))}
-        ${kpi('Projetado', U.money(projected), 'trending-up', '', `Previsto inicial: ${U.money(projectedInitial)} · consumido: ${U.money(planningConsumed)}`, goAction('planejamento'))}
+        ${kpi('Realizado', U.money(spent), 'wallet', '', '', goAction('financeiro'))}
+        ${kpi('Projetado', U.money(projected), 'trending-up', '', '', goAction('planejamento'))}
         ${kpi('Saldo Orçado', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
         ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
         ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
         ${kpi('Projetos Ativos', active.length, 'hard-hat')}
         ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
-        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', fut.today.length+fut.d7.length+' itens planejados', goAction('planejamento','{upcoming7:true}'))}
+        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', '', goAction('planejamento','{upcoming7:true}'))}
       </div>
 
       <div class="toolbar" style="margin-bottom:10px">

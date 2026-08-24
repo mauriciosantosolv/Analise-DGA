@@ -10,39 +10,82 @@
  *
  * Não modificar:
  * - valores das variáveis sem revisar impacto em todos os componentes
+ *
+ * v4.3.0 — Design sóbrio (flat, preto/branco/cinza; cor só em status).
+ * Os nomes de variável antigos (--blue, --surface, --r, ...) permanecem como
+ * alias dos novos tokens (--color-*) para não quebrar seletores existentes
+ * em components.css/dashboard.css/tables.css/layout.css/premium.css/rdo.css.
  */
 /* ================= [1] DESIGN SYSTEM ================= */
 :root{
-  --blue:#18181B; --blue-soft:#F4F4F5; --green:#16A34A; --green-soft:#EAF7EF;
-  --red:#DC2626; --red-soft:#FDEEEE; --amber:#D97706; --amber-soft:#FDF4E7;
-  --bg:#F4F4F5; --surface:#FFFFFF; --surface2:#FAFAFA;
-  --text:#27272A; --text2:#52525B; --text3:#71717A;
-  --border:#E4E4E7; --border2:#E4E4E7;
-  --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
-  --shadow-lg:0 12px 32px -8px rgba(16,24,40,.14);
-  --glass:rgba(255,255,255,.72); --r:12px;
-  --sidebar-w:236px; --rightbar-w:264px;
+  color-scheme:light;
+  /* ---- Tokens (seção 2 do guia de estilo) ---- */
+  --color-bg:#FFFFFF; --color-bg-subtle:#FAFAFA; --color-sidebar-bg:#F7F7F8;
+  --color-border:#E5E5E7;
+  --color-text-primary:#18181B; --color-text-secondary:#52525B; --color-text-muted:#9CA3AF;
+  --color-active-bg:#EFEFF1;
+  --color-primary:#18181B; --color-primary-hover:#27272A; --color-primary-text:#FFFFFF;
+  --color-status-active-bg:#DCFCE7; --color-status-active-text:#16A34A;
+  --color-status-new-bg:#E0E7FF; --color-status-new-text:#4338CA;
+  --color-status-nontargeted-bg:#F1F1F3; --color-status-nontargeted-text:#71717A;
+  --color-status-vip-bg:#FEF3C7; --color-status-vip-text:#B45309;
+  --color-status-danger-bg:#FEE2E2; --color-status-danger-text:#DC2626;
+  --shadow-popover:0 4px 12px rgba(0,0,0,.06);
+  --radius:0px; --radius-badge:5px; --radius-avatar:50%;
+  --ease:cubic-bezier(.22,1,.36,1);
+
+  /* ---- Alias de compatibilidade (usados nos demais arquivos css/) ---- */
+  --blue:var(--color-primary); --blue-hover:var(--color-primary-hover); --blue-soft:var(--color-active-bg);
+  --indigo:var(--color-status-new-text); --indigo-soft:var(--color-status-new-bg);
+  --green:var(--color-status-active-text); --green-soft:var(--color-status-active-bg);
+  --red:var(--color-status-danger-text); --red-soft:var(--color-status-danger-bg);
+  --amber:var(--color-status-vip-text); --amber-soft:var(--color-status-vip-bg);
+  --bg:var(--color-bg); --surface:var(--color-bg); --surface2:var(--color-bg-subtle);
+  --text:var(--color-text-primary); --text2:var(--color-text-secondary); --text3:var(--color-text-muted);
+  --border:var(--color-border); --border2:var(--color-border);
+  --shadow:none; --shadow-lg:var(--shadow-popover);
+  --glass:var(--color-bg);
+  --r:var(--radius);
+  --sidebar-w:248px; --rightbar-w:280px;
 }
 [data-theme="dark"]{
-  --blue:#3B82F6; --blue-soft:#1c2a44; --green:#22C55E; --green-soft:#132b1d;
-  --red:#EF4444; --red-soft:#331717; --amber:#F59E0B; --amber-soft:#33260f;
-  --bg:#111827; --surface:#1F2937; --surface2:#1a2332;
-  --text:#F3F4F6; --text2:#9CA3AF; --text3:#6B7280;
-  --border:#2b3648; --border2:#242e3f;
-  --shadow:0 1px 3px rgba(0,0,0,.4); --shadow-lg:0 12px 32px -8px rgba(0,0,0,.55);
-  --glass:rgba(31,41,55,.72);
+  color-scheme:dark;
+  --color-bg:#0B0B0C; --color-bg-subtle:#151517; --color-sidebar-bg:#111113;
+  --color-border:#27272A;
+  --color-text-primary:#FAFAFA; --color-text-secondary:#A1A1AA; --color-text-muted:#71717A;
+  --color-active-bg:#1F1F22;
+  --color-primary:#FAFAFA; --color-primary-hover:#E4E4E7; --color-primary-text:#18181B;
+  --color-status-active-bg:#14301F; --color-status-active-text:#4ADE80;
+  --color-status-new-bg:#1E2153; --color-status-new-text:#A5B4FC;
+  --color-status-nontargeted-bg:#232326; --color-status-nontargeted-text:#A1A1AA;
+  --color-status-vip-bg:#3A2A0E; --color-status-vip-text:#FBBF24;
+  --color-status-danger-bg:#3A1414; --color-status-danger-text:#F87171;
+  --shadow-popover:0 4px 16px rgba(0,0,0,.5);
+
+  --blue:var(--color-primary); --blue-hover:var(--color-primary-hover); --blue-soft:var(--color-active-bg);
+  --indigo:var(--color-status-new-text); --indigo-soft:var(--color-status-new-bg);
+  --green:var(--color-status-active-text); --green-soft:var(--color-status-active-bg);
+  --red:var(--color-status-danger-text); --red-soft:var(--color-status-danger-bg);
+  --amber:var(--color-status-vip-text); --amber-soft:var(--color-status-vip-bg);
+  --bg:var(--color-bg); --surface:var(--color-bg); --surface2:var(--color-bg-subtle);
+  --text:var(--color-text-primary); --text2:var(--color-text-secondary); --text3:var(--color-text-muted);
+  --border:var(--color-border); --border2:var(--color-border);
+  --shadow:none; --shadow-lg:var(--shadow-popover);
+  --glass:var(--color-bg);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{font-size:14px}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;transition:background .3s,color .3s}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-feature-settings:"tnum" 1;background:var(--bg);color:var(--text);overflow:hidden;transition:background .15s ease,color .15s ease}
 ::-webkit-scrollbar{width:9px;height:9px}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:0}
 ::-webkit-scrollbar-thumb:hover{background:var(--text3)}
 ::-webkit-scrollbar-track{background:transparent}
 button{font-family:inherit;cursor:pointer}
-input,select,textarea{font-family:inherit;font-size:.93rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 11px;outline:none;transition:border .15s,box-shadow .15s;width:100%}
-input:focus,select:focus,textarea:focus{border-color:var(--border);box-shadow:none}
+input,select,textarea{font-family:inherit;font-size:.93rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;outline:none;transition:border-color .15s ease,background .15s ease;width:100%}
+input:hover,select:hover,textarea:hover{border-color:var(--text3)}
+input:focus,select:focus,textarea:focus{border-color:var(--text);box-shadow:none}
 label{font-size:.8rem;font-weight:600;color:var(--text2);display:block;margin-bottom:5px}
 h1{font-size:1.35rem;font-weight:700}
 h2{font-size:1.05rem;font-weight:700}
 h3{font-size:.95rem;font-weight:600}
+:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}

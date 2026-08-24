@@ -8,6 +8,16 @@
 Views.medicoes = {
   title:'Medições',
 
+  // v4.4.0 — aba ativa do menu de Medições. 'medicoes' = lançamento e
+  // acompanhamento das medições; 'provisoes' = planejamento futuro (CashFlow).
+  mode:'medicoes',
+  tabsMarkup(){
+    return `<div class="tabs">
+      <button class="tab ${this.mode==='medicoes'?'active':''}" onclick="Views.medicoes.mode='medicoes';Views.medicoes.render()">Medições</button>
+      <button class="tab ${this.mode==='provisoes'?'active':''}" onclick="Views.medicoes.mode='provisoes';Views.medicoes.render()">Provisões</button>
+    </div>`;
+  },
+
   // v4.1.0 — filtros da tela. Período inicia no mês corrente.
   periodFrom:'',
   periodTo:'',
@@ -45,6 +55,7 @@ Views.medicoes = {
     });
   },
   render(){
+    if(this.mode==='provisoes') return CashFlow.renderProvisions();
     const rows=this.filtered();
     const byProj={};
     rows.forEach(m=>(byProj[m.projectId]=byProj[m.projectId]||[]).push(m));
@@ -53,16 +64,14 @@ Views.medicoes = {
     const totalApproved=rows.filter(m=>U.norm(m.status).startsWith('aprova')).reduce((sum,m)=>sum+(Number(m.value)||0),0);
     const totalAwaiting=rows.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((sum,m)=>sum+(Number(m.value)||0),0);
     const totalRevenue=State.projects.filter(p=>!State.filters.project||String(p.id)===String(State.filters.project)).reduce((sum,p)=>sum+(Number(p.saleValue)||0),0);
-    const scopedProjectIds=State.filters.project?[String(State.filters.project)]:State.projects.map(p=>String(p.id));
-    const cash=CashFlow.summary(rows,scopedProjectIds,this.periodFrom,this.periodTo);
     const pendingOmie=CashFlow.pendingOmieReceipts(State.filters.project||'').length;
     $c().innerHTML=`<div class="toolbar">
       <div><h2>Medições e faturamento</h2><small>HH é consolidado pelos RDOs; obra e fornecimento permanecem manuais.</small></div>
       <div class="spacer"></div>
       ${this.canEdit()?'<button class="btn btn-primary" onclick="Views.medicoes.form()"><i data-lucide="plus"></i>Nova Medição</button>':''}
-      ${this.canEdit()?'<button class="btn btn-ghost" onclick="CashFlow.forecastForm()"><i data-lucide="calendar-plus"></i>Nova Previsão</button>':''}
       ${this.canEdit()&&pendingOmie?`<button class="btn btn-ghost" onclick="CashFlow.reconcileQueue()"><i data-lucide="link"></i>Conciliar Omie <span class="tag tag-amber">${pendingOmie}</span></button>`:''}
     </div>
+    ${this.tabsMarkup()}
     <div class="toolbar" style="gap:10px;flex-wrap:wrap">
       <div><label style="font-size:.72rem">De</label><input id="md-period-from" type="date" value="${U.esc(this.periodFrom)}"></div>
       <div><label style="font-size:.72rem">Até</label><input id="md-period-to" type="date" value="${U.esc(this.periodTo)}"></div>
@@ -78,12 +87,6 @@ Views.medicoes = {
       <div class="kpi accent-blue"><div class="k-label"><i data-lucide="badge-check"></i>Aprovado</div><div class="k-value">${U.money(totalApproved)}</div></div>
       <div class="kpi accent-amber"><div class="k-label"><i data-lucide="clock-3"></i>Aguardando aprovação</div><div class="k-value">${U.money(totalAwaiting)}</div></div>
       <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-totalMeasured)}</div></div>
-    </div>
-    <div class="kpi-grid">
-      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-clock"></i>Previsão de Medição</div><div class="k-value">${U.money(cash.forecastBilling)}</div><div class="k-sub">${cash.forecastBillingCount?`${cash.forecastBillingCount} previsão(ões) · a partir de ${U.date(cash.forecastBillingNext)}`:'Sem previsão no período'}</div></div>
-      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-check"></i>Previsão de Recebimento</div><div class="k-value">${U.money(cash.forecastReceipt)}</div><div class="k-sub">${cash.forecastReceiptCount?`${cash.forecastReceiptCount} previsão(ões) · a partir de ${U.date(cash.forecastReceiptNext)}`:'Sem previsão no período'}</div></div>
-      <div class="kpi accent-green"><div class="k-label"><i data-lucide="file-check-2"></i>Previsto x Faturado</div><div class="k-value">${U.money(cash.invoiced)}</div><div class="k-sub">previsto ${U.money(cash.forecastBilling)} · ${CashFlow.gapMarkup(cash.billingGap)}</div></div>
-      <div class="kpi accent-green"><div class="k-label"><i data-lucide="hand-coins"></i>Previsto x Recebido</div><div class="k-value">${U.money(cash.received)}</div><div class="k-sub">previsto ${U.money(cash.forecastReceipt)} · ${CashFlow.gapMarkup(cash.receiptGap)}</div></div>
     </div>
     ${Object.keys(byProj).length?Object.entries(byProj).map(([projectId,items])=>{
       const project=State.projects.find(x=>String(x.id)===String(projectId));
@@ -108,10 +111,9 @@ Views.medicoes = {
             <td>${CashFlow.situationTag(m)}</td>
             <td class="num"><b>${U.money2(m.value)}</b></td>
             <td class="num">${U.money2(CashFlow.situation(m).received)}</td>
-            <td><div class="table-actions">${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.receiptForm(${U.jsArg(m.id)})" title="Medição Recebida"><i data-lucide="hand-coins"></i></button>`:''}${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
+            <td><div class="table-actions">${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.receiptForm(${U.jsArg(m.id)})" title="Medição Recebida"><i data-lucide="coins"></i></button>`:''}${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
           </tr>`).join('')}</tbody>
         </table></div>
-        ${CashFlow.projectForecastMarkup(projectId)}
       </div>`;
     }).join(''):'<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição no período e filtros selecionados.</div>'}`;
     U.icons();

@@ -90,6 +90,7 @@ const CashFlow = {
     const forecast=existing||{
       projectId:State.filters.project||String(State.projects[0].id),
       value:0,
+      measurementDate:'',
       billingDate:U.isoDate(new Date()),
       notes:''
     };
@@ -98,6 +99,7 @@ const CashFlow = {
       body:`<div class="form-grid">
         <div class="full"><label>Projeto *</label><select id="fc-project">${State.projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(forecast.projectId)?'selected':''}>${U.esc(U.projLabel(project))}</option>`).join('')}</select></div>
         <div><label>Valor Previsto *</label><input id="fc-value" type="number" min="0" step="0.01" value="${U.esc(forecast.value||'')}"></div>
+        <div><label>Data Prevista de Execução (Medição)</label><input id="fc-measurement" type="date" value="${U.esc(forecast.measurementDate||'')}"></div>
         <div><label>Data Prevista de Faturamento *</label><input id="fc-billing" type="date" value="${U.esc(forecast.billingDate||'')}"></div>
         <div><label>Condição de Pagamento</label><input id="fc-term" value="" readonly></div>
         <div><label>Data Prevista de Recebimento</label><input id="fc-receipt" value="" readonly></div>
@@ -153,6 +155,7 @@ const CashFlow = {
       ...(id?this.forecasts().find(item=>String(item.id)===String(id)):{id:U.id(),createdAt:new Date().toISOString()}),
       projectId:String(projectId),
       value,
+      measurementDate:document.getElementById('fc-measurement').value||'',
       billingDate,
       receiptDate:this.addCalendarDays(billingDate,days),
       paymentTermDays:days,
@@ -532,24 +535,353 @@ const CashFlow = {
     });
   },
 
-  /* ---------- bloco de previsões dentro do card do projeto ---------- */
+  /* ---------- tabela de previsões por projeto (aba Provisões, v4.4.0) ---------- */
 
-  projectForecastMarkup(projectId){
+  // Data de execução prevista: usa measurementDate quando informado; cai para
+  // billingDate em previsões antigas (anteriores à v4.4.0), que não tinham
+  // esse campo, para não sumirem do planejamento mensal.
+  plannedExecutionDate(row){
+    return row.measurementDate||row.billingDate||'';
+  },
+
+  projectForecastTable(projectId){
     const rows=this.forecasts(projectId);
     if(!rows.length) return '';
+    const project=State.projects.find(item=>String(item.id)===String(projectId));
     const total=rows.reduce((sum,item)=>sum+(Number(item.value)||0),0);
-    return `<details class="cashflow-forecasts" style="margin-top:10px">
-      <summary><b>${rows.length}</b> previsão(ões) · <b>${U.money2(total)}</b></summary>
-      <div class="table-scroll" style="max-height:200px;margin-top:8px"><table>
-        <thead><tr><th>Faturamento previsto</th><th>Recebimento previsto</th><th>Condição</th><th class="num">Valor</th><th></th></tr></thead>
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h3>${U.esc(U.projLabel(project))}</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="tag tag-blue">${rows.length} previsão(ões)</span><b>${U.money2(total)} previsto</b></div>
+      </div>
+      <div class="table-scroll" style="max-height:260px"><table>
+        <thead><tr><th>Execução prevista</th><th>Faturamento previsto</th><th>Condição</th><th>Recebimento previsto</th><th class="num">Valor</th><th></th></tr></thead>
         <tbody>${rows.map(row=>`<tr>
+          <td>${row.measurementDate?U.date(row.measurementDate):'—'}</td>
           <td>${U.date(row.billingDate)}</td>
-          <td>${U.date(row.receiptDate)}</td>
           <td>${U.esc(this.termLabel(row.paymentTermDays))}</td>
+          <td>${row.receiptDate?U.date(row.receiptDate):'—'}</td>
           <td class="num"><b>${U.money2(row.value)}</b></td>
           <td>${Views.medicoes.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.forecastForm(${U.jsArg(row.id)})" title="Editar previsão"><i data-lucide="pencil"></i></button>`:''}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-    </details>`;
+    </div>`;
+  },
+
+  /* ---------- aba Provisões: planejamento futuro mês a mês (v4.4.0) ---------- */
+
+  provisionsFrom:'',
+  provisionsTo:'',
+  ensureProvisionsPeriod(){
+    if(this.provisionsFrom&&this.provisionsTo) return;
+    const today=new Date();
+    this.provisionsFrom=U.isoDate(new Date(today.getFullYear(),today.getMonth(),1));
+    this.provisionsTo=U.isoDate(new Date(today.getFullYear(),today.getMonth()+5,0));
+  },
+  applyProvisionsFilters(){
+    this.provisionsFrom=document.getElementById('cf-period-from').value;
+    this.provisionsTo=document.getElementById('cf-period-to').value;
+    Views.medicoes.render();
+  },
+  clearProvisionsFilters(){
+    this.provisionsFrom=''; this.provisionsTo='';
+    this.ensureProvisionsPeriod(); Views.medicoes.render();
+  },
+
+  monthKey(date){
+    return /^\d{4}-\d{2}/.test(String(date||''))?String(date).slice(0,7):'';
+  },
+  monthLabel(key){
+    const parts=String(key||'').split('-').map(Number);
+    if(parts.length!==2||Number.isNaN(parts[0])||Number.isNaN(parts[1])) return key;
+    return `${String(parts[1]).padStart(2,'0')}/${parts[0]}`;
+  },
+  // Lista de meses (chave 'AAAA-MM') entre from/to, limitada a 36 meses como
+  // proteção contra período informado incorretamente.
+  monthsInRange(from,to){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(from||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(to||''))) return [];
+    const start=new Date(`${from}T12:00:00`);
+    const end=new Date(`${to}T12:00:00`);
+    if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||start>end) return [];
+    const months=[];
+    let cursor=new Date(start.getFullYear(),start.getMonth(),1);
+    const last=new Date(end.getFullYear(),end.getMonth(),1);
+    let guard=0;
+    while(cursor<=last&&guard<36){
+      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}`);
+      cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);
+      guard++;
+    }
+    return months;
+  },
+
+  // Previsto x realizado, mês a mês, nos três estágios do planejamento
+  // (execução, faturamento, recebimento). Não altera nenhum registro.
+  provisionsMonthly(projectIds){
+    const ids=new Set((projectIds||[]).map(String));
+    const scoped=list=>list.filter(item=>!ids.size||ids.has(String(item.projectId)));
+    const forecasts=scoped(this.forecasts());
+    const measurements=scoped(State.measurements);
+    const receipts=scoped(this.receipts());
+    const months=this.monthsInRange(this.provisionsFrom,this.provisionsTo);
+    const sumBy=(list,keyFn)=>month=>list.filter(item=>keyFn(item)===month).reduce((sum,item)=>sum+(Number(item.value)||0),0);
+    const plannedExecution=sumBy(forecasts,item=>this.monthKey(this.plannedExecutionDate(item)));
+    const plannedBilling=sumBy(forecasts,item=>this.monthKey(item.billingDate));
+    const plannedReceipt=sumBy(forecasts,item=>this.monthKey(item.receiptDate));
+    const actualExecution=sumBy(measurements,item=>this.monthKey(item.date));
+    const actualBilling=sumBy(measurements.filter(item=>U.norm(item.status).startsWith('faturad')),item=>this.monthKey(item.date));
+    const actualReceipt=sumBy(receipts,item=>this.monthKey(item.date));
+    return months.map(month=>({
+      month,
+      label:this.monthLabel(month),
+      plannedExecution:plannedExecution(month),
+      actualExecution:actualExecution(month),
+      plannedBilling:plannedBilling(month),
+      actualBilling:actualBilling(month),
+      plannedReceipt:plannedReceipt(month),
+      actualReceipt:actualReceipt(month)
+    }));
+  },
+
+  monthlyTableMarkup(rows){
+    if(!rows.length) return '<div class="empty card"><i data-lucide="calendar-x"></i><br>Informe um período válido para ver o previsto x realizado mês a mês.</div>';
+    return `<div class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:2px">Previsto x realizado por mês</h3>
+      <small style="display:block;margin-bottom:10px;color:var(--text3)">Clique em um mês para abrir o detalhamento por projeto.</small>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Mês</th><th class="num">Execução prevista</th><th class="num">Execução realizada</th><th class="num">Faturamento previsto</th><th class="num">Faturamento realizado</th><th class="num">Recebimento previsto</th><th class="num">Recebimento realizado</th></tr></thead>
+        <tbody>${rows.map(row=>`<tr class="clickable" onclick="CashFlow.openMonthBreakdown(${U.jsArg(row.month)})" title="Ver o detalhamento por projeto de ${U.esc(row.label)}">
+          <td><b>${U.esc(row.label)}</b></td>
+          <td class="num">${U.money2(row.plannedExecution)}</td>
+          <td class="num">${U.money2(row.actualExecution)}${row.plannedExecution||row.actualExecution?`<br>${this.gapMarkup(row.actualExecution-row.plannedExecution)}`:''}</td>
+          <td class="num">${U.money2(row.plannedBilling)}</td>
+          <td class="num">${U.money2(row.actualBilling)}${row.plannedBilling||row.actualBilling?`<br>${this.gapMarkup(row.actualBilling-row.plannedBilling)}`:''}</td>
+          <td class="num">${U.money2(row.plannedReceipt)}</td>
+          <td class="num">${U.money2(row.actualReceipt)}${row.plannedReceipt||row.actualReceipt?`<br>${this.gapMarkup(row.actualReceipt-row.plannedReceipt)}`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  },
+
+  /* ---------- detalhamento do mês por projeto (v4.2.2) ---------- */
+
+  monthScopeIds(){
+    return State.filters.project?[String(State.filters.project)]:State.projects.map(item=>String(item.id));
+  },
+
+  // Usa exatamente as mesmas datas e o mesmo filtro de status de
+  // provisionsMonthly(), para que a soma das linhas por projeto feche com o
+  // total do mês exibido na tabela. Somente leitura.
+  provisionsByProjectForMonth(month,projectIds){
+    const ids=new Set((projectIds||[]).map(String));
+    const inScope=item=>!ids.size||ids.has(String(item.projectId));
+    const bucket={};
+    const add=(projectId,field,value)=>{
+      const key=String(projectId);
+      bucket[key]=bucket[key]||{projectId:key,plannedExecution:0,actualExecution:0,plannedBilling:0,actualBilling:0,plannedReceipt:0,actualReceipt:0};
+      bucket[key][field]+=Number(value)||0;
+    };
+    this.forecasts().filter(inScope).forEach(item=>{
+      if(this.monthKey(this.plannedExecutionDate(item))===month) add(item.projectId,'plannedExecution',item.value);
+      if(this.monthKey(item.billingDate)===month) add(item.projectId,'plannedBilling',item.value);
+      if(this.monthKey(item.receiptDate)===month) add(item.projectId,'plannedReceipt',item.value);
+    });
+    State.measurements.filter(inScope).forEach(item=>{
+      if(this.monthKey(item.date)!==month) return;
+      add(item.projectId,'actualExecution',item.value);
+      if(U.norm(item.status).startsWith('faturad')) add(item.projectId,'actualBilling',item.value);
+    });
+    this.receipts().filter(inScope).forEach(item=>{
+      if(this.monthKey(item.date)===month) add(item.projectId,'actualReceipt',item.value);
+    });
+    return Object.values(bucket).map(row=>{
+      const project=State.projects.find(item=>String(item.id)===row.projectId);
+      return {
+        ...row,
+        proposal:String((project&&project.proposal)||''),
+        projectName:String((project&&project.name)||''),
+        label:project?U.projLabel(project):'Projeto não encontrado'
+      };
+    }).sort((a,b)=>String(a.proposal).localeCompare(String(b.proposal),undefined,{numeric:true}));
+  },
+
+  sumBreakdown(rows){
+    return rows.reduce((sum,row)=>({
+      plannedExecution:sum.plannedExecution+row.plannedExecution,
+      actualExecution:sum.actualExecution+row.actualExecution,
+      plannedBilling:sum.plannedBilling+row.plannedBilling,
+      actualBilling:sum.actualBilling+row.actualBilling,
+      plannedReceipt:sum.plannedReceipt+row.plannedReceipt,
+      actualReceipt:sum.actualReceipt+row.actualReceipt
+    }),{plannedExecution:0,actualExecution:0,plannedBilling:0,actualBilling:0,plannedReceipt:0,actualReceipt:0});
+  },
+
+  openMonthBreakdown(month){
+    const rows=this.provisionsByProjectForMonth(month,this.monthScopeIds());
+    const label=this.monthLabel(month);
+    if(!rows.length) return UI.toast(`Nenhum lançamento previsto ou realizado em ${label}.`,'info',5000);
+    const totals=this.sumBreakdown(rows);
+    UI.modal({
+      title:`Previsto x realizado · ${label}`,
+      wide:true,
+      body:`<div class="table-wrap"><div class="table-scroll" style="max-height:56vh"><table>
+        <thead><tr><th>Projeto</th><th class="num">Execução prevista</th><th class="num">Execução realizada</th><th class="num">Faturamento previsto</th><th class="num">Faturamento realizado</th><th class="num">Recebimento previsto</th><th class="num">Recebimento realizado</th></tr></thead>
+        <tbody>${rows.map(row=>`<tr>
+          <td><b>${U.esc(row.proposal||'—')}</b>${row.projectName?`<br><small style="color:var(--text3)">${U.esc(row.projectName)}</small>`:''}</td>
+          <td class="num">${U.money2(row.plannedExecution)}</td>
+          <td class="num">${U.money2(row.actualExecution)}</td>
+          <td class="num">${U.money2(row.plannedBilling)}</td>
+          <td class="num">${U.money2(row.actualBilling)}</td>
+          <td class="num">${U.money2(row.plannedReceipt)}</td>
+          <td class="num">${U.money2(row.actualReceipt)}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr>
+          <td><b>TOTAL DE ${U.esc(label)}</b></td>
+          <td class="num"><b>${U.money2(totals.plannedExecution)}</b></td>
+          <td class="num"><b>${U.money2(totals.actualExecution)}</b></td>
+          <td class="num"><b>${U.money2(totals.plannedBilling)}</b></td>
+          <td class="num"><b>${U.money2(totals.actualBilling)}</b></td>
+          <td class="num"><b>${U.money2(totals.plannedReceipt)}</b></td>
+          <td class="num"><b>${U.money2(totals.actualReceipt)}</b></td>
+        </tr></tfoot>
+      </table></div></div>`,
+      footer:`<button class="btn btn-ghost" onclick="CashFlow.printMonthBreakdown(${U.jsArg(month)})"><i data-lucide="file-down"></i>Gerar PDF</button><button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
+    });
+  },
+
+  // PDF do detalhamento do mês. A4 deitado, porque são sete colunas.
+  async printMonthBreakdown(month){
+    const rows=this.provisionsByProjectForMonth(month,this.monthScopeIds());
+    const label=this.monthLabel(month);
+    if(!rows.length) return UI.toast(`Nenhum lançamento previsto ou realizado em ${label}.`,'info',5000);
+    const totals=this.sumBreakdown(rows);
+    const projectId=State.filters.project||'';
+    const project=projectId?State.projects.find(item=>String(item.id)===String(projectId)):null;
+    const client=projectId?this.clientOf(projectId):null;
+    const old=document.getElementById('provisions-month-print-report');
+    if(old) old.remove();
+    const report=document.createElement('section');
+    report.id='provisions-month-print-report';
+    const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
+    report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
+      <header class="provisions-print-head">
+        <div class="provisions-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>CONTRATADA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Detalhamento por projeto</span></div></div>
+        <div class="provisions-print-client">${client&&U.safeImageSrc(client.logo)?`<img src="${U.esc(U.safeImageSrc(client.logo))}" alt="">`:`<span>${U.esc(U.initials(project?U.projLabel(project):'Todos'))}</span>`}<div><small>${project?'PROJETO':'ESCOPO'}</small><b>${U.esc(project?U.projLabel(project):'Todos os projetos')}</b><span>${U.esc(client?client.name:`${rows.length} projeto(s) no mês`)}</span></div></div>
+        <div class="provisions-print-period"><small>COMPETÊNCIA</small><b>${U.esc(label)}</b></div>
+      </header>
+      <div class="provisions-print-facts">
+        <div><small>Execução prevista</small><b>${U.money(totals.plannedExecution)}</b></div>
+        <div><small>Execução realizada</small><b>${U.money(totals.actualExecution)}</b></div>
+        <div><small>Faturamento previsto</small><b>${U.money(totals.plannedBilling)}</b></div>
+        <div><small>Faturamento realizado</small><b>${U.money(totals.actualBilling)}</b></div>
+        <div><small>Recebimento previsto</small><b>${U.money(totals.plannedReceipt)}</b></div>
+        <div><small>Recebimento realizado</small><b>${U.money(totals.actualReceipt)}</b></div>
+      </div>
+      <table class="provisions-print-table"><thead><tr><th>Projeto</th><th>Execução prevista</th><th>Execução realizada</th><th>Faturamento previsto</th><th>Faturamento realizado</th><th>Recebimento previsto</th><th>Recebimento realizado</th></tr></thead><tbody>
+        ${rows.map(row=>`<tr><td>${U.esc(row.proposal||'—')}${row.projectName?` · ${U.esc(row.projectName)}`:''}</td><td>${U.money(row.plannedExecution)}</td><td>${U.money(row.actualExecution)}</td><td>${U.money(row.plannedBilling)}</td><td>${U.money(row.actualBilling)}</td><td>${U.money(row.plannedReceipt)}</td><td>${U.money(row.actualReceipt)}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td>TOTAL DE ${U.esc(label)}</td><td>${U.money(totals.plannedExecution)}</td><td>${U.money(totals.actualExecution)}</td><td>${U.money(totals.plannedBilling)}</td><td>${U.money(totals.actualBilling)}</td><td>${U.money(totals.plannedReceipt)}</td><td>${U.money(totals.actualReceipt)}</td></tr></tfoot></table>
+      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
+    document.body.appendChild(report);
+    document.body.classList.add('printing-provisions-month');
+    UI.closeAll();
+    UI.loading(true,'Preparando detalhamento do mês…');
+    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
+    UI.loading(false);
+    UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
+    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-provisions-month');},{once:true});
+    setTimeout(()=>window.print(),250);
+  },
+
+  /* ---------- relatório impresso: previsto x realizado (aba Provisões, v4.2.1) ---------- */
+
+  // Filtrável pelo projeto selecionado no filtro global e pela competência
+  // (período De/Até) já aplicada na aba Provisões. Somente leitura — reaproveita
+  // provisionsMonthly() e não grava nada em forecasts/measurements/receipts.
+  async printProvisionsReport(){
+    this.ensureProvisionsPeriod();
+    const projectId=State.filters.project||'';
+    const scopedProjectIds=projectId?[String(projectId)]:State.projects.map(p=>String(p.id));
+    const rows=this.provisionsMonthly(scopedProjectIds);
+    if(!rows.length) return UI.toast('Informe um período válido para gerar o relatório.','warn');
+    const totals=rows.reduce((sum,row)=>({
+      plannedExecution:sum.plannedExecution+row.plannedExecution,
+      actualExecution:sum.actualExecution+row.actualExecution,
+      plannedBilling:sum.plannedBilling+row.plannedBilling,
+      actualBilling:sum.actualBilling+row.actualBilling,
+      plannedReceipt:sum.plannedReceipt+row.plannedReceipt,
+      actualReceipt:sum.actualReceipt+row.actualReceipt
+    }),{plannedExecution:0,actualExecution:0,plannedBilling:0,actualBilling:0,plannedReceipt:0,actualReceipt:0});
+    const project=projectId?State.projects.find(item=>String(item.id)===String(projectId)):null;
+    const client=projectId?this.clientOf(projectId):null;
+    const old=document.getElementById('provisions-print-report');
+    if(old) old.remove();
+    const report=document.createElement('section');
+    report.id='provisions-print-report';
+    const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
+    const periodLabel=`${this.monthLabel(this.monthKey(this.provisionsFrom))} a ${this.monthLabel(this.monthKey(this.provisionsTo))}`;
+    report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
+      <header class="provisions-print-head">
+        <div class="provisions-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>CONTRATADA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Relatório previsto x realizado</span></div></div>
+        <div class="provisions-print-client">${client&&U.safeImageSrc(client.logo)?`<img src="${U.esc(U.safeImageSrc(client.logo))}" alt="">`:`<span>${U.esc(U.initials(project?U.projLabel(project):'Todos'))}</span>`}<div><small>${project?'PROJETO':'ESCOPO'}</small><b>${U.esc(project?U.projLabel(project):'Todos os projetos')}</b><span>${U.esc(client?client.name:`${scopedProjectIds.length} projeto(s) com previsão`)}</span></div></div>
+        <div class="provisions-print-period"><small>COMPETÊNCIA</small><b>${U.esc(periodLabel)}</b></div>
+      </header>
+      <div class="provisions-print-facts">
+        <div><small>Execução prevista</small><b>${U.money(totals.plannedExecution)}</b></div>
+        <div><small>Execução realizada</small><b>${U.money(totals.actualExecution)}</b></div>
+        <div><small>Faturamento previsto</small><b>${U.money(totals.plannedBilling)}</b></div>
+        <div><small>Faturamento realizado</small><b>${U.money(totals.actualBilling)}</b></div>
+        <div><small>Recebimento previsto</small><b>${U.money(totals.plannedReceipt)}</b></div>
+        <div><small>Recebimento realizado</small><b>${U.money(totals.actualReceipt)}</b></div>
+      </div>
+      <table class="provisions-print-table"><thead><tr><th>Mês</th><th>Execução prevista</th><th>Execução realizada</th><th>Faturamento previsto</th><th>Faturamento realizado</th><th>Recebimento previsto</th><th>Recebimento realizado</th></tr></thead><tbody>
+        ${rows.map(row=>`<tr><td>${U.esc(row.label)}</td><td>${U.money(row.plannedExecution)}</td><td>${U.money(row.actualExecution)}</td><td>${U.money(row.plannedBilling)}</td><td>${U.money(row.actualBilling)}</td><td>${U.money(row.plannedReceipt)}</td><td>${U.money(row.actualReceipt)}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td>TOTAL</td><td>${U.money(totals.plannedExecution)}</td><td>${U.money(totals.actualExecution)}</td><td>${U.money(totals.plannedBilling)}</td><td>${U.money(totals.actualBilling)}</td><td>${U.money(totals.plannedReceipt)}</td><td>${U.money(totals.actualReceipt)}</td></tr></tfoot></table>
+      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
+    document.body.appendChild(report);
+    document.body.classList.add('printing-provisions');
+    UI.loading(true,'Preparando relatório de provisões…');
+    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
+    UI.loading(false);
+    UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
+    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-provisions');},{once:true});
+    setTimeout(()=>window.print(),250);
+  },
+
+  renderProvisions(){
+    this.ensureProvisionsPeriod();
+    const scopedProjectIds=State.filters.project?[String(State.filters.project)]:State.projects.map(p=>String(p.id));
+    const measurementsInPeriod=State.measurements.filter(m=>
+      (!State.filters.project||String(m.projectId)===String(State.filters.project))
+      && this.inPeriod(m.date,this.provisionsFrom,this.provisionsTo));
+    const cash=this.summary(measurementsInPeriod,scopedProjectIds,this.provisionsFrom,this.provisionsTo);
+    const projectsWithForecasts=State.projects
+      .filter(p=>!State.filters.project||String(p.id)===String(State.filters.project))
+      .filter(p=>this.forecasts(p.id).length);
+    $c().innerHTML=`<div class="toolbar">
+      <div><h2>Provisões</h2><small>Planeje, por projeto, as execuções, faturamentos e recebimentos futuros — o recebimento segue a condição de pagamento cadastrada no cliente.</small></div>
+      <div class="spacer"></div>
+      ${Views.medicoes.canEdit()?'<button class="btn btn-primary" onclick="CashFlow.forecastForm()"><i data-lucide="calendar-plus"></i>Nova Previsão</button>':''}
+      <button class="btn btn-ghost" onclick="CashFlow.printProvisionsReport()"><i data-lucide="file-down"></i>Relatório Previsto x Realizado</button>
+    </div>
+    ${Views.medicoes.tabsMarkup()}
+    <div class="toolbar" style="gap:10px;flex-wrap:wrap">
+      <div><label style="font-size:.72rem">De</label><input id="cf-period-from" type="date" value="${U.esc(this.provisionsFrom)}"></div>
+      <div><label style="font-size:.72rem">Até</label><input id="cf-period-to" type="date" value="${U.esc(this.provisionsTo)}"></div>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" onclick="CashFlow.applyProvisionsFilters()"><i data-lucide="filter"></i>Aplicar</button>
+      <button class="btn btn-ghost btn-sm" onclick="CashFlow.clearProvisionsFilters()"><i data-lucide="rotate-ccw"></i>Limpar</button>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-clock"></i>Previsão de Medição</div><div class="k-value">${U.money(cash.forecastBilling)}</div><div class="k-sub">${cash.forecastBillingCount?`${cash.forecastBillingCount} previsão(ões) · a partir de ${U.date(cash.forecastBillingNext)}`:'Sem previsão no período'}</div></div>
+      <div class="kpi accent-blue"><div class="k-label"><i data-lucide="calendar-check"></i>Previsão de Recebimento</div><div class="k-value">${U.money(cash.forecastReceipt)}</div><div class="k-sub">${cash.forecastReceiptCount?`${cash.forecastReceiptCount} previsão(ões) · a partir de ${U.date(cash.forecastReceiptNext)}`:'Sem previsão no período'}</div></div>
+      <div class="kpi accent-green"><div class="k-label"><i data-lucide="file-check-2"></i>Previsto x Faturado</div><div class="k-value">${U.money(cash.invoiced)}</div><div class="k-sub">previsto ${U.money(cash.forecastBilling)} · ${this.gapMarkup(cash.billingGap)}</div></div>
+      <div class="kpi accent-green"><div class="k-label"><i data-lucide="coins"></i>Previsto x Recebido</div><div class="k-value">${U.money(cash.received)}</div><div class="k-sub">previsto ${U.money(cash.forecastReceipt)} · ${this.gapMarkup(cash.receiptGap)}</div></div>
+    </div>
+    ${this.monthlyTableMarkup(this.provisionsMonthly(scopedProjectIds))}
+    <h3 style="margin:4px 0 10px">Previsões lançadas por projeto</h3>
+    ${projectsWithForecasts.length?projectsWithForecasts.map(p=>this.projectForecastTable(p.id)).join(''):'<div class="empty card"><i data-lucide="calendar-plus"></i><br>Nenhuma previsão lançada para os projetos e filtro selecionados.</div>'}`;
+    U.icons();
   }
 };

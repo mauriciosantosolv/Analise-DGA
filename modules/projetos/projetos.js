@@ -44,7 +44,7 @@ Views.projetos = {
           <td>${lightDot(s.light)}</td>
           <td><b>${U.esc(p.proposal)}</b></td>
           <td>${U.esc(p.name||'—')}</td>
-          <td style="display:flex;align-items:center;gap:8px">${clientAvatar(p.client)}${U.esc(p.client||'—')}</td>
+          <td><div style="display:flex;align-items:center;gap:8px">${clientAvatar(p.client)}${U.esc(p.client||'—')}</div></td>
           <td><span class="tag tag-gray">${U.esc(p.type||'—')}</span></td>
           <td>${statusTag(p.status)}</td>
           <td class="num">${U.money(p.saleValue)}</td>
