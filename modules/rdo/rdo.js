@@ -1366,6 +1366,33 @@ const RDO = {
     }
   },
 
+  // v4.2.4 — cabeçalho completo do documento. A RLS esconde settings,
+  // projects, clients e labor_rates de quem só preenche diário, então esses
+  // dados vêm da RPC clique_obras_rdo_document_header. Qualquer falha cai no
+  // comportamento anterior (State), sem quebrar quem já enxerga tudo.
+  async documentHeader(rdo){
+    const empty={
+      company:{name:'',cnpj:'',logo:'',letterhead:''},
+      client:{name:'',cnpj:'',logo:''},
+      project:{},roles:{},projectLabel:''
+    };
+    if(typeof Cloud==='undefined' || !Cloud.active() || typeof Cloud.rdoDocumentHeader!=='function')
+      return empty;
+    try{
+      const data=await Cloud.rdoDocumentHeader(rdo.id);
+      if(!data || typeof data!=='object') return empty;
+      const project=data.project||{};
+      const label=`${project.proposal||''} | ${project.name||''}`.replace(/^ \| /,'').replace(/ \| $/,'').trim();
+      return {
+        company:{...empty.company,...(data.company||{})},
+        client:{...empty.client,...(data.client||{})},
+        project,
+        roles:(data.roles&&typeof data.roles==='object')?data.roles:{},
+        projectLabel:label
+      };
+    }catch(err){ return empty; }
+  },
+
   async print(id){
     const rdo=State.rdos.find(item=>String(item.id)===String(id));
     if(!rdo) return UI.toast('RDO não encontrado.','warn');
@@ -1380,9 +1407,18 @@ const RDO = {
       if(old) old.remove();
       const report=document.createElement('section');
       report.id='rdo-print-report';
-      const logo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
-      const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
-      const customer=this.projectClient(rdo.projectId);
+      const header=await this.documentHeader(rdo);
+      const companyName=header.company.name||State.settings.companyName||'CliqueObras';
+      const logo=U.safeImageSrc(header.company.logo||State.settings.companyLogo)||'assets/logo-clique.png';
+      const companyCnpj=U.formatCnpj(header.company.cnpj||State.settings.companyCnpj||'');
+      const letterhead=U.safeImageSrc(header.company.letterhead||State.settings.pdfLetterhead||'');
+      const stateCustomer=this.projectClient(rdo.projectId);
+      const customer={
+        name:header.client.name||stateCustomer.name,
+        cnpj:U.formatCnpj(header.client.cnpj||(stateCustomer.client&&stateCustomer.client.cnpj)||''),
+        logo:U.safeImageSrc(header.client.logo||'')||stateCustomer.logo
+      };
+      const projectTitle=header.projectLabel||this.projectLabel(rdo.projectId);
       const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
       const snapshotFor=employeeId=>(financial?.rows||[]).find(row=>String(row.employeeId)===String(employeeId))||null;
       const visibleEntries=this.visibleEntries(rdo);
@@ -1393,26 +1429,38 @@ const RDO = {
         Enviado:'Aguardando aprovação',
         Devolvido:'Reprovado'
       }[rdo.status]||rdo.status;
-      report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}<header>
+      // v4.2.4 — serviço vendido ao cliente: tipo de contrato, proposta e as
+      // funções comerciais efetivamente apontadas neste diário.
+      const roleFor=row=>this.displayRoleFor(
+        rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
+      );
+      const soldRoles=[...new Set(visibleEntries.map(roleFor).filter(Boolean))];
+      const contractLabel=[
+        header.project.type||'',
+        header.project.proposal?`Proposta ${header.project.proposal}`:'',
+        soldRoles.join(' · ')
+      ].filter(Boolean).join(' — ');
+      report.innerHTML=`${letterhead?`<div class="pdf-letterhead" aria-hidden="true"><img src="${U.esc(letterhead)}" alt=""></div>`:''}<header>
         <div class="rdo-print-identities">
-          <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><small>Relatório Diário de Obra${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</small></span></div>
+          <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(companyName)}</b><small>Relatório Diário de Obra${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</small></span></div>
           <div class="rdo-print-client">
             ${customer.logo?`<img src="${U.esc(customer.logo)}" alt="">`:`<span>${U.esc(U.initials(customer.name))}</span>`}
-            <div><small>Cliente</small><b>${U.esc(customer.name)}</b></div>
+            <div><small>Cliente</small><b>${U.esc(customer.name)}</b>${customer.cnpj?`<small>CNPJ ${U.esc(customer.cnpj)}</small>`:''}</div>
           </div>
         </div>
         <div class="rdo-print-number"><small>RDO</small><b>${U.esc(this.documentNumber(rdo))}</b><span>${U.esc(status||'Rascunho')}</span></div>
       </header>
       <div class="rdo-print-facts">
-        <span><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></span>
+        <span><small>Projeto</small><b>${U.esc(projectTitle)}</b></span>
         <span><small>Data</small><b>${U.date(rdo.date)} · ${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</b></span>
         <span><small>Local</small><b>${U.esc(rdo.location||'Não informado')}</b></span>
         <span><small>Total apontado</small><b>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b></span>
+        ${contractLabel?`<span style="grid-column:1/-1"><small>Serviço contratado</small><b>${U.esc(contractLabel)}</b></span>`:''}
       </div>
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
-        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
-        <tbody>${visibleEntries.map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(this.displayRoleFor(rdo.projectId,row,snapshotFor(row.employeeId))||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')||'<tr><td colspan="10">Nenhum colaborador presente neste diário.</td></tr>'}</tbody></table></div>
+        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função vendida</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
+        <tbody>${visibleEntries.map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(roleFor(row)||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')||'<tr><td colspan="10">Nenhum colaborador presente neste diário.</td></tr>'}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<section class="rdo-print-section rdo-print-rejection"><h2>Comentário da reprovação</h2><p>${U.esc(rdo.rejectionComment)}</p></section>`:''}

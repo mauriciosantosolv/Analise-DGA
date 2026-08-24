@@ -1,0 +1,95 @@
+CliqueObras v4.2.4 - 24/08/2026
+================================
+
+O QUE ESTA VERSAO RESOLVE
+-------------------------
+
+1) SALDO A MEDIR ERRADO QUANDO HA FILTRO DE PERIODO
+   Antes: o saldo era "Receita Contratada menos o que foi medido NO PERIODO
+   filtrado", entao medicoes de outros meses nao abatiam nada.
+   No projeto 798 o saldo aparecia como R$ 698.169,10 quando o correto era
+   R$ 602.529,50 (o sistema esquecia uma medicao de R$ 95.639,60 de julho).
+   Agora: Saldo a Medir e percentual medido usam SEMPRE o total acumulado de
+   todas as medicoes ja lancadas. Total Medido / Aprovado / Aguardando
+   continuam sendo do periodo filtrado, como sempre foram.
+
+2) VER TODOS OS PERIODOS
+   O botao "Limpar" agora apaga as datas de verdade e mostra todo o historico.
+   O rotulo abaixo dos indicadores mostra "Periodo exibido: Todos os periodos".
+   Apagar as duas datas na mao e clicar em "Aplicar" da no mesmo.
+   Na primeira abertura da tela o mes corrente continua sendo o padrao.
+
+3) PERFIL "APONTADOR DE RDO"
+   Novo perfil em Configuracoes > Convidar usuario (e na edicao de permissoes).
+   Ele so enxerga o menu "Diarios de Obra", so os projetos que voce marcar e a
+   equipe alocada. Nao ve custo, valor de venda, medicoes, faturamento nem
+   qualquer outro cadastro.
+
+4) PDF DO RDO COMPLETO
+   O PDF de rascunho e o de envio para aprovacao agora saem com:
+   - papel timbrado da empresa
+   - logo e nome da empresa + CNPJ da empresa
+   - logo e nome do cliente + CNPJ do cliente (novo no layout)
+   - bloco "Servico contratado": tipo de contrato, proposta e as funcoes
+     vendidas ao cliente apontadas naquele diario
+   - a coluna "Funcao" virou "Funcao vendida"
+   Isso vale inclusive para o apontador, que nao tem permissao de ler os
+   cadastros: esses dados vem de uma funcao no banco que devolve SOMENTE o
+   cabecalho do documento, para quem ja pode ver aquele RDO.
+   De quebra, foi corrigido um erro de digitacao no CSS que fazia rotulo e
+   valor sairem colados no PDF ("Projeto693", "Data20/08/2026").
+
+
+COMO PUBLICAR
+-------------
+
+PASSO 1 - Banco de dados (obrigatorio, uma vez so)
+   Abra o SQL Editor do Supabase e rode o arquivo:
+      supabase/ATUALIZACAO-v4.2.4-RDO-CABECALHO-DOCUMENTO.sql
+   Ele so CRIA uma funcao nova. Nenhuma funcao, policy ou constraint que ja
+   existia foi alterada. Pode rodar mais de uma vez sem problema.
+   OBS: essa funcao ja foi aplicada no projeto durante o desenvolvimento.
+
+PASSO 2 - Arquivos
+   Suba no GitHub os arquivos do ZIP "-alterados", substituindo os existentes:
+      index.html
+      js/app.js
+      css/rdo.css
+      database/cloud.js
+      modules/medicoes/medicoes.js
+      modules/rdo/rdo.js
+      modules/configuracoes/configuracoes.js
+      supabase/ATUALIZACAO-v4.2.4-RDO-CABECALHO-DOCUMENTO.sql
+      ALTERACOES-v4.2.4.md
+      LEIA-ME-v4.2.4.txt
+
+PASSO 3 - Nada de Edge Function nesta versao.
+
+
+ATENCAO - NUMERACAO
+-------------------
+A v4.2.4 foi montada sobre a v4.2.3, que e o codigo mais avancado ja entregue.
+Ela ja contem a v4.2.0, a v4.3.0, a v4.4.0, a v4.2.1 e a v4.2.2.
+Publicar a v4.2.4 leva tudo. Nao republique a partir das pastas V4.3.0 ou
+V4.4.0.
+
+
+COMO CRIAR UM APONTADOR DE RDO
+------------------------------
+1. Configuracoes > Convidar usuario
+2. E-mail da pessoa
+3. Perfil: "Apontador de RDO"
+   (as caixas de permissao travam sozinhas)
+4. Marque, na lista "Projetos disponiveis no RDO", os projetos que ele pode
+   apontar. Esse e o unico ajuste que sobra para voce.
+5. Criar vinculo.
+
+
+PARA CONFERIR DEPOIS DE PUBLICAR
+--------------------------------
+[ ] Medicoes, filtro de agosto no projeto 798: saldo R$ 602.529,50 e 37,0%
+[ ] Medicoes > Limpar: aparece "Todos os periodos" e as duas medicoes
+[ ] Configuracoes > Convidar usuario: o perfil "Apontador de RDO" existe
+[ ] Entrando com esse usuario: so o menu "Diarios de Obra"
+[ ] PDF de um rascunho gerado por ele: timbrado, 2 logos, 2 CNPJs e o bloco
+    "Servico contratado"

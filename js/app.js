@@ -37,6 +37,11 @@ const App = {
   canOpenView(view){
     if(view==='configuracoes') return true;
     if(typeof Cloud==='undefined' || !Cloud.active()) return true;
+    // v4.2.4 — o Apontador de RDO enxerga apenas o menu Diários de Obra. Ele
+    // precisa de leitura em 'crew' para montar a equipe do diário, mas isso
+    // não deve abrir o módulo de Colaboradores para ele.
+    if(typeof Cloud.isRdoOnly==='function' && Cloud.isRdoOnly())
+      return view==='rdos';
     const stores=this.viewStores[view]||[];
     return !stores.length || stores.some(store=>Cloud.canViewStore(store));
   },
@@ -325,8 +330,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.2.3 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.2.3 · dados locais';
+      el.textContent=`v4.2.4 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.2.4 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();

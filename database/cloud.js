@@ -359,6 +359,17 @@ const Cloud = (() => {
   function canUseRdoProject(projectId){
     return fullAccess() || rdoProjects().some(x=>x.id===String(projectId));
   }
+  // v4.2.4 — perfil "Apontador de RDO": usuário que só preenche diário de obra.
+  // É reconhecido pelo FORMATO das permissões (view=crew+rdos, edit=rdos, sem
+  // gestão de usuários). O papel gravado no banco continua sendo 'editor', por
+  // isso nenhuma constraint, policy ou função existente precisou mudar.
+  function isRdoOnly(){
+    if(!configured() || !active() || fullAccess()) return false;
+    const p=(membership()||{}).permissions || {};
+    const view=[...new Set(Array.isArray(p.view)?p.view.map(String):[])].sort().join(',');
+    const edit=[...new Set(Array.isArray(p.edit)?p.edit.map(String):[])].sort().join(',');
+    return view==='crew,rdos' && edit==='rdos' && p.manage_users!==true;
+  }
   function canEditAny(){ return fullAccess() || permissionList('edit').length>0; }
   function assertCanEdit(store){
     if(!canEditStore(store)){
@@ -682,6 +693,20 @@ const Cloud = (() => {
       })
     }) || [];
     return [...new Set(rows.map(row=>String(row&&row.employee_id||'')).filter(Boolean))];
+  }
+
+  // v4.2.4 — cabeçalho do PDF do RDO (empresa, cliente, projeto e função
+  // comercial). Necessário porque a RLS esconde settings/projects/clients/
+  // labor_rates de quem só tem permissão nos diários. A função no banco é
+  // SECURITY DEFINER e valida a permissão de leitura do próprio RDO.
+  async function rdoDocumentHeader(rdoId){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return null;
+    return request('/rest/v1/rpc/clique_obras_rdo_document_header',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({p_rdo_id:String(rdoId||'')})
+    });
   }
 
   async function measurementLinks(projectId=''){
@@ -1175,7 +1200,7 @@ const Cloud = (() => {
     organization, organizations, membership, role, switchOrganization,
     refreshOrganizationContext,
     canViewStore, canEditStore, canEditAny, canManageUsers, assertCanEdit, isOwner,
-    rdoProjects, canUseRdoProject,
+    rdoProjects, canUseRdoProject, isRdoOnly, rdoDocumentHeader,
     mirror, flushQueue, readAll, upsertRaw, pendingCount:()=>queue().length,
     clearCurrentQueue,
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,

@@ -23,7 +23,11 @@ Views.medicoes = {
   periodTo:'',
   situationFilter:'',
   statusFilter:'',
+  // v4.2.4 — quando o usuário limpa os filtros, o período fica em branco de
+  // propósito e a tela passa a mostrar TODOS os períodos.
+  allPeriods:false,
   ensurePeriod(){
+    if(this.allPeriods) return;
     if(this.periodFrom&&this.periodTo) return;
     const today=new Date();
     this.periodFrom=U.isoDate(new Date(today.getFullYear(),today.getMonth(),1));
@@ -34,15 +38,27 @@ Views.medicoes = {
     this.periodTo=document.getElementById('md-period-to').value;
     this.statusFilter=document.getElementById('md-status-filter').value;
     this.situationFilter=document.getElementById('md-situation-filter').value;
+    // v4.2.4 — apagar as duas datas na mão também vale como "todos os períodos".
+    this.allPeriods=!this.periodFrom&&!this.periodTo;
     this.render();
   },
   clearFilters(){
     this.periodFrom=''; this.periodTo=''; this.statusFilter=''; this.situationFilter='';
-    this.ensurePeriod(); this.render();
+    // v4.2.4 — "Limpar" passa a exibir todo o histórico, sem recorte de datas.
+    this.allPeriods=true; this.render();
   },
 
   canEdit(){
     return typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('measurements');
+  },
+  // v4.2.4 — total medido acumulado: todas as medições já lançadas, sem
+  // filtro de período, status ou recebimento. É o valor que precisa ser
+  // abatido da receita contratada para chegar ao saldo a medir correto.
+  measuredAllTime(projectId=''){
+    const scope=projectId||State.filters.project||'';
+    return State.measurements
+      .filter(m=>!scope||String(m.projectId)===String(scope))
+      .reduce((sum,m)=>sum+(Number(m.value)||0),0);
   },
   filtered(){
     this.ensurePeriod();
@@ -65,6 +81,12 @@ Views.medicoes = {
     const totalAwaiting=rows.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((sum,m)=>sum+(Number(m.value)||0),0);
     const totalRevenue=State.projects.filter(p=>!State.filters.project||String(p.id)===String(State.filters.project)).reduce((sum,p)=>sum+(Number(p.saleValue)||0),0);
     const pendingOmie=CashFlow.pendingOmieReceipts(State.filters.project||'').length;
+    // v4.2.4 — o saldo a medir considera SEMPRE o acumulado; medições feitas em
+    // outros meses continuam abatendo o saldo mesmo com o período filtrado.
+    const measuredEver=this.measuredAllTime();
+    const periodLabel=this.allPeriods
+      ?'Todos os períodos'
+      :`${U.date(this.periodFrom)} a ${U.date(this.periodTo)}`;
     $c().innerHTML=`<div class="toolbar">
       <div><h2>Medições e faturamento</h2><small>HH é consolidado pelos RDOs; obra e fornecimento permanecem manuais.</small></div>
       <div class="spacer"></div>
@@ -86,8 +108,9 @@ Views.medicoes = {
       <div class="kpi accent-green"><div class="k-label"><i data-lucide="ruler"></i>Total Medido</div><div class="k-value">${U.money(totalMeasured)}</div><div class="k-sub">Faturado: ${U.money(totalInvoiced)}</div></div>
       <div class="kpi accent-blue"><div class="k-label"><i data-lucide="badge-check"></i>Aprovado</div><div class="k-value">${U.money(totalApproved)}</div></div>
       <div class="kpi accent-amber"><div class="k-label"><i data-lucide="clock-3"></i>Aguardando aprovação</div><div class="k-value">${U.money(totalAwaiting)}</div></div>
-      <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-totalMeasured)}</div></div>
+      <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-measuredEver)}</div><div class="k-sub">Medido acumulado: ${U.money(measuredEver)}</div></div>
     </div>
+    <div style="font-size:.78rem;color:var(--text2);margin:-2px 0 12px">Período exibido: <b>${U.esc(periodLabel)}</b> · Saldo a Medir e percentual medido consideram todas as medições já lançadas.</div>
     ${Object.keys(byProj).length?Object.entries(byProj).map(([projectId,items])=>{
       const project=State.projects.find(x=>String(x.id)===String(projectId));
       const measured=items.reduce((sum,m)=>sum+(Number(m.value)||0),0);
@@ -95,11 +118,13 @@ Views.medicoes = {
       const approved=items.filter(m=>U.norm(m.status).startsWith('aprova')).reduce((sum,m)=>sum+(Number(m.value)||0),0);
       const awaiting=items.filter(m=>U.norm(m.status)==='aguardando aprovacao').reduce((sum,m)=>sum+(Number(m.value)||0),0);
       const receivedProject=items.reduce((sum,m)=>sum+CashFlow.situation(m).received,0);
-      const pct=project&&project.saleValue>0?measured/project.saleValue*100:null;
+      // v4.2.4 — o percentual medido do projeto usa o acumulado, não o período.
+      const measuredEverProject=this.measuredAllTime(projectId);
+      const pct=project&&project.saleValue>0?measuredEverProject/project.saleValue*100:null;
       return `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
           <h3>${U.esc(U.projLabel(project))}</h3>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--green)">${U.money(invoiced)} faturado</b><span class="tag tag-blue">${U.money(approved)} aprovado</span><span class="tag tag-amber">${U.money(awaiting)} aguardando</span><span class="tag tag-green">${U.money(receivedProject)} recebido</span><span class="tag ${pct!=null&&pct>=100?'tag-green':'tag-blue'}">${U.pct(pct)} medido</span></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--green)">${U.money(invoiced)} faturado</b><span class="tag tag-blue">${U.money(approved)} aprovado</span><span class="tag tag-amber">${U.money(awaiting)} aguardando</span><span class="tag tag-green">${U.money(receivedProject)} recebido</span><span class="tag ${pct!=null&&pct>=100?'tag-green':'tag-blue'}" title="Percentual calculado sobre todas as medições já lançadas deste projeto">${U.pct(pct)} medido (acumulado)</span></div>
         </div>
         <div class="progress" style="margin-bottom:10px"><div style="width:${Math.min(100,pct||0)}%;background:var(--green)"></div></div>
         <div class="table-scroll" style="max-height:260px"><table>
@@ -115,7 +140,7 @@ Views.medicoes = {
           </tr>`).join('')}</tbody>
         </table></div>
       </div>`;
-    }).join(''):'<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição no período e filtros selecionados.</div>'}`;
+    }).join(''):`<div class="empty card"><i data-lucide="ruler"></i><br>Nenhuma medição ${this.allPeriods?'lançada com os filtros selecionados':'no período e filtros selecionados'}.</div>`}`;
     U.icons();
   },
 

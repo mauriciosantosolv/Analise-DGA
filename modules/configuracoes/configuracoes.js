@@ -116,8 +116,36 @@ Views.configuracoes = {
     ['categories','Categorias','Padronização das categorias'],
     ['settings','Configurações financeiras','Empresa, ticker e base de cálculo']
   ],
+  // v4.2.4 — perfil "Apontador de RDO". Na interface é um perfil próprio; no
+  // banco continua sendo gravado como 'editor' com o conjunto de permissões
+  // abaixo, de modo que nenhuma regra de acesso existente precisou mudar.
+  RDO_ONLY_ROLE:'rdo',
+  RDO_ONLY_LABEL:'Apontador de RDO',
+  rdoOnlyPermissions(rdoProjects=[]){
+    return {view:['rdos','crew'],edit:['rdos'],manage_users:false,rdo_projects:rdoProjects};
+  },
+  isRdoOnlyProfile(role,permissions){
+    if(!permissions || ['owner','admin'].includes(role)) return false;
+    const view=[...new Set((permissions.view||[]).map(String))].sort().join(',');
+    const edit=[...new Set((permissions.edit||[]).map(String))].sort().join(',');
+    return view==='crew,rdos' && edit==='rdos' && permissions.manage_users!==true;
+  },
+  profileLabel(role,permissions,labels){
+    if(this.isRdoOnlyProfile(role,permissions)) return this.RDO_ONLY_LABEL;
+    return (labels||{})[role]||role;
+  },
+  // v4.2.4 — o Apontador de RDO não enxerga a identidade da empresa; a tela de
+  // Configurações fica restrita ao cartão do próprio perfil.
+  restrictSettingsForRdoOnly(){
+    if(typeof Cloud==='undefined' || !Cloud.active()) return false;
+    if(['owner','admin'].includes(Cloud.role()) || Cloud.canViewStore('settings')) return false;
+    document.querySelectorAll('.settings-page > .settings-card:not(.settings-account)')
+      .forEach(node=>node.remove());
+    return true;
+  },
   defaultPermissions(role){
     const all=[...this.permissionModules.map(x=>x[0]),'planning_history'];
+    if(role===this.RDO_ONLY_ROLE) return this.rdoOnlyPermissions();
     if(role==='editor') return {view:all,edit:all,manage_users:false};
     if(role==='viewer') return {
       view:all.filter(x=>!['labor_rates','rdo_financial'].includes(x)),
@@ -145,7 +173,7 @@ Views.configuracoes = {
       <div class="settings-page">
       ${cloudConnected?`<section class="card settings-card settings-card-wide settings-account">
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <div class="account-summary" style="padding:0;flex:1;min-width:0"><div class="profile-avatar-preview"><img src="${U.esc(profileImage)}" alt="${ownProfilePhoto?'Foto do perfil':'Logo da empresa'}"></div><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(({owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}[currentRole]||currentRole))}</span></small></div></div>
+          <div class="account-summary" style="padding:0;flex:1;min-width:0"><div class="profile-avatar-preview"><img src="${U.esc(profileImage)}" alt="${ownProfilePhoto?'Foto do perfil':'Logo da empresa'}"></div><div><b id="cfg-profile-current-name">${U.esc(currentDisplayName||currentUser.email||'Usuário')}</b><small><span>${U.esc(currentUser.email||'')}</span><span class="organization-chip"><i data-lucide="building-2"></i>${U.esc(org?org.name:'Organização')}</span><span>${U.esc(this.profileLabel(currentRole,(Cloud.membership()||{}).permissions,{owner:'Proprietário',admin:'Administrador',editor:'Editor',viewer:'Leitor'}))}</span></small></div></div>
           <button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="refresh-cw"></i>Sincronizar</button>
         </div>
         ${Cloud.organizations().length>1?`<div style="margin-top:12px;max-width:420px"><label>Organização ativa</label><select id="cfg-active-org">${Cloud.organizations().map(x=>`<option value="${U.esc(x.id)}" ${x.id===org.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select></div>`:''}
@@ -396,6 +424,7 @@ Views.configuracoes = {
     };
     const cnpjInput=document.getElementById('cfg-cnpj');
     if(cnpjInput&&!cnpjInput.disabled) cnpjInput.oninput=()=>{cnpjInput.value=U.formatCnpj(cnpjInput.value);};
+    if(this.restrictSettingsForRdoOnly()){ U.icons(); return; }
     if(cloudConnected) this.loadTeam();
     if(cloudConnected&&currentRole==='owner') OmieIntegration.load();
     U.icons();
@@ -485,8 +514,8 @@ Views.configuracoes = {
         <thead><tr><th>Usuário</th><th>Perfil</th><th>Permissões</th><th style="width:110px"></th></tr></thead>
         <tbody>${members.map(m=>{const profile=m.profile||{};const locked=m.role==='owner'||(m.role==='admin'&&currentRole!=='owner');return `
           <tr><td><b>${U.esc(profile.full_name||profile.email||'Usuário')}</b><br><small>${U.esc(profile.email||m.user_id)}${m.user_id===currentId?' · você':''}</small></td>
-          <td><span class="tag ${locked?'tag-blue':'tag-gray'}">${U.esc(roleLabels[m.role]||m.role)}</span></td>
-          <td><small>${locked||m.role==='admin'?'Acesso completo':`${(m.permissions?.view||[]).length} módulo(s) para visualizar · ${(m.permissions?.edit||[]).length} para editar · ${(m.permissions?.rdo_projects||[]).length} projeto(s) no RDO`}</small></td>
+          <td><span class="tag ${locked?'tag-blue':'tag-gray'}">${U.esc(this.profileLabel(m.role,m.permissions,roleLabels))}</span></td>
+          <td><small>${locked||m.role==='admin'?'Acesso completo':this.isRdoOnlyProfile(m.role,m.permissions)?`Somente diários de obra · ${(m.permissions?.rdo_projects||[]).length} projeto(s) autorizado(s)`:`${(m.permissions?.view||[]).length} módulo(s) para visualizar · ${(m.permissions?.edit||[]).length} para editar · ${(m.permissions?.rdo_projects||[]).length} projeto(s) no RDO`}</small></td>
           <td>${locked?'':`<div style="display:flex;gap:5px"><button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.memberPermissionForm(${U.jsArg(m.user_id)})" title="Editar permissões"><i data-lucide="shield-check"></i></button>${m.user_id!==currentId?`<button class="btn btn-danger btn-sm" onclick="Views.configuracoes.removeMember(${U.jsArg(m.user_id)})" title="Remover da organização"><i data-lucide="user-minus"></i></button>`:''}</div>`}</td></tr>`;}).join('')}</tbody>
       </table></div></div>
       ${invitations.length?`<h3 style="margin:18px 0 8px">Convites pendentes</h3><div class="table-wrap"><div class="table-scroll"><table>
@@ -519,20 +548,36 @@ Views.configuracoes = {
       </div>
       <label class="check-item" style="margin-top:10px"><input id="perm-manage-users" type="checkbox" ${p.manage_users?'checked':''} ${canDelegate?'':'disabled'}><span><b>Gerenciar usuários</b><small>${canDelegate?'Permite convidar leitores e editores; somente o proprietário pode conceder esta delegação.':'Somente o proprietário pode conceder esta permissão.'}</small></span></label>`;
   },
+  // v4.2.4 — aplica e trava o conjunto de permissões do Apontador de RDO.
+  applyRdoOnlyPreset(){
+    const preset=this.rdoOnlyPermissions();
+    document.querySelectorAll('.perm-view').forEach(input=>{
+      input.checked=preset.view.includes(input.dataset.store);
+    });
+    document.querySelectorAll('.perm-edit').forEach(input=>{
+      input.checked=preset.edit.includes(input.dataset.store);
+    });
+    const manage=document.getElementById('perm-manage-users');
+    if(manage) manage.checked=false;
+  },
   bindPermissionRole(){
     const role=document.getElementById('member-role');
     const apply=()=>{
       const full=role.value==='admin';
+      const rdoOnly=role.value===this.RDO_ONLY_ROLE;
       document.querySelectorAll('#member-permissions input').forEach(input=>{
         if(full) input.checked=true;
-        input.disabled=full;
+        input.disabled=full||rdoOnly;
       });
       const manage=document.getElementById('perm-manage-users');
       if(full) manage.checked=true;
-      manage.disabled=full || Cloud.role()!=='owner';
+      manage.disabled=full || rdoOnly || Cloud.role()!=='owner';
+      const hint=document.getElementById('member-role-hint');
+      if(hint) hint.hidden=!rdoOnly;
     };
     role.onchange=()=>{
-      if(role.value==='viewer') document.querySelectorAll('.perm-edit').forEach(x=>x.checked=false);
+      if(role.value===this.RDO_ONLY_ROLE) this.applyRdoOnlyPreset();
+      else if(role.value==='viewer') document.querySelectorAll('.perm-edit').forEach(x=>x.checked=false);
       apply();
     };
     document.querySelectorAll('.perm-edit').forEach(input=>input.onchange=()=>{
@@ -574,8 +619,9 @@ Views.configuracoes = {
     UI.modal({title:'Vincular usuário à organização',wide:true,body:`
       <div class="form-grid" style="margin-bottom:14px">
         <div><label>E-mail do usuário *</label><input id="member-email" type="email" placeholder="usuario@empresa.com.br"></div>
-        <div><label>Perfil</label><select id="member-role"><option value="viewer">Leitor</option><option value="editor">Editor</option>${adminOption}</select></div>
+        <div><label>Perfil</label><select id="member-role"><option value="viewer">Leitor</option><option value="editor">Editor</option><option value="${this.RDO_ONLY_ROLE}">${this.RDO_ONLY_LABEL}</option>${adminOption}</select></div>
       </div>
+      <p id="member-role-hint" hidden style="font-size:.83rem;color:var(--text2);margin-bottom:10px;padding:9px 11px;border-left:3px solid var(--blue,#2563eb);background:var(--surface2)">O <b>${this.RDO_ONLY_LABEL}</b> só enxerga o menu <b>Diários de Obra</b> e os projetos marcados abaixo. Ele não vê custos, valores de venda, medições nem qualquer outro cadastro — mas o PDF que ele gera sai com o timbrado, os logotipos, os CNPJs e a função vendida ao cliente.</p>
       <p style="font-size:.83rem;color:var(--text2);margin-bottom:10px">Para uma conta nova, o CliqueObras enviará o link de convite por e-mail. Se a pessoa já tiver conta, o acesso será liberado no próximo login.</p>
       ${this.permissionControls(defaults,'viewer')}`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="member-invite-save"><i data-lucide="send"></i>Criar vínculo</button>',
@@ -585,10 +631,17 @@ Views.configuracoes = {
       }
     });
   },
+  // v4.2.4 — o perfil "Apontador de RDO" existe só na interface: no banco ele
+  // é gravado como 'editor' com o conjunto fixo de permissões do preset.
+  resolveRoleAndPermissions(){
+    const selected=document.getElementById('member-role').value;
+    const form=this.readPermissionForm();
+    if(selected!==this.RDO_ONLY_ROLE) return {role:selected,permissions:form};
+    return {role:'editor',permissions:this.rdoOnlyPermissions(form.rdo_projects)};
+  },
   async saveInvitation(){
     const email=document.getElementById('member-email').value.trim();
-    const role=document.getElementById('member-role').value;
-    const permissions=this.readPermissionForm();
+    const {role,permissions}=this.resolveRoleAndPermissions();
     try{
       UI.loading(true,'Criando vínculo…');
       const result=await Cloud.inviteMember(email,role,permissions);
@@ -604,10 +657,12 @@ Views.configuracoes = {
     if(member.role==='owner' || (member.role==='admin' && Cloud.role()!=='owner'))
       return UI.toast('Somente o proprietário pode alterar este perfil.','warn',5500);
     const profile=member.profile||{};
+    const currentIsRdoOnly=this.isRdoOnlyProfile(member.role,member.permissions);
     const adminOption=Cloud.role()==='owner'?`<option value="admin" ${member.role==='admin'?'selected':''}>Administrador</option>`:'';
     UI.modal({title:`Permissões — ${U.esc(profile.full_name||profile.email||'Usuário')}`,wide:true,body:`
-      <div class="form-grid" style="margin-bottom:14px"><div><label>Perfil</label><select id="member-role"><option value="viewer" ${member.role==='viewer'?'selected':''}>Leitor</option><option value="editor" ${member.role==='editor'?'selected':''}>Editor</option>${adminOption}</select></div><div><label>E-mail</label><input value="${U.esc(profile.email||'')}" disabled></div></div>
-      ${this.permissionControls(member.permissions,member.role)}`,
+      <div class="form-grid" style="margin-bottom:14px"><div><label>Perfil</label><select id="member-role"><option value="viewer" ${!currentIsRdoOnly&&member.role==='viewer'?'selected':''}>Leitor</option><option value="editor" ${!currentIsRdoOnly&&member.role==='editor'?'selected':''}>Editor</option><option value="${this.RDO_ONLY_ROLE}" ${currentIsRdoOnly?'selected':''}>${this.RDO_ONLY_LABEL}</option>${adminOption}</select></div><div><label>E-mail</label><input value="${U.esc(profile.email||'')}" disabled></div></div>
+      <p id="member-role-hint" ${currentIsRdoOnly?'':'hidden'} style="font-size:.83rem;color:var(--text2);margin-bottom:10px;padding:9px 11px;border-left:3px solid var(--blue,#2563eb);background:var(--surface2)">O <b>${this.RDO_ONLY_LABEL}</b> só enxerga o menu <b>Diários de Obra</b> e os projetos marcados abaixo.</p>
+      ${this.permissionControls(member.permissions,currentIsRdoOnly?this.RDO_ONLY_ROLE:member.role)}`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="member-permission-save"><i data-lucide="check"></i>Salvar permissões</button>',
       onOpen:()=>{
         this.bindPermissionRole();
@@ -616,10 +671,10 @@ Views.configuracoes = {
     });
   },
   async saveMemberPermissions(userId){
-    const role=document.getElementById('member-role').value;
+    const {role,permissions}=this.resolveRoleAndPermissions();
     try{
       UI.loading(true,'Salvando permissões…');
-      await Cloud.updateMember(userId,role,this.readPermissionForm());
+      await Cloud.updateMember(userId,role,permissions);
       UI.loading(false); UI.closeAll(); UI.toast('Permissões atualizadas','success');
       await this.loadTeam();
     }catch(err){ UI.loading(false); UI.toast('Não foi possível atualizar: '+U.esc(err.message),'error',6500); }
