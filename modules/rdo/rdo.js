@@ -1435,11 +1435,17 @@ const RDO = {
         rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
       );
       const soldRoles=[...new Set(visibleEntries.map(roleFor).filter(Boolean))];
-      const contractLabel=[
+      // v4.2.6 — "Serviço contratado" descreve a venda por hora-homem: tipo do
+      // contrato, proposta e funções apontadas. Em projeto de Obra ou de
+      // Fornecimento a venda é por escopo, não por função apontada, então a linha
+      // deixa de ser impressa. O tipo vem do cabeçalho servido pela RPC, para
+      // continuar funcionando em perfis que não enxergam o cadastro de projetos.
+      const isHhContract=String(header.project.type||this.projectFor(rdo.projectId)?.type||'').toUpperCase()==='HH';
+      const contractLabel=isHhContract?[
         header.project.type||'',
         header.project.proposal?`Proposta ${header.project.proposal}`:'',
         soldRoles.join(' · ')
-      ].filter(Boolean).join(' — ');
+      ].filter(Boolean).join(' — '):'';
       report.innerHTML=`${letterhead?`<div class="pdf-letterhead" aria-hidden="true"><img src="${U.esc(letterhead)}" alt=""></div>`:''}<header>
         <div class="rdo-print-identities">
           <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(companyName)}</b><small>Relatório Diário de Obra${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</small></span></div>

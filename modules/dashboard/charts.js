@@ -146,7 +146,9 @@ Dash.drill = function(filter){
   if(filter.category){ rows = rows.filter(x=>Biz.sameCategory(x.category,filter.category)); crumbs.push('Categoria: '+Biz.categoryName(filter.category)); }
   if(filter.supplier){ rows = rows.filter(x=>x.supplier===filter.supplier); crumbs.push('Fornecedor: '+filter.supplier); }
   if(filter.month){ rows = rows.filter(x=>(x.date||'').startsWith(filter.month)); crumbs.push('Mês: '+filter.month); }
-  rows.sort((a,b)=>b.value-a.value);
+  // v4.2.6 — lançamentos sempre em ordem de data decrescente. O maior valor
+  // continua desempatando quando a data é a mesma.
+  rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||b.value-a.value);
   const purchaseTotal = rows.reduce((s,x)=>s+x.value,0);
   const overheadKeys=new Set(['impostos','custo administrativo','taxas','outros encargos']);
   const categoryKey=Biz.categoryKey(filter.category||'');

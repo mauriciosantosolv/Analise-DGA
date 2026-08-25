@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { enforceRateLimit, json, preflight, readJson, rejectUntrustedOrigin } from "../_shared/security.ts";
-import { batchPayableEntries, buildPayableEntries, buildReceivableEntries, chunk, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
+import { batchPayableEntries, buildPayableEntries, buildReceivableEntries, chunk, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, isOmieMissingEntryError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -127,7 +127,7 @@ Deno.serve(async(request:Request)=>{
     ]);
     if(connectionError) throw connectionError;
     const last=Array.isArray(runs)&&runs[0]?runs[0]:null;
-    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status,receivables:(last.details as any)?.receivables??null}:null}};
+    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status,receivables:(last.details as any)?.receivables??null,orphans:(last.details as any)?.orphans??null}:null}};
   }
 
   async function supplierDirectory(orgId:string,payables:Record<string,unknown>[],creds:{app_key:string;app_secret:string}){
@@ -206,7 +206,7 @@ Deno.serve(async(request:Request)=>{
     try{
       const creds=await credentials(orgId);
       const [{data:connection,error:connectionError},{data:projectRows,error:projectError},{data:categoryRows,error:categoryError}]=await Promise.all([
-        admin.from("omie_connections").select("initial_sync_date,last_sync_at,supplier_backfill_completed_at,inclusion_backfill_completed_at,created_by,auto_sync").eq("organization_id",orgId).eq("active",true).maybeSingle(),
+        admin.from("omie_connections").select("initial_sync_date,last_sync_at,supplier_backfill_completed_at,created_by,auto_sync").eq("organization_id",orgId).eq("active",true).maybeSingle(),
         admin.from("omie_project_mappings").select("omie_project_code,omie_project_name,clique_project_id,enabled").eq("organization_id",orgId).eq("enabled",true),
         admin.from("omie_category_mappings").select("omie_category_code,clique_category_name,enabled").eq("organization_id",orgId).eq("enabled",true)
       ]);
@@ -224,16 +224,16 @@ Deno.serve(async(request:Request)=>{
       // A primeira execução da v3.0.8 relê o período completo uma única vez
       // para substituir os fornecedores genéricos já importados.
       const needsSupplierBackfill=!connection.supplier_backfill_completed_at;
-      // A v4.0.1 também força uma releitura histórica única para substituir
-      // datas antigas gravadas como vencimento/previsão pela inclusão info.dInc.
-      const needsInclusionBackfill=!connection.inclusion_backfill_completed_at;
-      const needsHistoricalBackfill=needsSupplierBackfill||needsInclusionBackfill;
+      // v4.2.6 — a releitura historica por data de inclusao (info.dInc) escrita
+      // para a v4.0.1 continua PENDENTE DE DECISAO e NAO entra em producao:
+      // publicar aquele trecho reescreveria a data de todos os lancamentos ja
+      // importados do Omie. Os auxiliares payableDates/payableInclusionDate
+      // seguem prontos em logic.mjs, porem fora do fluxo. Aqui vale exatamente
+      // a regra que ja roda em producao.
+      const needsHistoricalBackfill=needsSupplierBackfill;
       const incremental=mode==="automatic"&&connection.last_sync_at&&!needsHistoricalBackfill
         ?new Date(new Date(connection.last_sync_at).getTime()-3*86400000).toISOString().slice(0,10):initial;
-      const todayParts=Object.fromEntries(new Intl.DateTimeFormat("en-US",{
-        timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"
-      }).formatToParts(new Date()).map(part=>[part.type,part.value]));
-      const today=`${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+      const today=new Date().toISOString().slice(0,10);
       const selectedSet=new Set(selected);
       const basePayableFilter={
         apenas_importado_api:"N",filtrar_por_data_de:isoToDdMmYyyy(incremental),filtrar_por_data_ate:isoToDdMmYyyy(today),filtrar_apenas_inclusao:"N",filtrar_apenas_alteracao:"N",exibir_obs:"S"
@@ -256,15 +256,14 @@ Deno.serve(async(request:Request)=>{
         payables.push(...rows.filter(row=>selectedSet.has(cleanText(row.codigo_projeto,60))));
       }
       const suppliers=await supplierDirectory(orgId,payables,creds);
-      const built=buildPayableEntries(payables,projectMap,categoryMap,suppliers.names,{today});
+      const built=buildPayableEntries(payables,projectMap,categoryMap,suppliers.names);
       const supplierBackfillComplete=suppliers.complete&&selected.length===allowed.size;
-      const inclusionBackfillComplete=selected.length===allowed.size;
       let imported=0,updated=0,cancelled=0,unchanged=0;
       for(const batch of batchPayableEntries(built.entries,500)){
         const {data:reconciled,error:reconcileError}=await admin.rpc("clique_obras_reconcile_omie_entries",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(reconcileError) throw new Error(reconcileError.message||"Falha ao reconciliar lançamentos do Omie.");
         cancelled+=Number(reconciled?.cancelled)||0;
-        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries_v401",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
+        const {data,error}=await admin.rpc("clique_obras_apply_omie_entries",{target_organization_id:orgId,target_actor_id:runActor,entries:batch,target_sync_run_id:runId});
         if(error) throw new Error(error.message||"Falha ao aplicar lançamentos do Omie.");
         imported+=Number(data?.imported)||0;updated+=Number(data?.updated)||0;cancelled+=Number(data?.cancelled)||0;unchanged+=Number(data?.unchanged)||0;
       }
@@ -283,12 +282,22 @@ Deno.serve(async(request:Request)=>{
           filtrar_por_data_de:isoToDdMmYyyy(incremental),
           filtrar_por_data_ate:isoToDdMmYyyy(today)
         };
+        // v4.2.6 — CAUSA RAIZ da sincronizacao automatica que nunca terminava.
+        // Ate aqui esta etapa fazia UMA consulta ao Omie POR PROJETO (21 na
+        // organizacao de producao). Com o espacamento obrigatorio de 700ms por
+        // metodo, a latencia do Omie e os retries de "metodo concorrente", a
+        // execucao completa saiu de ~23s (antes da v4.2.0) para mais de 150s:
+        // estourava o timeout de 30s do pg_cron/pg_net e, sem ele, o limite de
+        // 150s da propria Edge Function. Nenhuma execucao completa terminou
+        // entre 21/08/2026 e 25/08/2026.
+        // A correcao repete o padrao que as contas a pagar ja usam na rotina
+        // incremental: UMA consulta pelo periodo e o recorte por projeto feito
+        // localmente. O conjunto de titulos considerado e o mesmo — nenhuma
+        // regra de negocio muda.
         const titles:Record<string,unknown>[]=[];
-        for(const projectCode of selected){
-          const rows=await pagedOmie(OMIE_ENDPOINTS.receivables,"ListarContasReceber","conta_receber_cadastro",{
-            ...baseReceivableFilter,filtrar_por_projeto:Number(projectCode)
-          },creds,100);
-          titles.push(...rows);
+        {
+          const rows=await pagedOmie(OMIE_ENDPOINTS.receivables,"ListarContasReceber","conta_receber_cadastro",baseReceivableFilter,creds,100);
+          titles.push(...rows.filter(row=>selectedSet.has(cleanText(row.codigo_projeto,60))));
         }
         receivables.titles=titles.length;
         const customers=await customerDirectory(orgId,titles);
@@ -309,14 +318,80 @@ Deno.serve(async(request:Request)=>{
         console.warn("Omie receivables step failed",{organizationId:orgId,runId,message:receivables.error});
       }
 
+      // ---------------------------------------------------------------------
+      // v4.2.6 — Lancamentos EXCLUIDOS no Omie.
+      //
+      // Quando uma conta a pagar e apagada no Omie ela simplesmente some de
+      // ListarContasPagar. A reconciliacao existente so cancela rateios de
+      // titulos que AINDA aparecem no lote, entao o registro apagado ficava
+      // para sempre no CliqueObras, duplicando o Realizado e mantendo o
+      // planejamento abatido. Foi o caso do projeto 798: o titulo 2420124371
+      // (R$ 3.999,50) foi refeito no Omie como 2421007984 e o antigo virou
+      // fantasma.
+      //
+      // Aqui listamos os candidatos (RPC somente leitura) e CONFIRMAMOS um a
+      // um no proprio Omie, com ConsultarContaPagar, que o titulo realmente
+      // nao existe mais. So entao cancelamos, chamando a MESMA rotina que ja
+      // trata cancelamento (active:false) — que devolve o valor ao
+      // planejamento e grava o historico 'omie_restored'. Nada e removido por
+      // deducao, e o bloco inteiro fica isolado num try/catch para nunca
+      // derrubar uma sincronizacao que ja aplicou os lancamentos.
+      // ---------------------------------------------------------------------
+      const orphans:Record<string,unknown>={checked:0,removed:0,kept:0,error:null};
+      try{
+        const presentIds=[...new Set(payables.map(row=>cleanText(row.codigo_lancamento_omie??row.codigo_lancamento_integracao,100)).filter(Boolean))];
+        const projectIds=[...new Set(selected.map(code=>String(projectMap.get(code)?.cliqueProjectId||"")).filter(Boolean))];
+        const {data:candidates,error:candidateError}=await admin.rpc("clique_obras_omie_orphan_candidates_v426",{
+          target_organization_id:orgId,project_ids:projectIds,date_from:incremental,date_to:today,present_ids:presentIds,max_rows:40
+        });
+        if(candidateError) throw new Error(candidateError.message||"Falha ao listar lancamentos orfaos.");
+        const verdicts=new Map<string,boolean>();
+        for(const candidate of (Array.isArray(candidates)?candidates:[]) as Record<string,unknown>[]){
+          const externalId=cleanText(candidate.externalId,100);
+          if(!externalId) continue;
+          if(!verdicts.has(externalId)){
+            if(verdicts.size>=15) break;
+            let missing=false;
+            try{
+              await omieCall(OMIE_ENDPOINTS.payables,"ConsultarContaPagar",
+                /^[0-9]+$/.test(externalId)
+                  ?{codigo_lancamento_omie:Number(externalId)}
+                  :{codigo_lancamento_integracao:externalId},creds);
+            }catch(error){ missing=isOmieMissingEntryError(error); }
+            verdicts.set(externalId,missing);
+            orphans.checked=Number(orphans.checked)+1;
+          }
+          if(!verdicts.get(externalId)){ orphans.kept=Number(orphans.kept)+1; continue; }
+          const {error:cancelError}=await admin.rpc("clique_obras_apply_omie_entries",{
+            target_organization_id:orgId,target_actor_id:runActor,
+            entries:[{
+              externalItemId:cleanText(candidate.externalItemId,180),
+              externalId,
+              projectId:cleanText(candidate.projectId,180),
+              category:cleanText(candidate.category,180),
+              value:Number(candidate.value)||0,
+              active:false,
+              externalSource:"omie"
+            }],
+            target_sync_run_id:runId
+          });
+          if(cancelError) throw new Error(cancelError.message||"Falha ao cancelar lancamento excluido no Omie.");
+          orphans.removed=Number(orphans.removed)+1;
+          console.log("Omie orphan removed",{organizationId:orgId,runId,externalId});
+        }
+      }catch(error){
+        orphans.error=safeOmieError(error);
+        console.warn("Omie orphan cleanup failed",{organizationId:orgId,runId,message:orphans.error});
+      }
+
       const finishedAt=new Date().toISOString();
       await Promise.all([
-        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,inclusionBackfillComplete,receivables}}).eq("id",runId),
+        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,receivables,orphans}}).eq("id",runId),
         admin.from("omie_connections").update({last_sync_at:finishedAt,last_sync_status:"success",last_sync_error:null,
           supplier_backfill_completed_at:connection.supplier_backfill_completed_at||(supplierBackfillComplete?finishedAt:null),
-          inclusion_backfill_completed_at:connection.inclusion_backfill_completed_at||(inclusionBackfillComplete?finishedAt:null),updated_at:finishedAt}).eq("organization_id",orgId)
+          updated_at:finishedAt}).eq("organization_id",orgId)
       ]);
-      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length,receivables};
+      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length,receivables,orphans};
     }catch(error){
       const message=safeOmieError(error);
       const updates=[admin.from("omie_connections").update({last_sync_status:"error",last_sync_error:message,updated_at:new Date().toISOString()}).eq("organization_id",orgId)];
@@ -381,12 +456,24 @@ Deno.serve(async(request:Request)=>{
         const last=Math.max(new Date(row.last_sync_at||0).getTime()||0,new Date(row.last_sync_attempt_at||0).getTime()||0);
         return !last||now-last>=(Number(row.auto_interval_minutes)||60)*60000;
       });
-      const results=[];
-      for(const row of due){
-        try{results.push({organizationId:row.organization_id,ok:true,...await syncOrganization(row.organization_id,null,"automatic",String(row.created_by||""))});}
-        catch(error){results.push({organizationId:row.organization_id,ok:false,error:safeOmieError(error)});}
-      }
-      return json(request,{processed:results.length,results});
+      // v4.2.6 — o pg_cron chama esta rota pelo pg_net, que corta a conexao no
+      // timeout configurado; alem disso a propria Edge Function encerra a
+      // requisicao ociosa em 150s. Sincronizar dentro da resposta fazia o
+      // worker morrer no meio: a execucao ficava presa em 'running', o
+      // last_sync_at nunca avancava e a tela mostrava a ultima sincronizacao
+      // parada no tempo. Agora respondemos imediatamente e o trabalho segue
+      // como tarefa de segundo plano.
+      const work=(async()=>{
+        for(const row of due){
+          try{ await syncOrganization(row.organization_id,null,"automatic",String(row.created_by||"")); }
+          catch(error){ console.error("Omie scheduled sync failed",{organizationId:row.organization_id,message:safeOmieError(error)}); }
+        }
+      })();
+      work.catch(()=>{});
+      const runtime=(globalThis as any).EdgeRuntime;
+      if(due.length&&runtime&&typeof runtime.waitUntil==="function") runtime.waitUntil(work);
+      else if(due.length) await work;
+      return json(request,{accepted:due.length,organizations:due.map((row:any)=>row.organization_id)});
     }
     return json(request,{error:"Operação inválida."},400);
   }catch(error){

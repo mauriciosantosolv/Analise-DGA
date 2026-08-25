@@ -41,8 +41,17 @@ Views.dashboard = {
     Dash.destroyCharts(); Dash.chartDefaults();
     const vis = this.chartVisibility();
     const categoryFilter = State.filters.category || '';
-    const projects = Biz.filteredProjects();
-    const purchases = Biz.filteredPurchases();
+    // v4.2.6 — projeto Concluído sai do Dashboard principal (lista, KPIs e
+    // gráficos) para não poluir o acompanhamento do que está em andamento. O
+    // resultado financeiro completo continua no menu Projetos. Ele volta a
+    // aparecer quando o usuário pede de forma explícita: filtro de status
+    // "Concluído" ou seleção manual de projetos.
+    const allProjects = Biz.filteredProjects();
+    const showFinished = State.filters.status==='Concluído' || State.selectedProjectIds().length>0;
+    const projects = showFinished ? allProjects : allProjects.filter(p=>p.status!=='Concluído');
+    const hiddenFinished = allProjects.length - projects.length;
+    const visibleProjectIds = new Set(projects.map(p=>String(p.id)));
+    const purchases = Biz.filteredPurchases().filter(x=>visibleProjectIds.has(String(x.projectId)));
     const active = projects.filter(p=>p.status==='Em andamento');
     const stats = projects.map(p=>({p, s:Biz.projectStats(p, categoryFilter)}));
     const sum = k => stats.reduce((s,x)=>s+(x.s[k]||0),0);
@@ -125,6 +134,7 @@ Views.dashboard = {
       </div>
 
       <div class="section-title"><h2>Semáforo Financeiro das Obras</h2>
+        ${hiddenFinished?`<small class="dash-hidden-note">${hiddenFinished} projeto(s) concluído(s) oculto(s) — veja o resultado em <button type="button" onclick="App.go('projetos')">Projetos</button></small>`:''}
         <button class="btn btn-ghost btn-sm" onclick="Views.projetos.compare()"><i data-lucide="git-compare"></i>Comparar</button></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
         <thead><tr><th></th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo Orçado</th><th class="num">Margem</th><th class="num">Saúde</th><th>Consumo</th></tr></thead>

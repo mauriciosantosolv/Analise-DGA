@@ -53,6 +53,9 @@
 .empty{text-align:center;padding:48px 20px;color:var(--text3)}
 .empty svg{width:42px;height:42px;margin-bottom:10px;opacity:.5}
 .section-title{display:flex;align-items:center;justify-content:space-between;margin:22px 0 12px}
+/* v4.2.6 - aviso de projetos concluidos ocultos no Semaforo Financeiro */
+.section-title .dash-hidden-note{color:var(--text3);font-size:.78rem;font-weight:600;margin-left:auto;margin-right:10px;text-align:right}
+.section-title .dash-hidden-note button{background:none;border:none;padding:0;font:inherit;color:var(--blue);cursor:pointer;text-decoration:underline}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:1100px){.two-col{grid-template-columns:1fr}}
 .drop-zone{border:1px dashed var(--border);border-radius:var(--r);padding:34px;text-align:center;color:var(--text2);cursor:pointer;transition:border-color .12s ease-out,color .12s ease-out;background:var(--surface2)}

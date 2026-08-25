@@ -7,7 +7,7 @@ export const OMIE_ENDPOINTS = Object.freeze({
 });
 
 export function cleanText(value,max=240){
-  return String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
+  return String(value??'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
 }
 
 export function money(value){
@@ -82,12 +82,15 @@ export function payableAllocations(payable){
   }).filter(item=>item.code&&item.value!==0);
 }
 
-export function buildPayableEntries(payables,projectMappings,categoryMappings,supplierMappings=new Map(),options={}){
+// ATENCAO — os auxiliares payableDates/payableInclusionDate/payableInclusionTime
+// acima foram escritos para a v4.0.1 e NAO sao usados por esta funcao. Trocar a
+// data do lancamento para a data de inclusao do Omie (info.dInc) e uma decisao
+// pendente: ela reescreveria a data de todos os lancamentos ja importados.
+// Enquanto nao houver decisao, vale a regra abaixo, que e a que roda em producao.
+export function buildPayableEntries(payables,projectMappings,categoryMappings,supplierMappings=new Map()){
   const projects=projectMappings instanceof Map?projectMappings:new Map();
   const categories=categoryMappings instanceof Map?categoryMappings:new Map();
   const suppliers=supplierMappings instanceof Map?supplierMappings:new Map();
-  const today=/^\d{4}-\d{2}-\d{2}$/.test(String(options.today||''))
-    ?String(options.today):new Date().toISOString().slice(0,10);
   const entries=[];
   let skipped=0;
   for(const payable of Array.isArray(payables)?payables:[]){
@@ -95,18 +98,12 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
     const projectCode=cleanText(payable?.codigo_projeto,60);
     const project=projects.get(projectCode);
     if(!externalId||!project||project.enabled===false){skipped++;continue;}
-    const dates=payableDates(payable);
-    const active=!isCancelledStatus(payable?.status_titulo);
-    // Títulos ativos sem info.dInc não recebem uma data aproximada. Usar
-    // vencimento/previsão aqui faria o painel apresentar datas futuras como se
-    // fossem inclusões. Cancelamentos continuam sendo processados para que uma
-    // conta já importada possa ser reconciliada mesmo em respostas incompletas.
-    if(active&&(!dates.inclusionDate||dates.inclusionDate>today)){skipped++;continue;}
     const allocations=payableAllocations(payable);
     if(!allocations.length){skipped++;continue;}
     for(const allocation of allocations){
       const category=categories.get(String(allocation.code));
       if(!category||category.enabled===false){skipped++;continue;}
+      const date=ddmmyyyyToIso(payable?.data_emissao)||ddmmyyyyToIso(payable?.data_entrada)||ddmmyyyyToIso(payable?.data_previsao)||ddmmyyyyToIso(payable?.data_vencimento);
       entries.push({
         externalId,
         externalItemId:`${externalId}:${allocation.code}:${allocation.index}`,
@@ -115,12 +112,7 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
         omieCategoryCode:String(allocation.code),
         category:cleanText(category.cliqueCategoryName,160),
         value:Math.abs(money(allocation.value)),
-        date:dates.inclusionDate,
-        omieInclusionDate:dates.inclusionDate,
-        omieInclusionTime:dates.inclusionTime,
-        omieInclusionDateTime:dates.inclusionDateTime,
-        dueDate:dates.dueDate,
-        forecastDate:dates.forecastDate,
+        date,
         supplier:cleanText(
           suppliers.get(String(payable?.codigo_cliente_fornecedor??''))
           ??payable?.nome_fantasia??payable?.nome_fornecedor??payable?.razao_social
@@ -130,7 +122,7 @@ export function buildPayableEntries(payables,projectMappings,categoryMappings,su
         order:cleanText(payable?.numero_documento??payable?.numero_documento_fiscal??payable?.numero_pedido,100),
         description:cleanText(payable?.observacao??payable?.descricao??'Conta a pagar Omie',500),
         status:cleanText(payable?.status_titulo,40),
-        active,
+        active:!isCancelledStatus(payable?.status_titulo),
         sourceType:'omiePayable',
         externalSource:'omie'
       });
@@ -224,6 +216,17 @@ export function isOmieConcurrentMethodError(value){
   return normalized.includes('ja existe uma requisicao desse metodo sendo executada')
     ||normalized.includes('consumo redundante detectado')
     ||normalized.includes('too many requests');
+}
+
+// v4.2.6 — resposta do Omie quando o titulo consultado nao existe mais:
+//   {"faultstring":"ERROR: Lancamento nao cadastrado para o Codigo [...] !"}
+// E a unica prova aceita para remover um lancamento ja importado.
+export function isOmieMissingEntryError(value){
+  const normalized=cleanText(value instanceof Error?value.message:value,500)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return normalized.includes('nao cadastrado')
+    ||normalized.includes('nao encontrado')
+    ||normalized.includes('nao existe');
 }
 
 export function omieRetryDelay(attempt,value=''){

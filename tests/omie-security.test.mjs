@@ -11,6 +11,7 @@ const migration=read('supabase/ATUALIZACAO-v3.0.7-OMIE-HISTORICO-FILTROS.sql');
 const migration308=read('supabase/ATUALIZACAO-v3.0.8-OMIE-RDO.sql');
 const migration3084=read('supabase/ATUALIZACAO-v3.0.8.4-OMIE-JORNADA.sql');
 const migration401=read('supabase/ATUALIZACAO-v4.0.1-RDO-FOLGAS-OMIE.sql');
+const migration426=read('supabase/ATUALIZACAO-v4.2.6-OMIE-ORFAOS.sql');
 
 assert(!frontend.includes('localStorage.setItem'), 'Credenciais Omie não podem ir para localStorage');
 assert(!frontend.includes('DB.put('), 'Credenciais/mapeamentos Omie não podem passar pelo banco genérico do navegador');
@@ -29,8 +30,19 @@ assert(edge.includes('isOmieConcurrentMethodError'), 'A falha temporária de con
 assert(edge.includes('supplier_backfill_completed_at'), 'Fornecedores históricos devem receber um backfill único');
 assert(edge.includes('[...refreshCodes].slice(0,24)'), 'O backfill deve limitar fornecedores por execução');
 assert(edge.includes('filtrar_por_projeto:Number(projectCode)'), 'A carga histórica deve limitar as contas a pagar pelo projeto no Omie');
-assert(edge.includes('clique_obras_apply_omie_entries_v401'), 'A aplicação deve validar e preservar a data real de inclusão');
-assert(edge.includes('inclusion_backfill_completed_at'), 'A inclusão histórica deve receber um backfill único');
+// v4.2.6 — o que está publicado é a rotina de produção. A variante v401
+// (data de inclusão info.dInc) existe no repositório apenas como migração
+// pronta e NÃO deve estar no fluxo da Edge Function enquanto a decisão de
+// adotá-la estiver pendente.
+assert(edge.includes('clique_obras_apply_omie_entries"'), 'A aplicação publicada deve usar a rotina de produção');
+assert(!edge.includes('clique_obras_apply_omie_entries_v401'), 'A variante v401 não pode entrar em produção sem decisão');
+assert(!edge.includes('inclusion_backfill_completed_at'), 'O backfill de inclusão da v4.0.1 não pode entrar em produção sem decisão');
+// v4.2.6 — correções desta versão.
+assert(edge.includes('runtime.waitUntil(work)'), 'A rota agendada deve responder na hora e sincronizar em segundo plano');
+assert(edge.includes('"ListarContasReceber","conta_receber_cadastro",baseReceivableFilter'), 'Contas a receber devem usar uma consulta por período, não uma por projeto');
+assert(edge.includes('clique_obras_omie_orphan_candidates_v426'), 'Lançamentos excluídos no Omie devem ser identificados por uma rotina de leitura');
+assert(edge.includes('isOmieMissingEntryError(error)'), 'A remoção só pode ocorrer com confirmação do próprio Omie');
+assert(edge.includes('active:false'), 'A remoção deve reutilizar a rotina de cancelamento que restaura o planejamento');
 assert(edge.includes('for(const projectCode of selected)'), 'As consultas históricas por projeto devem ser seriais');
 assert(edge.includes('if(needsHistoricalBackfill||mode==="manual")'), 'Somente cargas históricas/manuais devem consultar por projeto');
 assert(edge.includes('rows.filter(row=>selectedSet.has'), 'A sincronização incremental deve filtrar localmente os projetos selecionados');
@@ -54,5 +66,10 @@ assert(migration401.match(/create or replace function public\.clique_obras_apply
 assert(migration401.match(/future Omie inclusion date/i));
 assert(migration401.match(/revoke all on function public\.clique_obras_apply_omie_entries_v401[\s\S]*from public,anon,authenticated/i));
 assert(migration401.match(/grant execute on function public\.clique_obras_apply_omie_entries_v401[\s\S]*to service_role/i));
+assert(migration426.match(/create or replace function public\.clique_obras_omie_orphan_candidates_v426/i));
+assert(migration426.match(/\bstable\b/i), 'A rotina de órfãos deve ser somente leitura');
+assert(!migration426.match(/\b(delete|update|insert)\s+(from|into|public)/i), 'A rotina de órfãos não pode gravar nada');
+assert(migration426.match(/revoke all on function public\.clique_obras_omie_orphan_candidates_v426[\s\S]*from authenticated/i));
+assert(migration426.match(/grant execute on function public\.clique_obras_omie_orphan_candidates_v426[\s\S]*to service_role/i));
 
 console.log('Omie security boundary tests passed');

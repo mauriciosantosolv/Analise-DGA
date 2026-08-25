@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,isOmieConcurrentMethodError,normalizeOmieTime,omieRetryDelay,payableAllocations,payableDates,payableInclusionDate,payableInclusionTime,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
+import {batchPayableEntries,buildPayableEntries,ddmmyyyyToIso,isOmieConcurrentMethodError,isOmieMissingEntryError,normalizeOmieTime,omieRetryDelay,payableAllocations,payableDates,payableInclusionDate,payableInclusionTime,safeOmieError} from '../supabase/functions/omie-integration/logic.mjs';
 
 assert.equal(ddmmyyyyToIso('14/08/2026'),'2026-08-14');
 assert.equal(payableInclusionDate({info:{dInc:'15/08/2026'},data_entrada:'12/08/2026',data_emissao:'10/08/2026'}),'2026-08-15');
@@ -24,19 +24,19 @@ const categories=new Map([
   ['2.01.01',{cliqueCategoryName:'Compras de Material',enabled:true}],
   ['2.02.02',{cliqueCategoryName:'Hospedagem',enabled:true}]
 ]);
+// v4.2.6 - buildPayableEntries e testada com a regra que ESTA PUBLICADA: a data
+// do lancamento vem de emissao > entrada > previsao > vencimento. Os auxiliares
+// de data de inclusao (info.dInc) testados acima continuam prontos em
+// logic.mjs, porem fora do fluxo enquanto a troca de regra nao for decidida.
 const payables=[
-  {codigo_lancamento_omie:900,codigo_projeto:1001,valor_documento:100,codigo_categoria:'2.01.01',info:{dInc:'15/08/2026',hInc:'14:35:20'},data_previsao:'20/08/2026',data_vencimento:'30/08/2026',status_titulo:'EMABERTO'},
+  {codigo_lancamento_omie:900,codigo_projeto:1001,valor_documento:100,codigo_categoria:'2.01.01',data_emissao:'15/08/2026',data_previsao:'20/08/2026',data_vencimento:'30/08/2026',status_titulo:'EMABERTO'},
   {codigo_lancamento_omie:901,codigo_projeto:1002,valor_documento:200,categorias:[{codigo_categoria:'2.01.01',percentual:75},{codigo_categoria:'2.02.02',percentual:25}],status_titulo:'CANCELADO'}
 ];
-const result=buildPayableEntries(payables,projects,categories,new Map(),{today:'2026-08-17'});
+const result=buildPayableEntries(payables,projects,categories,new Map());
 assert.equal(result.skipped,0);
 assert.equal(result.entries.length,3);
 assert.equal(result.entries[0].projectId,'click-815-usf');
 assert.equal(result.entries[0].date,'2026-08-15');
-assert.equal(result.entries[0].omieInclusionTime,'14:35:20');
-assert.equal(result.entries[0].omieInclusionDateTime,'2026-08-15T14:35:20');
-assert.equal(result.entries[0].forecastDate,'2026-08-20');
-assert.equal(result.entries[0].dueDate,'2026-08-30');
 assert.equal(result.entries[1].projectId,'click-815-urd');
 assert.equal(result.entries[1].value,150);
 assert.equal(result.entries[2].value,50);
@@ -46,23 +46,30 @@ assert.notEqual(result.entries[0].externalItemId,result.entries[1].externalItemI
 const suppliers=new Map([['24040','Depósito Aurora']]);
 const fantasy=buildPayableEntries([{
   codigo_lancamento_omie:902,codigo_projeto:1001,codigo_cliente_fornecedor:24040,
-  nome_fornecedor:'Razão Social Antiga',valor_documento:75,codigo_categoria:'2.01.01',info:{dInc:'16/08/2026'}
-}],projects,categories,suppliers,{today:'2026-08-17'});
+  nome_fornecedor:'Razão Social Antiga',valor_documento:75,codigo_categoria:'2.01.01',data_emissao:'16/08/2026'
+}],projects,categories,suppliers);
 assert.equal(fantasy.entries[0].supplier,'Depósito Aurora');
 
-const unmapped=buildPayableEntries([{codigo_lancamento_omie:1,codigo_projeto:999,valor_documento:10,codigo_categoria:'2.01.01'}],projects,categories,new Map(),{today:'2026-08-17'});
+const unmapped=buildPayableEntries([{codigo_lancamento_omie:1,codigo_projeto:999,valor_documento:10,codigo_categoria:'2.01.01'}],projects,categories,new Map());
 assert.equal(unmapped.entries.length,0);
 assert.equal(unmapped.skipped,1);
-const invalidDates=buildPayableEntries([
-  {codigo_lancamento_omie:903,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01'},
-  {codigo_lancamento_omie:904,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01',info:{dInc:'30/08/2026'}}
-],projects,categories,new Map(),{today:'2026-08-17'});
-assert.equal(invalidDates.entries.length,0);
-assert.equal(invalidDates.skipped,2);
+// Cadeia de fallback da data, na ordem que roda em producao.
+const fallbackDates=buildPayableEntries([
+  {codigo_lancamento_omie:903,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01',data_vencimento:'30/08/2026'},
+  {codigo_lancamento_omie:904,codigo_projeto:1001,valor_documento:10,codigo_categoria:'2.01.01',data_entrada:'12/08/2026',data_previsao:'20/08/2026'}
+],projects,categories,new Map());
+assert.equal(fallbackDates.entries.length,2);
+assert.equal(fallbackDates.entries[0].date,'2026-08-30');
+assert.equal(fallbackDates.entries[1].date,'2026-08-12');
 assert.equal(safeOmieError('app_secret=super-segredo app_key=abc123'),'credencial protegida chave protegida');
 assert.equal(isOmieConcurrentMethodError('ERROR: Já existe uma requisição desse método sendo executada e você pode tentar novamente.'),true);
 assert.equal(isOmieConcurrentMethodError('ERROR: Consumo redundante detectado. Aguarde 56 segundos para tentar novamente.'),true);
 assert.equal(isOmieConcurrentMethodError('Credencial inválida'),false);
+// v4.2.6 - unica prova aceita para remover um lancamento ja importado.
+assert.equal(isOmieMissingEntryError('ERROR: Lançamento não cadastrado para o Código [2420124371] !'),true);
+assert.equal(isOmieMissingEntryError(new Error('Lancamento nao encontrado')),true);
+assert.equal(isOmieMissingEntryError('Omie indisponível (500).'),false);
+assert.equal(isOmieMissingEntryError('Credencial inválida'),false);
 assert.deepEqual([0,1,2].map(attempt=>omieRetryDelay(attempt)),[1500,3000,6000]);
 assert.equal(omieRetryDelay(0,'Aguarde 56 segundos para tentar novamente.'),57000);
 

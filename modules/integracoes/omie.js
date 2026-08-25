@@ -61,11 +61,19 @@ const OmieIntegration = {
       </div>
       ${c.lastSyncError?`<div class="permission-banner" style="margin-top:12px"><i data-lucide="alert-triangle"></i><span>${U.esc(c.lastSyncError)}</span></div>`:''}
       <div class="omie-actions"><button class="btn btn-primary" id="omie-sync-now" type="button"><i data-lucide="refresh-cw"></i>Sincronizar agora</button><button class="btn btn-ghost" id="omie-configure" type="button"><i data-lucide="sliders-horizontal"></i>Projetos e categorias</button><button class="btn btn-danger" id="omie-disconnect" type="button"><i data-lucide="unlink"></i>Desvincular</button></div>
-      <small class="omie-last-result">${summary.lastRun?`Último resultado: ${Number(summary.lastRun.imported)||0} incluído(s), ${Number(summary.lastRun.updated)||0} atualizado(s), ${Number(summary.lastRun.cancelled)||0} cancelado(s) e ${Number(summary.lastRun.skipped)||0} pendente(s).`:''}</small>`;
+      <small class="omie-last-result">${summary.lastRun?`Último resultado: ${Number(summary.lastRun.imported)||0} incluído(s), ${Number(summary.lastRun.updated)||0} atualizado(s), ${Number(summary.lastRun.cancelled)||0} cancelado(s) e ${Number(summary.lastRun.skipped)||0} pendente(s).${this.orphanLabel(summary.lastRun.orphans)}`:''}</small>`;
     document.getElementById('omie-sync-now').onclick=()=>this.syncForm();
     document.getElementById('omie-configure').onclick=()=>this.configure();
     document.getElementById('omie-disconnect').onclick=()=>this.disconnect();
     U.icons();
+  },
+
+  // v4.2.6 — quantos lançamentos foram removidos por terem sido excluídos no
+  // Omie. Só aparece quando houve remoção, para não poluir a linha no dia a dia.
+  orphanLabel(orphans){
+    const removed=Number(orphans&&orphans.removed)||0;
+    if(!removed) return '';
+    return ` ${removed} lançamento(s) removido(s) por exclusão no Omie.`;
   },
 
   intervalLabel(minutes){
