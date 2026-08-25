@@ -1,0 +1,83 @@
+CLIQUEOBRAS v4.2.5 - fim dos piscas e recarregamentos
+=====================================================
+Data: 25/08/2026
+Base: v4.2.5 e construida sobre a v4.2.4 (que ja inclui v4.2.0, v4.3.0,
+      v4.4.0, v4.2.1, v4.2.2 e v4.2.3). Publicar a v4.2.5 leva TUDO.
+
+
+O QUE MUDOU
+-----------
+So correcao de desempenho e usabilidade. Nenhuma regra de calculo, de
+permissao ou de gravacao foi alterada.
+
+A tela piscava e recarregava porque:
+
+1) O filtro que deveria ignorar as SUAS PROPRIAS gravacoes nunca funcionou.
+   O carimbo de tempo chega escrito de tres jeitos diferentes
+   ("...412Z", "...412+00:00" e "...412+00") e a comparacao era feita
+   letra a letra. Resultado: cada vez que voce salvava algo, o sistema
+   achava que outra pessoa tinha salvado e redesenhava a tela inteira.
+
+2) Cada aviso de mudanca baixava a base inteira de novo (3.216 registros,
+   ~2,8 MB) e redesenhava a tela - sem nenhuma trava. A carga do Omie
+   provocava dezenas dessas releituras encavaladas.
+
+3) A copia de seguranca no navegador serializava ~3 MB de uma vez a cada
+   sincronizacao, travando a tela por instantes.
+
+4) A logo da barra lateral era recriada a cada 60 segundos pela checagem
+   de acesso (piscada de minuto em minuto).
+
+5) O letreiro financeiro do rodape era reconstruido a cada sincronizacao,
+   o que reinicia a animacao e faz ele "pular" para o comeco.
+
+E, de quebra: uma unica falha momentanea de rede podia deslogar o usuario
+e recarregar a pagina sozinho.
+
+Tudo isso foi corrigido. Agora:
+- salvar algo NAO redesenha mais a sua propria tela;
+- as mudancas de outras pessoas sao agrupadas (espera 1,2s de silencio,
+  no maximo 10s) e redesenham a tela UMA vez;
+- so redesenha se a tela aberta mostra a tabela que mudou;
+- com a aba em segundo plano nada e redesenhado;
+- a logo e o letreiro ficam parados;
+- so sai da conta depois de DUAS falhas seguidas de acesso.
+
+
+COMO PUBLICAR
+-------------
+1. Suba no GitHub os 4 arquivos alterados (ou o ZIP -completo inteiro):
+
+     index.html
+     js/app.js
+     database/cloud.js
+     database/indexeddb.js
+
+2. Publique na Hostinger como de costume.
+
+3. NAO precisa rodar nada no Supabase. Esta versao nao tem SQL nem
+   Edge Function.
+
+4. Depois de publicar, de um CTRL+F5 na primeira vez. O rodape deve
+   mostrar "v4.2.5".
+
+
+COMO CONFERIR QUE FUNCIONOU
+---------------------------
+- Abra o sistema em DUAS abas com o mesmo usuario.
+- Salve um registro na aba A: a aba A nao pode piscar. A aba B deve
+  atualizar sozinha cerca de 1 segundo depois.
+- Fique em "Colaboradores" na aba B e edite uma compra na aba A: a aba B
+  nao deve redesenhar (mas ao entrar em Financeiro os dados ja estao la).
+- Olhe a logo da barra lateral por 2-3 minutos: sem piscadas.
+- Olhe o letreiro do rodape: ele nao pode mais voltar ao comeco sozinho.
+- Rode a sincronizacao do Omie: a tela deve se atualizar poucas vezes.
+
+
+OBSERVACAO
+----------
+Quatro testes da pasta tests/ ja falhavam na v4.2.4 porque estao presos a
+versao 4.0.1. Continuam falhando pelo mesmo motivo; nao foram tocados
+para nao mexer no que nao foi pedido.
+
+Detalhes tecnicos completos: ALTERACOES-v4.2.5.md

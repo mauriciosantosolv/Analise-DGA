@@ -434,7 +434,7 @@ const Cloud = (() => {
         return true;
       }
       const pending=pendingWriteEchoes.get(key);
-      if(eventType!=='DELETE' && pending && now-pending.at<8000 && pending.updatedAt===row.updated_at){
+      if(eventType!=='DELETE' && pending && now-pending.at<8000 && sameVersion(pending.updatedAt,row.updated_at)){
         pendingWriteEchoes.delete(key);
         return true;
       }
@@ -484,6 +484,17 @@ const Cloud = (() => {
   }
   function queueStorageKey(){ return scopeId() ? QUEUE_PREFIX+scopeId() : ''; }
   function recordVersionKey(store,id){ return `${store}:${String(id)}`; }
+  // v4.2.5 - O carimbo de tempo chega em tres formatos diferentes: o cliente
+  // grava "2026-08-25T01:20:29.412Z", o PostgREST devolve "...412+00:00" e o
+  // Realtime devolve "...412+00". Comparar as strings cruas fazia o filtro de
+  // eco (e a checagem de conflito) nunca casarem, entao toda gravacao local
+  // voltava como se fosse alteracao de outra pessoa e a tela era redesenhada.
+  function versionStamp(value){
+    if(value==null || value==='') return '';
+    const parsed=Date.parse(String(value));
+    return Number.isFinite(parsed) ? String(parsed) : String(value);
+  }
+  function sameVersion(a,b){ return versionStamp(a)===versionStamp(b); }
   function queue(){
     const key=queueStorageKey();
     if(!key) return [];
@@ -554,7 +565,7 @@ const Cloud = (() => {
         pendingWriteEchoes.set(key,{updatedAt:item.updated_at,at:Date.now()});
         setTimeout(()=>{
           const pending=pendingWriteEchoes.get(key);
-          if(pending&&pending.updatedAt===item.updated_at) pendingWriteEchoes.delete(key);
+          if(pending&&sameVersion(pending.updatedAt,item.updated_at)) pendingWriteEchoes.delete(key);
         },10000);
       });
       try{
@@ -621,7 +632,7 @@ const Cloud = (() => {
       const current=remoteVersions.get(recordVersionKey(op.store,id))||null;
       const base=Object.prototype.hasOwnProperty.call(op.baseVersions||{},id)
         ? op.baseVersions[id] : null;
-      return current!==base;
+      return !sameVersion(current,base);
     });
   }
   async function flushQueue(remoteRows=[]){

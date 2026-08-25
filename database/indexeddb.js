@@ -91,7 +91,7 @@ const DB = (() => {
       if(rows.length) await Cloud.upsertRaw(store,rows);
     }
   }
-  async function syncFromCloud(){
+  async function syncFromCloud(options={}){
     if(typeof Cloud==='undefined' || !Cloud.active()) return {mode:'local',records:0};
     const accountSwitch=Cloud.isAccountSwitch();
     if(accountSwitch) await clearLocalCache();
@@ -106,7 +106,16 @@ const DB = (() => {
     }
     // Salva uma cópia apenas quando o cache pertence à mesma conta. Isso evita
     // que um usuário de computador compartilhado veja dados de outra conta.
-    if(!accountSwitch){
+    // v4.2.5 - esta copia de seguranca percorre todas as tabelas e serializa
+    // ~3 MB de uma vez, travando a tela por alguns instantes. Numa
+    // sincronizacao em segundo plano ela passa a ser regravada no maximo a
+    // cada 2 minutos; a sincronizacao manual continua gravando sempre.
+    let recentSnapshot=false;
+    try{
+      const last=Number(localStorage.getItem('ccf_snap_time')||0);
+      recentSnapshot=!!options.background && (Date.now()-last)<120000;
+    }catch(e){}
+    if(!accountSwitch && !recentSnapshot){
       try{
         const snapshot={app:'ccf_obras',version:1,exportedAt:new Date().toISOString()};
         let hasLocal=false;

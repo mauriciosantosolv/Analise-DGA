@@ -19,6 +19,13 @@ const App = {
   lastCloudRefresh:0,
   realtimeSyncTimer:null,
   accessCheckTimer:null,
+  // v4.2.5 - estado do agrupamento de mudancas vindas da nuvem
+  accessCheckFailures:0,
+  syncInFlight:null,
+  syncQueued:false,
+  realtimeChangedStores:new Set(),
+  realtimeBurstStart:0,
+  realtimeDirty:false,
   viewStores:{
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
@@ -118,7 +125,7 @@ const App = {
     const selection=State.settings.tickerProjects;
     const selectedIds=Array.isArray(selection) ? new Set(selection) : null;
     const projects = State.projects.filter(p=>p.status !== 'Cancelado' && (!selectedIds || selectedIds.has(p.id)));
-    if(!projects.length){ el.innerHTML = `<div class="ticker-empty">${State.projects.length?'Nenhum projeto selecionado para o ticker financeiro':'Desempenho financeiro: nenhum projeto cadastrado'}</div>`; return; }
+    if(!projects.length){ el.dataset.tickerSignature=''; el.innerHTML = `<div class="ticker-empty">${State.projects.length?'Nenhum projeto selecionado para o ticker financeiro':'Desempenho financeiro: nenhum projeto cadastrado'}</div>`; return; }
     const metric=State.settings.tickerMetric==='profit'?'profit':'budget_balance';
     const items = projects.map(p=>{
       const st = Biz.projectStats(p);
@@ -127,6 +134,11 @@ const App = {
       const label=metric==='profit'?'Lucro estimado':'Saldo orçado';
       return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="${label} · abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(value)}</span></button>`;
     }).join('');
+    // v4.2.5 - reconstruir o ticker reinicia a animacao do letreiro. Quando o
+    // conteudo e o mesmo, deixa como esta: era o "pulo" visivel do rodape a
+    // cada sincronizacao em segundo plano.
+    if(el.dataset.tickerSignature===items && el.querySelector('.ticker-track')) return;
+    el.dataset.tickerSignature=items;
     el.innerHTML = `<div class="ticker-track"><div class="ticker-group">${items}</div></div>`;
     requestAnimationFrame(() => {
       const track = el.querySelector('.ticker-track'), first = track && track.querySelector('.ticker-group');
@@ -315,8 +327,15 @@ const App = {
     if(box){
       const source=profileAvatar||safeLogo||'assets/logo-clique.png';
       const isProfile=!!profileAvatar;
-      box.style.background='transparent';
-      box.innerHTML=`<img src="${U.esc(source)}" class="${isProfile?'profile-avatar-image':'logo-clean'}" alt="${isProfile?'Foto do perfil':'Logo da empresa'}">`;
+      // v4.2.5 - so recria a imagem quando ela realmente mudou. Antes, a
+      // checagem de acesso de 1 em 1 minuto reescrevia este bloco e a logo
+      // piscava na barra lateral a cada minuto.
+      const signature=`${isProfile?'p':'l'}|${source}`;
+      if(box.dataset.brandSignature!==signature){
+        box.dataset.brandSignature=signature;
+        box.style.background='transparent';
+        box.innerHTML=`<img src="${U.esc(source)}" class="${isProfile?'profile-avatar-image':'logo-clean'}" alt="${isProfile?'Foto do perfil':'Logo da empresa'}">`;
+      }
     }
     if(typeof Cloud!=='undefined'&&Cloud.active()&&Cloud.profileAvatarPath()&&!profileAvatar){
       Cloud.loadProfileAvatar().then(()=>{
@@ -330,8 +349,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.2.4 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.2.4 · dados locais';
+      el.textContent=`v4.2.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.2.5 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -360,39 +379,103 @@ const App = {
       }
     };
   },
-  async syncCloudNow(showToast=true){
+  async syncCloudNow(showToast=true,options={}){
     if(typeof Cloud==='undefined' || !Cloud.active()) return;
     if(typeof UI!=='undefined' && UI.isModalOpen()) return;
-    try{
-      if(showToast) UI.loading(true,'Sincronizando com a nuvem…');
-      await DB.syncFromCloud(); await State.reload();
-      this.lastCloudRefresh=Date.now();
-      if(showToast){ UI.loading(false); UI.toast('Base sincronizada com a nuvem','success'); }
-      this.applyStorageStatus(); this.render();
-    }catch(err){
-      if(showToast){ UI.loading(false); UI.toast('Falha ao sincronizar: '+U.esc(err.message),'error',7000); }
+    // v4.2.5 - uma sincronizacao de cada vez. Antes, cada evento da nuvem podia
+    // comecar uma leitura completa por cima da anterior (a carga do Omie grava
+    // centenas de registros seguidos) e cada uma redesenhava a tela.
+    if(this.syncInFlight){ this.syncQueued=true; return this.syncInFlight; }
+    const run=async()=>{
+      try{
+        if(showToast) UI.loading(true,'Sincronizando com a nuvem…');
+        await DB.syncFromCloud({background:!showToast}); await State.reload();
+        this.lastCloudRefresh=Date.now();
+        if(showToast){ UI.loading(false); UI.toast('Base sincronizada com a nuvem','success'); }
+        this.applyStorageStatus();
+        if(options.render!==false) this.render();
+      }catch(err){
+        if(showToast){ UI.loading(false); UI.toast('Falha ao sincronizar: '+U.esc(err.message),'error',7000); }
+      }
+    };
+    this.syncInFlight=run();
+    try{ await this.syncInFlight; }
+    finally{ this.syncInFlight=null; }
+    if(this.syncQueued){
+      this.syncQueued=false;
+      await this.syncCloudNow(false,options);
     }
   },
+  // v4.2.5 - qual tabela mudou no evento recebido do Realtime
+  changedStoreOf(payload){
+    const row=payload && ((payload.new && payload.new.store!=null) ? payload.new : payload.old);
+    return (row && row.store) ? String(row.store) : '';
+  },
+  // v4.2.5 - tabelas que cada tela mostra alem das declaradas em viewStores.
+  // Fica separado de proposito: viewStores tambem decide quem pode abrir o
+  // menu (canOpenView), e mexer nele mudaria permissao. Este mapa so decide
+  // se vale a pena redesenhar.
+  viewExtraStores:{
+    dashboard:['rdos','crew','forecasts','measurement_receipts','planning_history'],
+    medicoes:['forecasts','measurement_receipts','projects','clients'],
+    rdos:['crew','labor_rates','rdo_financial','projects'],
+    financeiro:['planning','planning_history','projects','categories'],
+    planejamento:['projects','categories','purchases'],
+    projetos:['budgets','purchases','measurements','clients'],
+    orcamentos:['projects','categories'],
+    relatorios:['forecasts','measurement_receipts','planning_history','labor_rates','rdo_financial'],
+    valoreshh:['crew','rdos'],
+    colaboradores:['rdos','labor_rates']
+  },
+  // v4.2.5 - a tela aberta mostra alguma das tabelas que mudaram?
+  touchesCurrentView(stores){
+    if(!stores || !stores.size) return true;
+    const relevant=new Set(this.viewStores[State.view]||[]);
+    (this.viewExtraStores[State.view]||[]).forEach(store=>relevant.add(store));
+    // o ticker e o painel lateral direito aparecem em todas as telas
+    ['projects','planning','settings'].forEach(store=>relevant.add(store));
+    for(const store of stores) if(relevant.has(store)) return true;
+    return false;
+  },
+  // v4.2.5 - as mudancas da nuvem passam a ser agrupadas: em vez de uma leitura
+  // completa + redesenho por linha alterada, espera 1,2s de silencio (no maximo
+  // 10s de espera total) e redesenha uma vez so - e somente se a tela aberta
+  // mostra o que mudou. Com a aba em segundo plano nada e redesenhado; a
+  // atualizacao acontece quando ela volta a ficar visivel.
   scheduleRealtimeSync(change={}){
     if(change.kind==='membership'){
       this.validateCloudAccess();
       return;
     }
+    const store=this.changedStoreOf(change.payload);
+    if(store) this.realtimeChangedStores.add(store);
+    if(typeof document!=='undefined' && document.hidden){
+      this.realtimeDirty=true;
+      return;
+    }
+    const now=Date.now();
+    if(!this.realtimeBurstStart) this.realtimeBurstStart=now;
     clearTimeout(this.realtimeSyncTimer);
     const attempt=async()=>{
       if(typeof UI!=='undefined' && UI.isModalOpen()){
         this.realtimeSyncTimer=setTimeout(attempt,1000);
         return;
       }
-      await this.syncCloudNow(false);
+      const stores=this.realtimeChangedStores;
+      this.realtimeChangedStores=new Set();
+      this.realtimeBurstStart=0;
+      this.realtimeDirty=false;
+      await this.syncCloudNow(false,{render:this.touchesCurrentView(stores)});
       if(change.kind==='organization') this.applyBranding();
     };
-    this.realtimeSyncTimer=setTimeout(attempt,350);
+    const waited=now-this.realtimeBurstStart;
+    this.realtimeSyncTimer=setTimeout(attempt,Math.max(200,Math.min(1200,10000-waited)));
   },
   async validateCloudAccess(silent=true){
     if(typeof Cloud==='undefined' || !Cloud.active()) return false;
     try{
       const result=await Cloud.refreshOrganizationContext();
+      this.accessCheckFailures=0;
       if(result.changed){
         location.reload();
         return false;
@@ -401,6 +484,11 @@ const App = {
       return true;
     }catch(err){
       if(err && err.code==='NO_ORGANIZATION_ACCESS'){
+        // v4.2.5 - uma unica resposta vazia (falha momentanea de rede ou do
+        // token) nao derruba mais a sessao: so sai depois de duas seguidas.
+        this.accessCheckFailures=(this.accessCheckFailures||0)+1;
+        if(silent && this.accessCheckFailures<2) return false;
+        this.accessCheckFailures=0;
         try{ await DB.clearLocalCache(); }catch(e){}
         await Cloud.signOut();
         location.reload();
@@ -636,8 +724,15 @@ const App = {
         .catch(()=>{});
     });
     document.addEventListener('visibilitychange',()=>{
-      if(!document.hidden && Cloud.active() && Date.now()-this.lastCloudRefresh>120000 && !UI.isModalOpen())
-        this.syncCloudNow(false);
+      if(document.hidden || !Cloud.active() || UI.isModalOpen()) return;
+      // v4.2.5 - ao voltar para a aba: sincroniza se algo mudou na nuvem
+      // enquanto ela estava em segundo plano, ou se a copia local ficou velha.
+      const stale=Date.now()-this.lastCloudRefresh>120000;
+      if(!this.realtimeDirty && !stale) return;
+      const stores=this.realtimeChangedStores;
+      this.realtimeChangedStores=new Set();
+      this.realtimeDirty=false;
+      this.syncCloudNow(false,{render:stale || this.touchesCurrentView(stores)});
     });
    }catch(err){ this.fatal(err); }
   }
