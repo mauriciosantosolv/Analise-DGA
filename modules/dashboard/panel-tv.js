@@ -114,7 +114,7 @@ const DashboardPanel = {
     const hasFilters=selected.length>0||[filters.client,filters.category,filters.status,filters.type].some(Boolean);
     return `<div class="tv-filter-bar" aria-label="Filtros do painel">
       <span class="tv-filter-title"><i data-lucide="sliders-horizontal"></i>Filtros</span>
-      <label><span>Projeto</span><select id="tv-filter-project"><option value="">Todos os projetos</option>${selected.length>1?`<option value="" selected>${selected.length} projetos selecionados</option>`:''}${projects.map(project=>this.option(project.id,projectValue,U.projLabel(project))).join('')}</select></label>
+      <label class="tv-filter-project"><span>Projeto</span><input id="tv-filter-project-search" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar obra" aria-label="Buscar projeto por número ou nome"><select id="tv-filter-project"><option value="">Todos os projetos</option>${selected.length>1?`<option value="" selected>${selected.length} projetos selecionados</option>`:''}${projects.map(project=>this.option(project.id,projectValue,U.projLabel(project))).join('')}</select></label>
       <label><span>Cliente</span><select id="tv-filter-client"><option value="">Todos os clientes</option>${clients.map(client=>this.option(client,filters.client)).join('')}</select></label>
       <label><span>Status</span><select id="tv-filter-status"><option value="">Todos os status</option>${statuses.map(status=>this.option(status,filters.status)).join('')}</select></label>
       <label><span>Tipo</span><select id="tv-filter-type"><option value="">Todos os tipos</option>${types.map(type=>this.option(type,filters.type)).join('')}</select></label>
@@ -130,6 +130,26 @@ const DashboardPanel = {
       if(Views.planejamento) Views.planejamento.projectFilter='';
       App.render({resetScroll:false});
     };
+    // v4.2.7 - a caixa de selecao de projeto ganhou busca. As opcoes originais
+    // sao guardadas na primeira montagem e a lista e reconstruida a cada tecla,
+    // preservando a selecao atual. Nenhum filtro muda de semantica.
+    const projectSearch=document.getElementById('tv-filter-project-search');
+    if(project&&projectSearch){
+      const allOptions=[...project.options].map(option=>({
+        value:option.value,
+        label:option.textContent,
+        norm:U.norm(option.textContent)
+      }));
+      projectSearch.oninput=()=>{
+        const query=U.norm(projectSearch.value);
+        const current=project.value;
+        const matches=allOptions.filter(option=>!option.value||!query||option.norm.includes(query));
+        project.innerHTML=matches.map(option=>
+          `<option value="${U.esc(option.value)}" ${option.value===current?'selected':''}>${U.esc(option.label)}</option>`
+        ).join('');
+        project.value=matches.some(option=>option.value===current)?current:'';
+      };
+    }
     [['tv-filter-client','client'],['tv-filter-status','status'],['tv-filter-type','type']].forEach(([id,key])=>{
       const element=document.getElementById(id);
       if(element) element.onchange=()=>{State.filters[key]=element.value;App.render({resetScroll:false});};
@@ -387,13 +407,13 @@ const DashboardPanel = {
               <article class="tv-panel-card tv-field-allocation-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocações por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
                 ${field.projects.length?`<div class="tv-field-allocation-content"><div class="tv-field-chart"><canvas id="tv-field-allocation-chart" aria-label="Quantidade de alocações por número da obra"></canvas></div><div class="tv-field-cost-table-wrap"><table class="tv-field-cost-table"><thead><tr><th>Obra</th><th>Alocados</th><th>Custo parcial</th></tr></thead><tbody>${field.projects.map(item=>`<tr><td><b>${U.esc(item.name)}</b></td><td>${item.count}</td><td>${U.money(item.cost)}</td></tr>`).join('')}</tbody></table></div></div>`:this.empty('Nenhuma alocação no dia selecionado.')}
               </article>
-              <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-allocated-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
                 <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
               </article>
               <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><small>AUSÊNCIAS</small><h2>Faltas e folgas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s) · ${field.dayOff.length} folga(s)</span></div>
                 <div class="tv-field-roster">${field.absent.map(row=>`<div><span><i class="tv-field-dot absent"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>Falta</b><small>${U.esc(row.rdoStatus)}</small></span></div>`).join('')}${field.dayOff.map(row=>`<div><span><i class="tv-field-dot day-off"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>Folga</b><small>Sem carga horária</small></span></div>`).join('')||(!field.absent.length?this.empty('Nenhuma falta ou folga registrada no dia.'):'')}</div>
               </article>
-              <article class="tv-panel-card tv-field-roster-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-idle-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
                 <div class="tv-field-roster">${field.idle.map(row=>`<div><span><i class="tv-field-dot idle"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>${U.money(row.cost)}</b><small>${row.missingCost?'Custo-hora não cadastrado':`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h de ociosidade`}</small></span></div>`).join('')||this.empty('Nenhum colaborador ocioso hoje.')}</div>
               </article>
             </div>
@@ -460,15 +480,15 @@ const DashboardPanel = {
       type:'bar',
       data:{
         labels:suppliers.map(item=>item.name),
-        datasets:[{data:suppliers.map(item=>item.value),backgroundColor:'#1aa7c8',borderRadius:6,borderSkipped:false,barThickness:10,categoryPercentage:.72,barPercentage:.86}]
+        datasets:[{data:suppliers.map(item=>item.value),backgroundColor:'#a1a1aa',hoverBackgroundColor:'#fafafa',borderRadius:0,borderSkipped:false,barThickness:10,categoryPercentage:.72,barPercentage:.86}]
       },
       options:{
         indexAxis:'y',responsive:true,maintainAspectRatio:false,resizeDelay:80,animation:{duration:420},
         layout:{padding:{top:1,right:4,bottom:1,left:0}},
         plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${money(context.raw)}`}}},
         scales:{
-          x:{beginAtZero:true,grid:{color:'rgba(141,152,168,.13)'},ticks:{color:'#8d98a8',font:{size:9},maxTicksLimit:4,callback:value=>money(value)}},
-          y:{grid:{display:false},ticks:{autoSkip:false,padding:6,color:'#cbd3df',font:{size:10,weight:'600'},callback:function(value){const label=this.getLabelForValue(value);return label.length>22?`${label.slice(0,21)}…`:label;}}}
+          x:{beginAtZero:true,grid:{color:'rgba(161,161,170,.14)'},ticks:{color:'#71717a',font:{size:9},maxTicksLimit:4,callback:value=>money(value)}},
+          y:{grid:{display:false},ticks:{autoSkip:false,padding:6,color:'#a1a1aa',font:{size:10,weight:'600'},callback:function(value){const label=this.getLabelForValue(value);return label.length>22?`${label.slice(0,21)}…`:label;}}}
         }
       }
     });
@@ -486,9 +506,9 @@ const DashboardPanel = {
       const allocation=new Chart(allocationCanvas.getContext('2d'),{
         type:'bar',
         data:{labels:field.projects.map(item=>item.name),datasets:[
-          {label:'Alocações',data:field.projects.map(item=>item.count),backgroundColor:'rgba(59,130,246,.82)',borderRadius:7,borderSkipped:false,maxBarThickness:48}
+          {label:'Alocações',data:field.projects.map(item=>item.count),backgroundColor:'#a1a1aa',hoverBackgroundColor:'#fafafa',borderRadius:0,borderSkipped:false,barThickness:12,categoryPercentage:.82,barPercentage:.9}
         ]},
-        options:{responsive:true,maintainAspectRatio:false,animation:{duration:420},plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${context.raw} pessoa(s)`}}},scales:{x:{grid:{display:false},ticks:{color:'#cbd3df',font:{size:10,weight:'700'},maxRotation:0}},y:{beginAtZero:true,grace:'10%',grid:{color:'rgba(141,152,168,.12)'},ticks:{color:'#8d98a8',precision:0,font:{size:9}}}}}
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,resizeDelay:80,animation:{duration:420},layout:{padding:{top:1,right:6,bottom:1,left:0}},plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>` ${context.raw} pessoa(s)`}}},scales:{x:{beginAtZero:true,grace:'8%',grid:{color:'rgba(161,161,170,.14)'},ticks:{color:'#71717a',precision:0,font:{size:9},maxTicksLimit:5}},y:{grid:{display:false},ticks:{autoSkip:false,padding:6,color:'#a1a1aa',font:{size:10,weight:'600'},callback:function(value){const label=String(this.getLabelForValue(value));return label.length>18?`${label.slice(0,17)}…`:label;}}}}}
       });
       if(typeof Dash!=='undefined') Dash.charts.tvFieldAllocation=allocation;
     }

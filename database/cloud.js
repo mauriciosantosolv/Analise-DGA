@@ -706,6 +706,42 @@ const Cloud = (() => {
     return [...new Set(rows.map(row=>String(row&&row.employee_id||'')).filter(Boolean))];
   }
 
+  // v4.2.7 - proximo numero livre de RDO do ano, contado na organizacao inteira.
+  // A contagem local (State.rdos) so ve o que a RLS entrega e ja gerou 18 numeros
+  // repetidos. A funcao no banco e SECURITY DEFINER e valida a permissao de
+  // leitura do proprio store 'rdos'.
+  async function nextRdoNumber(year){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return '';
+    return request('/rest/v1/rpc/clique_obras_next_rdo_number_v427',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        p_organization_id:organization().id,
+        p_year:Number(year)||new Date().getFullYear()
+      })
+    });
+  }
+
+  // v4.2.7 - colaboradores sem funcao/custo HH configurado no projeto. Serve os
+  // perfis que nao enxergam projects nem labor_rates, onde a validacao do
+  // cliente era pulada em silencio.
+  async function rdoHhGaps(projectId,employeeIds=[]){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return [];
+    const ids=[...new Set((Array.isArray(employeeIds)?employeeIds:[]).map(String).filter(Boolean))];
+    if(!ids.length) return [];
+    return await request('/rest/v1/rpc/clique_obras_rdo_hh_gaps_v427',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        p_organization_id:organization().id,
+        p_project_id:String(projectId||''),
+        p_employee_ids:ids
+      })
+    }) || [];
+  }
+
   // v4.2.4 — cabeçalho do PDF do RDO (empresa, cliente, projeto e função
   // comercial). Necessário porque a RLS esconde settings/projects/clients/
   // labor_rates de quem só tem permissão nos diários. A função no banco é
@@ -1220,6 +1256,8 @@ const Cloud = (() => {
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
+    nextRdoNumber,
+    rdoHhGaps,
     omieRequest,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,
     profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,

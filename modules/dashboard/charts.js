@@ -79,13 +79,39 @@ const Dash = {
     const selected=new Set(State.selectedProjectIds());
     UI.modal({title:'Filtrar projetos',wide:true,body:`
       <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros.</p>
+      <div class="rdo-search project-filter-search"><i data-lucide="search"></i><input id="filter-project-search" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por número, nome ou cliente" aria-label="Buscar projeto"><button type="button" id="filter-project-search-clear" aria-label="Limpar busca" title="Limpar busca"><i data-lucide="x"></i></button></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button">Limpar seleção</button></div>
       <div class="check-list project-filter-list" id="filter-project-list">${State.projects.map(project=>`
-        <label class="check-item"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`).join('')||'<small>Nenhum projeto cadastrado.</small>'}</div>`,
+        <label class="check-item" data-search="${U.esc(U.norm(`${project.proposal||''} ${project.name||''} ${project.client||''}`))}"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`).join('')||'<small>Nenhum projeto cadastrado.</small>'}</div>
+      <div class="project-filter-empty" id="filter-project-empty" hidden>Nenhum projeto encontrado.</div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="filter-project-apply"><i data-lucide="check"></i>Aplicar filtro</button>',
       onOpen:()=>{
-        document.getElementById('filter-project-all').onclick=()=>document.querySelectorAll('#filter-project-list input').forEach(input=>input.checked=true);
-        document.getElementById('filter-project-none').onclick=()=>document.querySelectorAll('#filter-project-list input').forEach(input=>input.checked=false);
+        // v4.2.7 - busca dentro do filtro de projetos. Os botoes de marcar/limpar
+        // passam a agir sobre o que esta visivel; sem busca ativa o resultado e
+        // exatamente o de antes (todos os projetos ficam visiveis).
+        const searchInput=document.getElementById('filter-project-search');
+        const emptyNote=document.getElementById('filter-project-empty');
+        const items=[...document.querySelectorAll('#filter-project-list .check-item')];
+        const visibleInputs=()=>items.filter(item=>!item.hidden).map(item=>item.querySelector('input')).filter(Boolean);
+        const applySearch=()=>{
+          const query=U.norm(searchInput?searchInput.value:'');
+          let visible=0;
+          items.forEach(item=>{
+            const matches=!query||String(item.dataset.search||'').includes(query);
+            item.hidden=!matches;
+            if(matches) visible++;
+          });
+          if(emptyNote) emptyNote.hidden=visible!==0||!items.length;
+          const clear=document.getElementById('filter-project-search-clear');
+          if(clear) clear.classList.toggle('visible',!!query);
+        };
+        if(searchInput){
+          searchInput.oninput=applySearch;
+          const clear=document.getElementById('filter-project-search-clear');
+          if(clear) clear.onclick=()=>{searchInput.value='';applySearch();searchInput.focus();};
+        }
+        document.getElementById('filter-project-all').onclick=()=>visibleInputs().forEach(input=>input.checked=true);
+        document.getElementById('filter-project-none').onclick=()=>visibleInputs().forEach(input=>input.checked=false);
         document.getElementById('filter-project-apply').onclick=()=>{
           const ids=[...document.querySelectorAll('#filter-project-list input:checked')].map(input=>String(input.value));
           State.filters.project=ids.length===1?ids[0]:'';

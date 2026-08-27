@@ -236,6 +236,86 @@ const RDO = {
     const match=String(value||'').match(/^(\d{1,2}):(\d{2})$/);
     return match&&Number(match[1])<24&&Number(match[2])<60?Number(match[1])*60+Number(match[2]):null;
   },
+  // v4.2.7 - o intervalo passa a ser digitado no mesmo formato 00:00 de Entrada
+  // e Saida. O dado continua gravado em minutos (breakMinutes), entao nenhuma
+  // conta de horas, custo ou medicao muda: minutesToTime so formata a leitura e
+  // breakInput normaliza a escrita (aceita "01:00" e tambem o numero puro dos
+  // rascunhos gravados antes desta versao).
+  minutesToTime(value){
+    const total=Math.max(0,Math.min(1439,Math.round(Number(value)||0)));
+    return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+  },
+  breakInput(value){
+    const text=String(value==null?'':value).trim();
+    if(/^\d{1,2}:\d{2}$/.test(text)){
+      const minutes=this.timeMinutes(text);
+      return minutes==null?0:minutes;
+    }
+    return Math.max(0,U.num(text));
+  },
+  // v4.2.7 - numeracao do diario. A regra antiga era State.rdos.length+1, que so
+  // enxerga o que a RLS entrega: o perfil Apontador via 17 diarios e gerava
+  // RDO-2026-0018, numero que ja existia em outro projeto (18 numeros repetidos
+  // no banco). localNumber mantem o comportamento offline, mas agora pula os
+  // numeros ja usados; nextNumber pede o proximo livre da organizacao inteira.
+  localNumber(){
+    const year=new Date().getFullYear();
+    const used=new Set((Array.isArray(State.rdos)?State.rdos:[]).map(item=>String(item&&item.number||'')));
+    let sequence=Math.max(1,(Array.isArray(State.rdos)?State.rdos.length:0)+1);
+    let candidate=`RDO-${year}-${String(sequence).padStart(4,'0')}`;
+    while(used.has(candidate)&&sequence<99999){
+      sequence++;
+      candidate=`RDO-${year}-${String(sequence).padStart(4,'0')}`;
+    }
+    return candidate;
+  },
+  async nextNumber(){
+    const year=new Date().getFullYear();
+    if(typeof Cloud!=='undefined'&&Cloud.active()&&typeof Cloud.nextRdoNumber==='function'){
+      try{
+        const number=await Cloud.nextRdoNumber(year);
+        if(/^RDO-\d{4}-\d{4,}$/.test(String(number||''))) return String(number);
+      }catch(err){}
+    }
+    return this.localNumber();
+  },
+  // v4.2.7 - guarda de duplicidade no servidor. allocationConflicts() so compara
+  // com State.rdos, filtrado pela RLS; a RPC enxerga a organizacao inteira e e a
+  // unica capaz de ver um colaborador ja alocado num projeto que este usuario nao
+  // acessa. Qualquer falha da RPC cai no comportamento anterior, sem travar.
+  async remoteAllocationConflicts(rdo){
+    if(typeof Cloud==='undefined'||!Cloud.active()||typeof Cloud.occupiedRdoEmployees!=='function') return [];
+    let occupied=[];
+    try{ occupied=await Cloud.occupiedRdoEmployees(rdo.date,rdo.id); }catch(err){ return []; }
+    if(!Array.isArray(occupied)||!occupied.length) return [];
+    const taken=new Set(occupied.map(String));
+    const seen=new Set();
+    return (Array.isArray(rdo.entries)?rdo.entries:[]).filter(entry=>{
+      const employeeId=String(entry&&entry.employeeId||'');
+      if(!employeeId||!taken.has(employeeId)||seen.has(employeeId)) return false;
+      seen.add(employeeId);
+      return true;
+    }).map(entry=>String(entry.employeeName||'Colaborador'));
+  },
+  // v4.2.7 - hhConfigurationIssues() depende de State.projects para saber se o
+  // contrato e HH; num perfil que nao enxerga o cadastro de projetos o tipo vem
+  // null e a validacao era pulada em silencio, deixando enviar diario de quem nao
+  // tem valor HH no projeto. A RPC responde pelo servidor.
+  async remoteHhIssues(rdo){
+    if(typeof Cloud==='undefined'||!Cloud.active()||typeof Cloud.rdoHhGaps!=='function') return [];
+    const employeeIds=[...new Set((Array.isArray(rdo.entries)?rdo.entries:[])
+      .filter(entry=>!this.isAbsent(entry))
+      .map(entry=>String(entry&&entry.employeeId||''))
+      .filter(Boolean))];
+    if(!employeeIds.length) return [];
+    try{
+      const rows=await Cloud.rdoHhGaps(rdo.projectId,employeeIds);
+      return (Array.isArray(rows)?rows:[]).map(row=>({
+        employeeName:String(row&&row.employee_name||'Colaborador'),
+        missing:String(row&&row.missing||'valor HH')
+      }));
+    }catch(err){ return []; }
+  },
   paidHours(start,end,breakMinutes=0){
     const from=this.timeMinutes(start),to=this.timeMinutes(end);
     if(from==null||to==null) return 0;
@@ -527,15 +607,38 @@ const RDO = {
         ?`${names} ${conflicts.length===1?'está de folga':'estão de folga'} nesta data. Remova a folga antes de incluir no RDO.`
         :`${names} já ${conflicts.length===1?'está registrado':'estão registrados'} em outro RDO nesta data. Atualize a tela antes de continuar.`);
     }
+    // v4.2.7 - a checagem local acima só enxerga os RDOs entregues pela RLS.
+    // A remota fecha o buraco que permitia o mesmo colaborador em dois diários
+    // do mesmo dia quando o segundo RDO estava num projeto invisível ao usuário.
+    const remoteConflicts=await this.remoteAllocationConflicts(rdo);
+    if(remoteConflicts.length){
+      const names=remoteConflicts.join(', ');
+      throw new Error(`${names} já ${remoteConflicts.length===1?'está registrado':'estão registrados'} em outro diário ou de folga nesta data. Remova ${remoteConflicts.length===1?'o colaborador':'os colaboradores'} antes de salvar.`);
+    }
     if(status==='Enviado'){
       const issues=this.hhConfigurationIssues(rdo.projectId,rdo.entries);
       if(issues.length){
         const summary=issues.map(item=>`${item.employeeName} (${item.missing.join(', ')})`).join('; ');
         throw new Error(`Projetos HH exigem função e custo da mão de obra antes do envio. Configure em Colaboradores/Valores HH: ${summary}.`);
       }
+      // v4.2.7 - mesma validação, agora também para quem não enxerga o cadastro
+      // de projetos nem os valores HH (perfil Apontador de RDO).
+      if(!issues.length){
+        const remoteIssues=await this.remoteHhIssues(rdo);
+        if(remoteIssues.length){
+          const summary=remoteIssues.map(item=>`${item.employeeName} (${item.missing})`).join('; ');
+          throw new Error(`Projetos HH exigem função e custo da mão de obra antes do envio. Peça ao administrador para configurar: ${summary}.`);
+        }
+      }
     }
+    // v4.2.7 - o número definitivo só é reservado quando o diário nasce, e vem
+    // do servidor para não repetir número já usado em projeto que este usuário
+    // não enxerga.
+    const isNew=!(Array.isArray(State.rdos)?State.rdos:[]).some(item=>String(item&&item.id)===String(rdo.id));
+    const number=isNew?await this.nextNumber():(rdo.number||await this.nextNumber());
     const updated={
       ...rdo,
+      number,
       status,
       updatedAt:new Date().toISOString(),
       submittedAt:status==='Enviado'?new Date().toISOString():(rdo.submittedAt||null)
@@ -765,7 +868,7 @@ const RDO = {
         <div class="rdo-worker-fields">
           <label>Entrada<input data-field="start" type="time" value="${U.esc(row.start||defaultShift.start)}"></label>
           <label>Saída<input data-field="end" type="time" value="${U.esc(row.end||defaultShift.end)}"></label>
-          <label>Intervalo<input data-field="breakMinutes" type="number" min="0" max="360" step="5" value="${Number(row.breakMinutes)||0}"></label>
+          <label>Intervalo<input data-field="breakMinutes" type="time" step="300" max="06:00" value="${this.minutesToTime(row.breakMinutes)}"></label>
           <label>Normal<input data-field="regular" type="number" min="0" max="24" step="0.25" value="${Number(row.regular)||0}"></label>
           <label>HE 50%<input data-field="overtime50" type="number" min="0" max="24" step="0.25" value="${Number(row.overtime50)||0}"></label>
           <label>HE 100%<input data-field="overtime100" type="number" min="0" max="24" step="0.25" value="${Number(row.overtime100)||0}"></label>
@@ -804,7 +907,7 @@ const RDO = {
             <div class="rdo-team-template">
               <label>Entrada<input id="rdo-all-start" type="time" value="${U.esc(sharedEntry.start||defaultShift.start)}"></label>
               <label>Saída<input id="rdo-all-end" type="time" value="${U.esc(sharedEntry.end||defaultShift.end)}"></label>
-              <label>Intervalo (min)<input id="rdo-all-break" type="number" min="0" max="360" step="5" value="${Number(sharedEntry.breakMinutes)||0}"></label>
+              <label>Intervalo<input id="rdo-all-break" type="time" step="300" max="06:00" value="${this.minutesToTime(sharedEntry.breakMinutes)}"></label>
               <label>Normal<input id="rdo-all-regular" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.regular)||0}"></label>
               <label>HE 50%<input id="rdo-all-50" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime50)||0}"></label>
               <label>HE 100%<input id="rdo-all-100" type="number" min="0" max="24" step="0.25" value="${Number(sharedEntry.overtime100)||0}"></label>
@@ -961,7 +1064,7 @@ const RDO = {
         const recalculateCard=card=>{
           const start=card.querySelector('[data-field="start"]').value;
           const end=card.querySelector('[data-field="end"]').value;
-          const breakMinutes=card.querySelector('[data-field="breakMinutes"]').value;
+          const breakMinutes=this.breakInput(card.querySelector('[data-field="breakMinutes"]').value);
           const hours=this.workedHours(start,end,breakMinutes,this.standardDailyHours(),currentDate(),currentHoliday());
           card.querySelector('[data-field="regular"]').value=hours.regular;
           card.querySelector('[data-field="overtime50"]').value=hours.overtime50;
@@ -1001,13 +1104,13 @@ const RDO = {
           const hours=this.workedHours(
             byId('rdo-all-start').value,
             byId('rdo-all-end').value,
-            byId('rdo-all-break').value,
+            this.breakInput(byId('rdo-all-break').value),
             this.standardDailyHours(),currentDate(),currentHoliday()
           );
           byId('rdo-all-regular').value=hours.regular;
           byId('rdo-all-50').value=hours.overtime50;
           byId('rdo-all-100').value=hours.overtime100;
-          byId('rdo-all-night').value=this.nightHours(byId('rdo-all-start').value,byId('rdo-all-end').value,byId('rdo-all-break').value);
+          byId('rdo-all-night').value=this.nightHours(byId('rdo-all-start').value,byId('rdo-all-end').value,this.breakInput(byId('rdo-all-break').value));
           applyToAll();
         };
         ['rdo-all-start','rdo-all-end','rdo-all-break'].forEach(fieldId=>byId(fieldId).onchange=recalcTemplate);
@@ -1017,7 +1120,7 @@ const RDO = {
           const shift=this.defaultShift(currentDate());
           byId('rdo-all-start').value=shift.start;
           byId('rdo-all-end').value=shift.end;
-          byId('rdo-all-break').value=shift.breakMinutes;
+          byId('rdo-all-break').value=this.minutesToTime(shift.breakMinutes);
           refreshDayType();
           await refreshAvailability();
           recalcTemplate();
@@ -1027,7 +1130,7 @@ const RDO = {
         const collect=()=>({
           ...(existing||{
             id:U.id(),
-            number:`RDO-${new Date().getFullYear()}-${String(State.rdos.length+1).padStart(4,'0')}`,
+            number:this.localNumber(),
             createdAt:new Date().toISOString(),
             createdBy:this.authorName()
           }),
@@ -1057,7 +1160,7 @@ const RDO = {
               attendanceStatus:absent?'absent':'present',
               start:absent?'':card.querySelector('[data-field="start"]').value,
               end:absent?'':card.querySelector('[data-field="end"]').value,
-              breakMinutes:absent?0:U.num(card.querySelector('[data-field="breakMinutes"]').value),
+              breakMinutes:absent?0:this.breakInput(card.querySelector('[data-field="breakMinutes"]').value),
               regular:absent?0:U.num(card.querySelector('[data-field="regular"]').value),
               overtime50:absent?0:U.num(card.querySelector('[data-field="overtime50"]').value),
               overtime100:absent?0:U.num(card.querySelector('[data-field="overtime100"]').value),
@@ -1189,8 +1292,10 @@ const RDO = {
           byId('rdo-review').innerHTML=`
             <article><div><i data-lucide="calendar-days"></i><b>Informações</b><button type="button" data-review-step="1">Editar</button></div>
               <dl><span><dt>Data</dt><dd>${U.date(rdo.date)}</dd></span><span><dt>Classificação</dt><dd>${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</dd></span><span><dt>Projeto</dt><dd>${U.esc(project?.label||'Projeto')}</dd></span><span><dt>Local</dt><dd>${U.esc(rdo.location||'Não informado')}</dd></span></dl></article>
-            <article><div><i data-lucide="users"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
-              <dl><span><dt>Alocados</dt><dd>${present.length} pessoas</dd></span><span><dt>Faltas</dt><dd>${absent.length}</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span><span><dt>Adic. noturno</dt><dd>${night.toLocaleString('pt-BR')}h · ${rdo.nightPremiumPct}%</dd></span></dl></article>
+            <article class="full"><div><i data-lucide="users"></i><b>Equipe e horas</b><button type="button" data-review-step="2">Editar</button></div>
+              <dl><span><dt>Alocados</dt><dd>${present.length} pessoa(s)</dd></span><span><dt>Faltas</dt><dd>${absent.length}</dd></span><span><dt>Normal</dt><dd>${regular.toLocaleString('pt-BR')}h</dd></span><span><dt>HE 50% / 100%</dt><dd>${extra50.toLocaleString('pt-BR')}h / ${extra100.toLocaleString('pt-BR')}h</dd></span><span><dt>Adic. noturno</dt><dd>${night.toLocaleString('pt-BR')}h · ${rdo.nightPremiumPct}%</dd></span></dl>
+              ${present.length?`<div class="rdo-review-people"><small>Colaboradores alocados</small><ul>${present.map(row=>`<li><b>${U.esc(row.employeeName||'Colaborador')}</b><span>${U.esc(row.start||'—')} · ${U.durationMinutes(row.breakMinutes)} · ${U.esc(row.end||'—')}</span><span>${((Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)).toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span></li>`).join('')}</ul></div>`:''}
+              ${absent.length?`<div class="rdo-review-people absent"><small>Faltas registradas</small><ul>${absent.map(row=>`<li><b>${U.esc(row.employeeName||'Colaborador')}</b><span>Sem horas no dia</span><span>Falta</span></li>`).join('')}</ul></div>`:''}</article>
             <article class="full"><div><i data-lucide="file-check-2"></i><b>Serviço e evidências</b><button type="button" data-review-step="3">Editar</button></div>
               <p>${U.esc(rdo.description)}</p><span class="rdo-review-tag"><i data-lucide="paperclip"></i>${rdo.attachmentCount} ${rdo.attachmentCount===1?'anexo':'anexos'}</span></article>`;
           byId('rdo-review').querySelectorAll('[data-review-step]').forEach(button=>button.onclick=()=>showStep(Number(button.dataset.reviewStep),true));
@@ -1431,10 +1536,20 @@ const RDO = {
       }[rdo.status]||rdo.status;
       // v4.2.4 — serviço vendido ao cliente: tipo de contrato, proposta e as
       // funções comerciais efetivamente apontadas neste diário.
-      const roleFor=row=>this.displayRoleFor(
-        rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
+      // v4.2.7 - a função vendida ao cliente é informação comercial. Quem não tem
+      // permissão de leitura em labor_rates (perfil Apontador de RDO) passa a
+      // imprimir a função interna do colaborador, e o campo "Serviço contratado"
+      // deixa de listar as funções vendidas. Para owner/admin nada muda.
+      const canSeeCommercialRole=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
+      const internalRoleFor=row=>String(
+        row.internalRole
+        ||(this.crewMembers().find(item=>String(item.id)===String(row.employeeId))||{}).internalRole
+        ||''
       );
-      const soldRoles=[...new Set(visibleEntries.map(roleFor).filter(Boolean))];
+      const roleFor=row=>canSeeCommercialRole?this.displayRoleFor(
+        rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
+      ):internalRoleFor(row);
+      const soldRoles=canSeeCommercialRole?[...new Set(visibleEntries.map(roleFor).filter(Boolean))]:[];
       // v4.2.6 — "Serviço contratado" descreve a venda por hora-homem: tipo do
       // contrato, proposta e funções apontadas. Em projeto de Obra ou de
       // Fornecimento a venda é por escopo, não por função apontada, então a linha
@@ -1465,7 +1580,7 @@ const RDO = {
       </div>
       <section class="rdo-print-section"><h2>Serviço realizado</h2><p>${U.esc(rdo.description||'—')}</p></section>
       <section class="rdo-print-section"><h2>Equipe e horas</h2>
-        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>Função vendida</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
+        <div class="rdo-print-labor-table-wrap"><table class="rdo-print-labor-table"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:17%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:9%"></colgroup><thead><tr><th>Matrícula</th><th>Colaborador</th><th>${canSeeCommercialRole?'Função vendida':'Função'}</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Adic. noturno</th></tr></thead>
         <tbody>${visibleEntries.map(row=>`<tr><td>${U.esc(row.employeeRegistration||'—')}</td><td>${U.esc(row.employeeName||'Colaborador')}</td><td>${U.esc(roleFor(row)||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${Number(row.regular)||0}h</td><td>${Number(row.overtime50)||0}h</td><td>${Number(row.overtime100)||0}h</td><td>${Number(row.nightHours)||0}h · ${Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct())}%</td></tr>`).join('')||'<tr><td colspan="10">Nenhum colaborador presente neste diário.</td></tr>'}</tbody></table></div>
       </section>
       ${rdo.notes?`<section class="rdo-print-section"><h2>Ocorrências e observações</h2><p>${U.esc(rdo.notes)}</p></section>`:''}
