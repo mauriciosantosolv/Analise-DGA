@@ -80,7 +80,7 @@ const Dash = {
     UI.modal({title:'Filtrar projetos',wide:true,body:`
       <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros.</p>
       <div class="rdo-search project-filter-search"><i data-lucide="search"></i><input id="filter-project-search" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por número, nome ou cliente" aria-label="Buscar projeto"><button type="button" id="filter-project-search-clear" aria-label="Limpar busca" title="Limpar busca"><i data-lucide="x"></i></button></div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button">Limpar seleção</button></div>
+      <div class="project-filter-actions"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button" title="Marca os projetos visíveis na lista">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button" title="Desmarca os projetos visíveis na lista">Limpar seleção</button><span class="project-filter-count" id="filter-project-count"></span></div>
       <div class="check-list project-filter-list" id="filter-project-list">${State.projects.map(project=>`
         <label class="check-item" data-search="${U.esc(U.norm(`${project.proposal||''} ${project.name||''} ${project.client||''}`))}"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`).join('')||'<small>Nenhum projeto cadastrado.</small>'}</div>
       <div class="project-filter-empty" id="filter-project-empty" hidden>Nenhum projeto encontrado.</div>`,
@@ -89,10 +89,30 @@ const Dash = {
         // v4.2.7 - busca dentro do filtro de projetos. Os botoes de marcar/limpar
         // passam a agir sobre o que esta visivel; sem busca ativa o resultado e
         // exatamente o de antes (todos os projetos ficam visiveis).
+        // v4.2.8 - a busca passa a funcionar como a do RDO: o proprio item e o
+        // alvo do clique (com estado visivel), o contador mostra o total
+        // marcado inclusive o que a busca escondeu, Enter marca o unico
+        // resultado e limpar a busca devolve a lista inteira sem perder nada do
+        // que ja estava marcado. Nenhuma marcacao e feita automaticamente e o
+        // filtro so vale depois de "Aplicar filtro", como antes.
         const searchInput=document.getElementById('filter-project-search');
         const emptyNote=document.getElementById('filter-project-empty');
+        const counter=document.getElementById('filter-project-count');
+        const list=document.getElementById('filter-project-list');
         const items=[...document.querySelectorAll('#filter-project-list .check-item')];
         const visibleInputs=()=>items.filter(item=>!item.hidden).map(item=>item.querySelector('input')).filter(Boolean);
+        const paint=()=>{
+          let marked=0,outside=0;
+          items.forEach(item=>{
+            const input=item.querySelector('input');
+            const checked=!!(input&&input.checked);
+            item.classList.toggle('selected',checked);
+            if(checked){ marked++; if(item.hidden) outside++; }
+          });
+          if(counter) counter.textContent=marked
+            ?`${marked} projeto(s) selecionado(s)${outside?` · ${outside} fora da busca`:''}`
+            :'Nenhum projeto selecionado — o dashboard mostra todos.';
+        };
         const applySearch=()=>{
           const query=U.norm(searchInput?searchInput.value:'');
           let visible=0;
@@ -104,14 +124,26 @@ const Dash = {
           if(emptyNote) emptyNote.hidden=visible!==0||!items.length;
           const clear=document.getElementById('filter-project-search-clear');
           if(clear) clear.classList.toggle('visible',!!query);
+          paint();
         };
+        if(list) list.addEventListener('change',paint);
         if(searchInput){
           searchInput.oninput=applySearch;
+          searchInput.onkeydown=event=>{
+            if(event.key!=='Enter') return;
+            event.preventDefault();
+            const visible=items.filter(item=>!item.hidden);
+            if(visible.length!==1) return;
+            const input=visible[0].querySelector('input');
+            if(input){ input.checked=!input.checked; paint(); }
+          };
           const clear=document.getElementById('filter-project-search-clear');
           if(clear) clear.onclick=()=>{searchInput.value='';applySearch();searchInput.focus();};
+          setTimeout(()=>searchInput.focus(),60);
         }
-        document.getElementById('filter-project-all').onclick=()=>visibleInputs().forEach(input=>input.checked=true);
-        document.getElementById('filter-project-none').onclick=()=>visibleInputs().forEach(input=>input.checked=false);
+        document.getElementById('filter-project-all').onclick=()=>{visibleInputs().forEach(input=>input.checked=true);paint();};
+        document.getElementById('filter-project-none').onclick=()=>{visibleInputs().forEach(input=>input.checked=false);paint();};
+        paint();
         document.getElementById('filter-project-apply').onclick=()=>{
           const ids=[...document.querySelectorAll('#filter-project-list input:checked')].map(input=>String(input.value));
           State.filters.project=ids.length===1?ids[0]:'';

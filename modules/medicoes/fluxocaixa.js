@@ -578,9 +578,28 @@ const CashFlow = {
     this.provisionsFrom=U.isoDate(new Date(today.getFullYear(),today.getMonth(),1));
     this.provisionsTo=U.isoDate(new Date(today.getFullYear(),today.getMonth()+5,0));
   },
+  // v4.2.8 - o periodo das Provisoes passa a ser escolhido por mes (ex.: de
+  // Ago/2026 a Dez/2026). Internamente provisionsFrom/provisionsTo continuam
+  // sendo datas ISO -- o primeiro e o ultimo dia do intervalo --, entao
+  // provisionsMonthly(), summary(), inPeriod() e os dois relatorios impressos
+  // nao mudam em nada.
+  monthRangeStart(month){
+    const parts=String(month||'').match(/^(\d{4})-(\d{2})$/);
+    return parts?`${parts[1]}-${parts[2]}-01`:'';
+  },
+  monthRangeEnd(month){
+    const parts=String(month||'').match(/^(\d{4})-(\d{2})$/);
+    return parts?U.isoDate(new Date(Number(parts[1]),Number(parts[2]),0)):'';
+  },
   applyProvisionsFilters(){
-    this.provisionsFrom=document.getElementById('cf-period-from').value;
-    this.provisionsTo=document.getElementById('cf-period-to').value;
+    const rawFrom=document.getElementById('cf-period-from').value;
+    const rawTo=document.getElementById('cf-period-to').value;
+    const from=this.monthRangeStart(rawFrom)||rawFrom;
+    const to=this.monthRangeEnd(rawTo)||rawTo;
+    if(!from||!to) return UI.toast('Informe o mês inicial e o mês final.','warn',5000);
+    if(from>to) return UI.toast('O mês inicial não pode ser posterior ao mês final.','warn',5500);
+    this.provisionsFrom=from;
+    this.provisionsTo=to;
     Views.medicoes.render();
   },
   clearProvisionsFilters(){
@@ -783,14 +802,10 @@ const CashFlow = {
       </tbody><tfoot><tr><td>TOTAL DE ${U.esc(label)}</td><td>${U.money(totals.plannedExecution)}</td><td>${U.money(totals.actualExecution)}</td><td>${U.money(totals.plannedBilling)}</td><td>${U.money(totals.actualBilling)}</td><td>${U.money(totals.plannedReceipt)}</td><td>${U.money(totals.actualReceipt)}</td></tr></tfoot></table>
       <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
     document.body.appendChild(report);
-    document.body.classList.add('printing-provisions-month');
     UI.closeAll();
-    UI.loading(true,'Preparando detalhamento do mês…');
-    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
     UI.loading(false);
     UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
-    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-provisions-month');},{once:true});
-    setTimeout(()=>window.print(),250);
+    await Exports.beginPrint('printing-provisions-month',report);
   },
 
   /* ---------- relatório impresso: previsto x realizado (aba Provisões, v4.2.1) ---------- */
@@ -840,13 +855,9 @@ const CashFlow = {
       </tbody><tfoot><tr><td>TOTAL</td><td>${U.money(totals.plannedExecution)}</td><td>${U.money(totals.actualExecution)}</td><td>${U.money(totals.plannedBilling)}</td><td>${U.money(totals.actualBilling)}</td><td>${U.money(totals.plannedReceipt)}</td><td>${U.money(totals.actualReceipt)}</td></tr></tfoot></table>
       <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
     document.body.appendChild(report);
-    document.body.classList.add('printing-provisions');
-    UI.loading(true,'Preparando relatório de provisões…');
-    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
     UI.loading(false);
     UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
-    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-provisions');},{once:true});
-    setTimeout(()=>window.print(),250);
+    await Exports.beginPrint('printing-provisions',report);
   },
 
   renderProvisions(){
@@ -867,8 +878,9 @@ const CashFlow = {
     </div>
     ${Views.medicoes.tabsMarkup()}
     <div class="toolbar" style="gap:10px;flex-wrap:wrap">
-      <div><label style="font-size:.72rem">De</label><input id="cf-period-from" type="date" value="${U.esc(this.provisionsFrom)}"></div>
-      <div><label style="font-size:.72rem">Até</label><input id="cf-period-to" type="date" value="${U.esc(this.provisionsTo)}"></div>
+      <div><label style="font-size:.72rem">De (mês)</label><input id="cf-period-from" type="month" placeholder="AAAA-MM" value="${U.esc(this.monthKey(this.provisionsFrom))}"></div>
+      <div><label style="font-size:.72rem">Até (mês)</label><input id="cf-period-to" type="month" placeholder="AAAA-MM" value="${U.esc(this.monthKey(this.provisionsTo))}"></div>
+      <div style="align-self:end;font-size:.72rem;color:var(--text3);padding-bottom:9px">${U.date(this.provisionsFrom)} a ${U.date(this.provisionsTo)}</div>
       <div class="spacer"></div>
       <button class="btn btn-ghost btn-sm" onclick="CashFlow.applyProvisionsFilters()"><i data-lucide="filter"></i>Aplicar</button>
       <button class="btn btn-ghost btn-sm" onclick="CashFlow.clearProvisionsFilters()"><i data-lucide="rotate-ccw"></i>Limpar</button>

@@ -237,8 +237,11 @@ const DashboardPanel = {
 
   fieldSnapshot(selectedDate=''){
     const today=selectedDate||this.fieldDate||(typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10));
+    // v4.2.8 - quem tem "Inativo a partir de" continua contando nos dias
+    // anteriores a essa data (RDO.crewActiveOn).
     const crew=(Array.isArray(State.crew)?State.crew:[])
-      .filter(item=>item&&item.recordType!=='role'&&item.active!==false)
+      .filter(item=>item&&item.recordType!=='role'
+        &&(typeof RDO!=='undefined'&&typeof RDO.crewActiveOn==='function'?RDO.crewActiveOn(item,today):item.active!==false))
       .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     const crewById=new Map(crew.map(employee=>[String(employee.id),employee]));
     const occupancy=new Map();

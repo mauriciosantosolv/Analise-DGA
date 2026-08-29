@@ -381,14 +381,10 @@ Views.medicoes = {
       ${measurement.notes?`<section class="measurement-print-notes"><b>Observações</b><p>${U.esc(measurement.notes)}</p></section>`:''}
       <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
     document.body.appendChild(report);
-    document.body.classList.add('printing-measurement');
     UI.closeAll();
-    UI.loading(true,'Preparando PDF da medição…');
-    if(typeof Exports!=='undefined') await Exports.waitForImages(report);
     UI.loading(false);
     UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
-    window.addEventListener('afterprint',()=>{report.remove();document.body.classList.remove('printing-measurement');},{once:true});
-    setTimeout(()=>window.print(),250);
+    await Exports.beginPrint('printing-measurement',report);
   },
 
   hhStatusForm(measurement){

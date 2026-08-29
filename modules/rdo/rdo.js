@@ -152,8 +152,21 @@ const RDO = {
       .filter(item=>item.recordType==='role')
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   },
-  activeCrew(){
-    return this.crewMembers().filter(x=>x.active!==false).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  // v4.2.8 - "Inativo a partir de" (campo inactiveSince, AAAA-MM-DD). O
+  // colaborador continua valendo para todos os dias ANTERIORES a essa data e
+  // some a partir dela (inclusive). Sem a data o comportamento e exatamente o
+  // de antes: inativo some de tudo.
+  crewActiveOn(employee,date){
+    if(!employee) return false;
+    const since=String(employee.inactiveSince||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(since)){
+      const day=String(date||'').slice(0,10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(day)?day<since:employee.active!==false;
+    }
+    return employee.active!==false;
+  },
+  activeCrew(date){
+    return this.crewMembers().filter(x=>this.crewActiveOn(x,date)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   },
   isAbsent(entry){
     return String(entry&&entry.attendanceStatus||'').toLowerCase()==='absent';
@@ -526,7 +539,7 @@ const RDO = {
   dayOffForm(selectedDate=''){
     if(!this.fullAccess()) return UI.toast('Somente a equipe administrativa pode controlar folgas.','warn',6500);
     const date=/^\d{4}-\d{2}-\d{2}$/.test(String(selectedDate))?String(selectedDate):U.isoDate(new Date());
-    const crew=this.activeCrew();
+    const crew=this.activeCrew(date);
     if(!crew.length) return UI.toast('Cadastre colaboradores ativos antes de controlar folgas.','warn',6000);
     const current=new Map(this.dayOffs(date).map(item=>[String(item.employeeId),item]));
     const rdoOccupancy=new Map();
@@ -841,7 +854,7 @@ const RDO = {
     const existing=id?State.rdos.find(x=>String(x.id)===String(id)):null;
     if(existing && !this.canEdit(existing)) return this.detail(id);
     const projects=this.allowedProjects();
-    const crew=this.activeCrew();
+    const crew=this.activeCrew(existing?.date||U.isoDate(new Date()));
     if(!projects.length) return UI.toast('Nenhum projeto foi disponibilizado para preenchimento de RDO.','warn',6500);
     if(!crew.length) return UI.toast('Cadastre a equipe antes de criar o primeiro RDO.','warn',6500);
     const initialDate=existing?.date||U.isoDate(new Date());
@@ -1498,9 +1511,15 @@ const RDO = {
     }catch(err){ return empty; }
   },
 
+  printBusy:false,
   async print(id){
     const rdo=State.rdos.find(item=>String(item.id)===String(id));
     if(!rdo) return UI.toast('RDO não encontrado.','warn');
+    // v4.2.8 - o preparo do PDF faz duas idas ao servidor. Sem esta trava, um
+    // segundo clique montava um relatório novo e removia o do primeiro clique
+    // antes de ele chegar ao window.print().
+    if(this.printBusy) return UI.toast('O PDF anterior ainda está sendo preparado.','warn',4000);
+    this.printBusy=true;
     try{
       UI.loading(true,'Preparando PDF do diário…');
       const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
@@ -1591,23 +1610,15 @@ const RDO = {
       </section>
       <footer>Gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
       document.body.appendChild(report);
-      document.body.classList.add('printing-rdo');
-      await Promise.race([
-        Promise.all([...report.querySelectorAll('img')].map(image=>image.complete?Promise.resolve():new Promise(resolve=>{
-          image.onload=resolve; image.onerror=resolve;
-        }))),
-        new Promise(resolve=>setTimeout(resolve,1800))
-      ]);
       UI.loading(false);
       UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
-      window.addEventListener('afterprint',()=>{
-        report.remove();
-        document.body.classList.remove('printing-rdo');
-      },{once:true});
-      setTimeout(()=>window.print(),250);
+      await Exports.beginPrint('printing-rdo',report);
+      this.printBusy=false;
     }catch(err){
+      this.printBusy=false;
       UI.loading(false);
-      document.body.classList.remove('printing-rdo');
+      if(typeof Exports!=='undefined'&&typeof Exports.finishPrint==='function') Exports.finishPrint();
+      else document.body.classList.remove('printing-rdo');
       UI.toast('Não foi possível gerar o PDF: '+U.esc(err.message||err),'error',7000);
     }
   },
@@ -1752,7 +1763,7 @@ Views.colaboradores={
       <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
         ${this.avatar(employee)}
         <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
-        <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?'Inativo':'Ativo'}</span>
+        <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):'Ativo'}</span>
         ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
       </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
     const search=document.getElementById('crew-search');
@@ -1792,6 +1803,7 @@ Views.colaboradores={
       <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
       <div><label>Custo padrão por hora <small>Opcional</small></label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'Obrigatório somente quando o colaborador for usado no RDO de um projeto HH. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
       <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
+      <div><label>Inativo a partir de <small>Opcional</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}><small>A partir desta data (inclusive) o colaborador deixa de aparecer no RDO, nas folgas, no Painel/TV e no Histórico de Alocações — nos dias anteriores ele continua sendo apurado normalmente. Em branco, o colaborador inativo some de todos os relatórios, como antes.</small></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
     const clearPhoto=()=>{
       photo='';
@@ -1832,6 +1844,12 @@ Views.colaboradores={
       };
       input.click();
     };
+    const activeSelect=document.getElementById('crew-active');
+    const inactiveSinceInput=document.getElementById('crew-inactive-since');
+    if(activeSelect&&inactiveSinceInput) activeSelect.onchange=()=>{
+      inactiveSinceInput.disabled=activeSelect.value!=='false';
+      if(inactiveSinceInput.disabled) inactiveSinceInput.value='';
+    };
     document.getElementById('crew-save').onclick=async()=>{
       const name=document.getElementById('crew-name').value.trim();
       const registration=document.getElementById('crew-registration').value.trim();
@@ -1850,6 +1868,9 @@ Views.colaboradores={
           photo,
           internalRole:document.getElementById('crew-role').value.trim(),
           active:document.getElementById('crew-active').value==='true',
+          inactiveSince:document.getElementById('crew-active').value==='false'
+            ?String((document.getElementById('crew-inactive-since')||{}).value||'').slice(0,10)
+            :'',
           updatedAt:new Date().toISOString()
         });
         if(canEditCost&&rawCost!==''){

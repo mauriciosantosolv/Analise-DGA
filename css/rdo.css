@@ -342,6 +342,15 @@
 .project-filter-empty{padding:14px;border:1px dashed var(--border);color:var(--text3);font-size:.78rem;text-align:center}
 .project-filter-empty[hidden]{display:none}
 
+/* v4.2.8 - item inteiro clicavel, estado visivel e contador de selecionados */
+.project-filter-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.project-filter-count{margin-left:auto;color:var(--text2);font-size:.76rem}
+.project-filter-list .check-item{align-items:flex-start;transition:border-color .12s ease,background .12s ease}
+.project-filter-list .check-item:hover{border-color:var(--text3)}
+.project-filter-list .check-item.selected{border-color:var(--text);background:var(--surface)}
+.project-filter-list .check-item>span{display:flex;min-width:0;flex-direction:column}
+.project-filter-list .check-item small{margin-top:2px;color:var(--text3)}
+
 @media(max-width:560px){
   .rdo-review-people li{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
   .rdo-review-people li span:nth-child(2){grid-column:1/-1;text-align:left}

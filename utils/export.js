@@ -53,6 +53,89 @@ const Exports = {
       new Promise(resolve=>setTimeout(resolve,timeout))
     ]);
   },
+  /* ---------- v4.2.8 - pipeline unico de impressao ----------
+     Todo PDF do sistema (dashboard, projeto, RDO, medicao e provisoes) passa
+     por aqui. O conteudo de cada relatorio continua sendo montado pelo modulo
+     dono; o que muda e so QUANDO se imprime e QUANDO se limpa.
+
+     Causa do bug corrigido: a limpeza era registrada em `afterprint` antes de
+     `window.print()`. O `afterprint` nao e confiavel para isso -- o Chrome nao
+     dispara quando a pre-visualizacao e descartada de certas formas (a classe
+     printing-* e o relatorio ficam presos no documento) e dispara CEDO quando
+     uma nova impressao substitui uma pre-visualizacao ainda aberta. Nesse
+     segundo caso a classe printing-rdo era removida no exato instante em que o
+     navegador tirava o retrato da pagina, e o PDF saia com a TELA no lugar do
+     documento. Na segunda tentativa nao havia mais pre-visualizacao pendente e
+     o PDF saia certo.
+
+     O que este pipeline garante:
+     1. beginPrint() encerra qualquer impressao anterior que ficou pela metade;
+     2. so a classe e o relatorio desta impressao ficam no documento;
+     3. a limpeza so e armada depois que o navegador entra de fato em modo de
+        impressao (beforeprint / matchMedia('print')), entao um afterprint
+        precoce nao apaga mais nada;
+     4. dois cliques no botao cancelam o window.print() pendente do primeiro em
+        vez de imprimir um relatorio que o segundo ja removeu. */
+  printModes:['printing-dashboard','printing-project','printing-rdo','printing-measurement','printing-provisions','printing-provisions-month'],
+  printReportIds:['project-print-report','rdo-print-report','measurement-print-report','provisions-print-report','provisions-month-print-report'],
+  activePrint:null,
+  clearPrintState(keepId){
+    this.printModes.forEach(name=>document.body.classList.remove(name));
+    this.printReportIds.forEach(id=>{
+      if(id===keepId) return;
+      const node=document.getElementById(id);
+      if(node) node.remove();
+    });
+  },
+  finishPrint(keepId){
+    const current=this.activePrint;
+    this.activePrint=null;
+    if(current){
+      if(current.timer) clearTimeout(current.timer);
+      if(current.fallback) clearTimeout(current.fallback);
+      window.removeEventListener('beforeprint',current.onBefore);
+      window.removeEventListener('afterprint',current.onAfter);
+      if(current.media&&current.onMedia){
+        if(current.media.removeEventListener) current.media.removeEventListener('change',current.onMedia);
+        else if(current.media.removeListener) current.media.removeListener(current.onMedia);
+      }
+    }
+    this.clearPrintState(keepId);
+    if(current&&typeof current.cleanup==='function'){ try{ current.cleanup(); }catch(err){} }
+  },
+  printToken:0,
+  async beginPrint(mode,report,cleanup){
+    // Token: se um segundo pedido de impressao comecar enquanto este ainda
+    // espera as imagens, este aqui desiste em vez de disparar um window.print()
+    // sobre um relatorio que o segundo pedido ja substituiu.
+    const token=this.printToken=(this.printToken||0)+1;
+    this.finishPrint(report?report.id:undefined);
+    document.body.classList.add(mode);
+    await this.waitForImages(report||document.body);
+    // Dois quadros: o layout de impressao ja esta calculado quando o navegador
+    // tira o retrato da pagina.
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    if(this.printToken!==token) return;
+    if(!document.body.classList.contains(mode)) document.body.classList.add(mode);
+    const state={mode,report,cleanup,started:false,timer:null,fallback:null,media:null};
+    const done=()=>{ if(this.activePrint===state && state.started) this.finishPrint(); };
+    state.onBefore=()=>{ state.started=true; };
+    state.onAfter=()=>{ if(state.started) done(); else state.started=true; };
+    state.media=typeof window.matchMedia==='function'?window.matchMedia('print'):null;
+    state.onMedia=event=>{ if(event&&event.matches) state.started=true; else done(); };
+    window.addEventListener('beforeprint',state.onBefore);
+    window.addEventListener('afterprint',state.onAfter);
+    if(state.media){
+      if(state.media.addEventListener) state.media.addEventListener('change',state.onMedia);
+      else if(state.media.addListener) state.media.addListener(state.onMedia);
+    }
+    // Rede de seguranca: ninguem fica 5 minutos no dialogo de impressao. Sem
+    // isso, um afterprint que nunca chega deixaria a classe presa e um Ctrl+P
+    // do usuario sairia com o relatorio antigo.
+    state.fallback=setTimeout(()=>{state.started=true;done();},300000);
+    this.activePrint=state;
+    state.timer=setTimeout(()=>{state.timer=null;window.print();},120);
+  },
   spreadsheetCell(value){
     if(typeof value !== 'string') return value;
     // Evita que Excel/LibreOffice interpretem dados importados como fórmulas.
@@ -96,11 +179,9 @@ const Exports = {
     document.body.classList.add('printing-dashboard');
     const stationery=this.mountStationery();
     const companyMeta=this.mountCompanyMeta();
-    const cleanup = () => {document.body.classList.remove('printing-dashboard');if(stationery) stationery.remove();if(companyMeta) companyMeta.remove();};
-    window.addEventListener('afterprint', cleanup, {once:true});
+    const cleanup = () => {if(stationery) stationery.remove();if(companyMeta) companyMeta.remove();};
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
-    await this.waitForImages(document.body);
-    setTimeout(()=>window.print(), 400);
+    await this.beginPrint('printing-dashboard', null, cleanup);
   },
   async projectPDF(projectId){
     const p = State.projects.find(x=>String(x.id)===String(projectId)); if(!p) return;
@@ -147,16 +228,9 @@ const Exports = {
       </table>
       <div class="print-foot"><b>${U.esc(State.settings.companyName||'CliqueObras')}${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</b><br>Realizado inclui compras, contas pagas, mão de obra e custos da base de cálculo. Projetado contém somente o Planejamento. Gerado em ${new Date().toLocaleString('pt-BR')}.</div>`;
     document.body.appendChild(report);
-    document.body.classList.remove('printing-dashboard');
-    document.body.classList.add('printing-project');
     UI.close();
     UI.toast('Abrindo impressão — escolha "Salvar como PDF"', 'info');
-    await this.waitForImages(report);
-    window.addEventListener('afterprint', () => {
-      report.remove();
-      document.body.classList.remove('printing-project');
-    }, {once:true});
-    setTimeout(()=>window.print(), 250);
+    await this.beginPrint('printing-project', report);
   },
   toImage(){
     const canvases = document.querySelectorAll('#content canvas');

@@ -144,8 +144,16 @@ Views.relatorios = {
         });
         occupied.add(key(date,employeeId));
       });
-      const activeCrew=(Array.isArray(State.crew)?State.crew:[]).filter(item=>item&&item.recordType!=='role'&&item.active!==false);
+      // v4.2.8 - a disponibilidade passa a ser avaliada dia a dia: quem tem
+      // "Inativo a partir de" preenchido continua sendo apurado como ocioso nos
+      // dias anteriores a essa data e some a partir dela. Sem a data, o inativo
+      // segue fora do relatorio como antes.
+      const activeCrew=(Array.isArray(State.crew)?State.crew:[]).filter(item=>item&&item.recordType!=='role');
+      const availableOn=(employee,date)=>typeof RDO!=='undefined'&&typeof RDO.crewActiveOn==='function'
+        ?RDO.crewActiveOn(employee,date)
+        :employee.active!==false;
       this.allocationHistoryDates(filters).forEach(date=>activeCrew.forEach(employee=>{
+        if(!availableOn(employee,date)) return;
         const employeeId=String(employee.id||'');
         if(!employeeId||occupied.has(key(date,employeeId))) return;
         rows.push({
