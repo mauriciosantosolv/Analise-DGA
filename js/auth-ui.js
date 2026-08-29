@@ -1,4 +1,4 @@
-/** Interface de autenticação do Clique Obras. Carregado depois de app.js. */
+/** Interface de autenticação do CliqueObras — v4.2.12. */
 const AuthUI = (() => {
   const esc = value => String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   function friendlyError(err){
@@ -17,29 +17,32 @@ const AuthUI = (() => {
   function shell(content){
     return `<div class="cloud-auth-shell">
       <section class="cloud-auth-hero">
-        <div class="cloud-auth-logo"><img src="assets/logo-clique.png" alt="Clique Obras"></div>
-        <div><span class="cloud-auth-kicker">GESTÃO FINANCEIRA DE OBRAS</span><h1>Clique Obras</h1></div>
-        <p>Orçamento, realizado, planejamento e medições em uma base segura, acessível de qualquer aparelho.</p>
-        <ul><li><i data-lucide="shield-check"></i>Dados separados por conta</li><li><i data-lucide="cloud"></i>Sincronização automática</li><li><i data-lucide="smartphone"></i>Acesso no computador e celular</li></ul>
+        <div class="cloud-auth-brand"><span class="cloud-auth-logo"><img src="assets/logo-clique.png" alt=""></span><strong>cliqueobras</strong></div>
+        <div class="cloud-auth-message">
+          <span class="cloud-auth-kicker">GESTÃO DE OBRAS</span>
+          <h1>Decisões seguras começam com uma obra bem controlada.</h1>
+          <p>Orçamentos, financeiro, planejamento e medições reunidos em um só lugar.</p>
+          <ul><li><i data-lucide="shield-check"></i>Dados protegidos por conta</li><li><i data-lucide="cloud"></i>Sincronização automática</li><li><i data-lucide="smartphone"></i>Acesso no computador e celular</li></ul>
+        </div>
       </section>
       <section class="cloud-auth-panel">
-        <div class="cloud-auth-mobile-brand"><span><img src="assets/logo-clique.png" alt=""></span><div><b>CliqueObras</b><small>Gestão segura de obras</small></div></div>
+        <div class="cloud-auth-mobile-brand"><span><img src="assets/logo-clique.png" alt=""></span><div><b>cliqueobras</b><small>Gestão segura de obras</small></div></div>
         ${content}
       </section>
     </div>`;
   }
   function login(message='',messageType='error'){
-    return shell(`<div class="cloud-auth-heading"><h2>Entrar</h2><p>Acesse seu painel financeiro.</p></div>
+    return shell(`<div class="cloud-auth-heading"><h2>Bem-vindo de volta</h2><p>Entre com seus dados para acessar o painel.</p></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>E-mail<input id="cloud-email" type="email" autocomplete="username" required placeholder="voce@empresa.com.br"></label>
-        <label>Senha<input id="cloud-password" type="password" autocomplete="current-password" required placeholder="Sua senha"></label>
+        <label>Senha<input id="cloud-password" type="password" autocomplete="current-password" required placeholder="Digite sua senha"></label>
         ${feedback(message,messageType)}
         <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="log-in"></i>Entrar</button>
       </form>
       <button class="cloud-auth-link" data-mode="recover" type="button">Esqueci minha senha</button>
       <div class="cloud-auth-divider"><span>ou</span></div>
       <p class="cloud-auth-switch">Ainda não possui conta?</p>
-      <button class="btn btn-ghost cloud-auth-secondary" data-mode="signup" type="button">Criar minha conta</button>`);
+      <button class="btn btn-ghost cloud-auth-secondary" data-mode="signup" type="button">Criar uma conta</button>`);
   }
   function signup(message='',messageType='error'){
     return shell(`<button class="cloud-auth-back" data-mode="login" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
@@ -85,10 +88,7 @@ const AuthUI = (() => {
     el.innerHTML=(views[mode]||login)(message,messageType);
     document.body.appendChild(el);
     el.querySelectorAll('[data-mode]').forEach(btn=>btn.onclick=()=>show(btn.dataset.mode));
-    el.querySelectorAll('input[type="email"]').forEach(input=>{
-      input.autocapitalize='none';
-      input.spellcheck=false;
-    });
+    el.querySelectorAll('input[type="email"]').forEach(input=>{ input.autocapitalize='none'; input.spellcheck=false; });
     el.querySelectorAll('input[type="password"]').forEach(input=>{
       const button=document.createElement('button');
       button.type='button';
@@ -154,22 +154,10 @@ const AuthUI = (() => {
     try{
       if(typeof Cloud!=='undefined' && Cloud.configured()){
         const callback=await Cloud.consumeAuthCallback();
-        if(callback && callback.error){
-          try{ UI.loading(false); }catch(e){}
-          AuthUI.show('login',AuthUI.friendlyError(callback.error));
-          return;
-        }
-        if(callback && callback.type==='recovery'){
-          try{ UI.loading(false); }catch(e){}
-          AuthUI.show('reset');
-          return;
-        }
+        if(callback && callback.error){ try{ UI.loading(false); }catch(e){} AuthUI.show('login',AuthUI.friendlyError(callback.error)); return; }
+        if(callback && callback.type==='recovery'){ try{ UI.loading(false); }catch(e){} AuthUI.show('reset'); return; }
       }
-    }catch(err){
-      try{ UI.loading(false); }catch(e){}
-      AuthUI.show('login',AuthUI.friendlyError(err));
-      return;
-    }
+    }catch(err){ try{ UI.loading(false); }catch(e){} AuthUI.show('login',AuthUI.friendlyError(err)); return; }
     await originalInit();
   };
 })();

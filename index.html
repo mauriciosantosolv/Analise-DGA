@@ -3,36 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="application-version" content="4.2.9">
+<meta name="application-version" content="4.2.12">
 <meta name="description" content="Gestão financeira e operacional de obras com sincronização segura.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="CliqueObras">
+<meta name="apple-mobile-web-app-title" content="cliqueobras">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-elem 'self'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ghxpcclqiabbknzjaapl.supabase.co wss://ghxpcclqiabbknzjaapl.supabase.co; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self' blob:">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>CliqueObras</title>
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=4.2.9">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=4.2.9">
-<link rel="manifest" href="manifest.webmanifest?v=4.2.9">
+<title>cliqueobras</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=4.2.12">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=4.2.12">
+<link rel="manifest" href="manifest.webmanifest?v=4.2.12">
 <meta name="theme-color" content="#18181B">
-<link rel="stylesheet" href="css/fonts.css?v=4.2.9">
-<script src="assets/vendor/xlsx.min.js?v=4.2.9"></script>
-<script src="assets/vendor/chart.min.js?v=4.2.9"></script>
-<script src="assets/vendor/lucide.min.js?v=4.2.9"></script>
+<link rel="stylesheet" href="css/fonts.css?v=4.2.12">
+<script src="assets/vendor/xlsx.min.js?v=4.2.12"></script>
+<script src="assets/vendor/chart.min.js?v=4.2.12"></script>
+<script src="assets/vendor/lucide.min.js?v=4.2.12"></script>
 <script src="assets/vendor/supabase.js?v=2.111.0"></script>
-<link rel="stylesheet" href="css/variables.css?v=4.2.9">
-<link rel="stylesheet" href="css/layout.css?v=4.2.9">
-<link rel="stylesheet" href="css/dashboard.css?v=4.2.9">
-<link rel="stylesheet" href="css/tables.css?v=4.2.9">
-<link rel="stylesheet" href="css/components.css?v=4.2.9">
-<link rel="stylesheet" href="css/auth.css?v=4.2.9">
-<link rel="stylesheet" href="css/premium.css?v=4.2.9">
-<link rel="stylesheet" href="css/rdo.css?v=4.2.9">
-<link rel="stylesheet" href="css/panel-tv.css?v=4.2.9">
+<link rel="stylesheet" href="css/variables.css?v=4.2.12">
+<link rel="stylesheet" href="css/layout.css?v=4.2.12">
+<link rel="stylesheet" href="css/dashboard.css?v=4.2.12">
+<link rel="stylesheet" href="css/tables.css?v=4.2.12">
+<link rel="stylesheet" href="css/components.css?v=4.2.12">
+<link rel="stylesheet" href="css/auth.css?v=4.2.12">
+<link rel="stylesheet" href="css/premium.css?v=4.2.12">
+<link rel="stylesheet" href="css/rdo.css?v=4.2.12">
+<link rel="stylesheet" href="css/panel-tv.css?v=4.2.12">
 </head>
 <body>
 <div id="app">
@@ -66,7 +66,7 @@
       <div class="nav-sep">Conta</div>
       <button class="nav-item nav-logout" id="nav-logout" type="button"><i data-lucide="log-out"></i>Sair</button>
     </nav>
-    <div id="sidebar-footer"><span id="storage-status">v4.2.9 · carregando…</span></div>
+    <div id="sidebar-footer"><span id="storage-status">v4.2.12 · carregando…</span></div>
   </aside>
   <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
   <main>
@@ -93,36 +93,36 @@
 </div>
 <div id="modal-overlay"><div class="modal" id="modal"></div></div>
 <div id="toasts"></div>
-<div class="loading-overlay" id="loading"><div class="spinner"></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
+<div class="loading-overlay" id="loading"><div class="loading-brand"><img src="assets/logo-clique.png?v=4.2.12" alt=""></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
 <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
 <input type="file" id="json-input" accept=".json" style="display:none">
 <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp" style="display:none">
-<script src="config/cloud-config.js?v=4.2.9"></script>
-<script src="database/cloud.js?v=4.2.9"></script>
-<script src="database/indexeddb.js?v=4.2.9"></script>
-<script src="utils/format.js?v=4.2.9"></script>
-<script src="utils/helpers.js?v=4.2.9"></script>
-<script src="modules/custos/custos.js?v=4.2.9"></script>
-<script src="js/importer.js?v=4.2.9"></script>
-<script src="js/router.js?v=4.2.9"></script>
-<script src="modules/projetos/projetos.js?v=4.2.9"></script>
-<script src="modules/orcamentos/orcamentos.js?v=4.2.9"></script>
-<script src="modules/planejamento/planejamento.js?v=4.2.9"></script>
-<script src="modules/rdo/rdo.js?v=4.2.9"></script>
-<script src="modules/medicoes/medicoes.js?v=4.2.9"></script>
-<script src="modules/medicoes/fluxocaixa.js?v=4.2.9"></script>
-<script src="modules/clientes/clientes.js?v=4.2.9"></script>
-<script src="modules/configuracoes/categorias.js?v=4.2.9"></script>
-<script src="modules/custos/basecalculo.js?v=4.2.9"></script>
-<script src="modules/dashboard/charts.js?v=4.2.9"></script>
-<script src="modules/dashboard/panel-tv.js?v=4.2.9"></script>
-<script src="modules/compras/compras.js?v=4.2.9"></script>
-<script src="modules/dashboard/dashboard.js?v=4.2.9"></script>
-<script src="utils/export.js?v=4.2.9"></script>
-<script src="modules/relatorios/relatorios.js?v=4.2.9"></script>
-<script src="modules/integracoes/omie.js?v=4.2.9"></script>
-<script src="modules/configuracoes/configuracoes.js?v=4.2.9"></script>
-<script src="js/app.js?v=4.2.9"></script>
-<script src="js/auth-ui.js?v=4.2.9"></script>
+<script src="config/cloud-config.js?v=4.2.12"></script>
+<script src="database/cloud.js?v=4.2.12"></script>
+<script src="database/indexeddb.js?v=4.2.12"></script>
+<script src="utils/format.js?v=4.2.12"></script>
+<script src="utils/helpers.js?v=4.2.12"></script>
+<script src="modules/custos/custos.js?v=4.2.12"></script>
+<script src="js/importer.js?v=4.2.12"></script>
+<script src="js/router.js?v=4.2.12"></script>
+<script src="modules/projetos/projetos.js?v=4.2.12"></script>
+<script src="modules/orcamentos/orcamentos.js?v=4.2.12"></script>
+<script src="modules/planejamento/planejamento.js?v=4.2.12"></script>
+<script src="modules/rdo/rdo.js?v=4.2.12"></script>
+<script src="modules/medicoes/medicoes.js?v=4.2.12"></script>
+<script src="modules/medicoes/fluxocaixa.js?v=4.2.12"></script>
+<script src="modules/clientes/clientes.js?v=4.2.12"></script>
+<script src="modules/configuracoes/categorias.js?v=4.2.12"></script>
+<script src="modules/custos/basecalculo.js?v=4.2.12"></script>
+<script src="modules/dashboard/charts.js?v=4.2.12"></script>
+<script src="modules/dashboard/panel-tv.js?v=4.2.12"></script>
+<script src="modules/compras/compras.js?v=4.2.12"></script>
+<script src="modules/dashboard/dashboard.js?v=4.2.12"></script>
+<script src="utils/export.js?v=4.2.12"></script>
+<script src="modules/relatorios/relatorios.js?v=4.2.12"></script>
+<script src="modules/integracoes/omie.js?v=4.2.12"></script>
+<script src="modules/configuracoes/configuracoes.js?v=4.2.12"></script>
+<script src="js/app.js?v=4.2.12"></script>
+<script src="js/auth-ui.js?v=4.2.12"></script>
 </body>
 </html>
