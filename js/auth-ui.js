@@ -1,4 +1,4 @@
-/** Interface de autenticação do CliqueObras — v4.2.13. */
+/** Interface de autenticação do CliqueObras — v4.2.14. */
 const AuthUI = (() => {
   const esc = value => String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   function friendlyError(err){
@@ -22,12 +22,13 @@ const AuthUI = (() => {
           <span class="cloud-auth-kicker">GESTÃO DE OBRAS</span>
           <h1>Decisões seguras começam com uma obra bem controlada.</h1>
           <p>Orçamentos, financeiro, planejamento e medições reunidos em um só lugar.</p>
-          <ul><li><i data-lucide="shield-check"></i>Dados protegidos por conta</li><li><i data-lucide="cloud"></i>Sincronização automática</li><li><i data-lucide="smartphone"></i>Acesso no computador e celular</li></ul>
+          <ul><li><i data-lucide="shield-check"></i>Dados protegidos por conta</li><li><i data-lucide="download-cloud"></i>Sincronização automática</li><li><i data-lucide="monitor"></i>Acesso no computador e celular</li></ul>
         </div>
       </section>
       <section class="cloud-auth-panel">
         <div class="cloud-auth-mobile-brand"><span><img src="assets/logo-clique.png" alt=""></span><div><b>cliqueobras</b><small>Gestão segura de obras</small></div></div>
         ${content}
+        <p class="cloud-auth-foot">&copy; ${new Date().getFullYear()} CliqueObras &middot; Ambiente seguro</p>
       </section>
     </div>`;
   }
@@ -37,12 +38,11 @@ const AuthUI = (() => {
         <label>E-mail<input id="cloud-email" type="email" autocomplete="username" required placeholder="voce@empresa.com.br"></label>
         <label>Senha<input id="cloud-password" type="password" autocomplete="current-password" required placeholder="Digite sua senha"></label>
         ${feedback(message,messageType)}
-        <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="log-in"></i>Entrar</button>
+        <button class="btn btn-primary cloud-auth-submit" type="submit">Entrar<i data-lucide="arrow-right"></i></button>
       </form>
       <button class="cloud-auth-link" data-mode="recover" type="button">Esqueci minha senha</button>
       <div class="cloud-auth-divider"><span>ou</span></div>
-      <p class="cloud-auth-switch">Ainda não possui conta?</p>
-      <button class="btn btn-ghost cloud-auth-secondary" data-mode="signup" type="button">Criar uma conta</button>`);
+      <p class="cloud-auth-switch">Ainda não possui conta? <button class="cloud-auth-signup" data-mode="signup" type="button">Criar uma conta</button></p>`);
   }
   function signup(message='',messageType='error'){
     return shell(`<button class="cloud-auth-back" data-mode="login" type="button"><i data-lucide="arrow-left"></i>Voltar</button>

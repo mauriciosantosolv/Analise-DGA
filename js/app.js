@@ -349,8 +349,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.2.9 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.2.9 · dados locais';
+      el.textContent=`v4.2.14 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.2.14 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -708,8 +708,7 @@ const App = {
     // propósito: o menu no desktop agora é sempre visível (estabilidade).
     const initialView=this.initHistory();
     this.go(initialView,{history:false});
-    if(!State.projects.length)
-      UI.toast('Bem-vindo! Importe suas planilhas em <b>Orçamentos</b> e <b>Financeiro</b> para começar.', 'info', 7000);
+    // v4.2.10 - aviso de boas-vindas removido a pedido do usuario.
     // Se os ícones carregarem depois do boot (fallback de CDN), aplica-os na tela atual
     let iconTries = 0;
     const iconTimer = setInterval(() => {
