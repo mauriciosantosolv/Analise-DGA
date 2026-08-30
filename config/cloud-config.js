@@ -8,6 +8,6 @@
 window.CLIQUE_OBRAS_CLOUD = {
   enabled: true,
   provider: 'supabase',
-  url: 'https://ghxpcclqiabbknzjaapl.supabase.co',
-  publishableKey: 'sb_publishable_UMnjtmvKWbIAL323FS7ALg_8mvwFb3n'
+  url: 'https://mwelgpjkqljtkzbqxmag.supabase.co',
+  publishableKey: 'sb_publishable_CDBX6n51aOD9R9gyAyjQVQ_O4y6DUcT'
 };
