@@ -1,33 +1,4 @@
 -- =====================================================================
--- CliqueObras v4.2.6 — Lançamentos órfãos do Omie
---
--- Problema resolvido
--- ------------------
--- Quando uma conta a pagar é EXCLUÍDA no Omie, ela simplesmente deixa de
--- aparecer em ListarContasPagar. A reconciliação existente
--- (clique_obras_reconcile_omie_entries) só cancela rateios de títulos que
--- AINDA aparecem no lote — por isso o registro excluído no Omie ficava para
--- sempre no CliqueObras, duplicando o Realizado e abatendo o planejamento.
---
--- Caso comprovado em 25/08/2026, projeto 798 (PROJETO AURORA):
---   título 2420124371 (R$ 3.999,50, ATRASADO)  -> ConsultarContaPagar responde
---        "Lançamento não cadastrado para o Código [2420124371]"  => EXCLUÍDO
---   título 2421007984 (R$ 3.999,50, PAGO)      -> existe, mesma observação
---   (renovação do mesmo veículo ONIX TDC3F48). O primeiro foi refeito no Omie.
---
--- O que este script cria
--- ----------------------
--- Apenas UMA função de LEITURA, que lista os candidatos a órfão. Ela não
--- apaga nada. Quem cancela continua sendo a função já existente
--- clique_obras_apply_omie_entries(..., active:false) — a mesma rotina que já
--- trata cancelamento no Omie e que devolve o valor ao planejamento gravando
--- o histórico 'omie_restored'. Nenhuma lógica existente foi alterada.
---
--- A Edge Function omie-integration (versão 12) chama esta função depois de
--- aplicar as contas a pagar e, para cada candidato, CONFIRMA no próprio Omie
--- (ConsultarContaPagar) que o título realmente não existe mais antes de
--- cancelar. Nada é removido por dedução — só com a resposta do Omie.
--- =====================================================================
 
 create or replace function public.clique_obras_omie_orphan_candidates_v426(
   target_organization_id uuid,
