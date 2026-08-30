@@ -1,4 +1,4 @@
-/** Interface de autenticação do CliqueObras — v4.2.14. */
+/** Interface de autenticação do CliqueObras — v4.2.15. */
 const AuthUI = (() => {
   const esc = value => String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   function friendlyError(err){
@@ -17,7 +17,7 @@ const AuthUI = (() => {
   function shell(content){
     return `<div class="cloud-auth-shell">
       <section class="cloud-auth-hero">
-        <div class="cloud-auth-brand"><span class="cloud-auth-logo"><img src="assets/logo-clique.png" alt=""></span><strong>cliqueobras</strong></div>
+        <div class="cloud-auth-brand"><span class="cloud-auth-logo"><img src="assets/logo-clique-branco.png" alt="" width="76" height="59"></span><strong>cliqueobras</strong></div>
         <div class="cloud-auth-message">
           <span class="cloud-auth-kicker">GESTÃO DE OBRAS</span>
           <h1>Decisões seguras começam com uma obra bem controlada.</h1>
