@@ -1,4 +1,4 @@
-/* CliqueObras v4.2.12 — login sóbrio em tela dividida, sem cartão externo */
+/* CliqueObras v4.2.13 — login sóbrio em tela dividida, sem cartão externo */
 .cloud-login{position:fixed;inset:0;z-index:900;overflow:auto;background:#f7f8f9;color:#111c28}
 .cloud-auth-shell{width:100%;min-height:100dvh;display:grid;grid-template-columns:minmax(480px,1.08fr) minmax(420px,.92fr);background:#f7f8f9}
 
@@ -15,27 +15,27 @@
 .cloud-auth-hero li{display:grid;align-content:start;gap:11px;padding:18px 22px 0 0;color:rgba(255,255,255,.88);font-size:.79rem;line-height:1.35}
 .cloud-auth-hero li svg{width:21px;height:21px;color:#fff}
 
-.cloud-auth-panel{position:relative;min-height:100dvh;padding:clamp(46px,7vw,96px);display:flex;flex-direction:column;justify-content:center;background:#f7f8f9;color:#111c28}
-.cloud-auth-panel>*{width:min(390px,100%);margin-right:auto;margin-left:auto}
+.cloud-auth-panel{position:relative;min-height:100dvh;padding:clamp(28px,4.5vh,56px) clamp(36px,6vw,84px);display:flex;flex-direction:column;justify-content:center;background:#f7f8f9;color:#111c28}
+.cloud-auth-panel>*{width:min(356px,100%);margin-right:auto;margin-left:auto}
 .cloud-auth-mobile-brand{display:none}
-.cloud-auth-heading:before{content:"ACESSO AO SISTEMA";display:block;margin-bottom:16px;color:#123d65;font-size:.72rem;font-weight:750;letter-spacing:.16em}
-.cloud-auth-heading h2{margin:0 0 10px;font-size:clamp(2rem,3vw,2.65rem);font-weight:650;letter-spacing:-.04em;line-height:1.08;color:#111c28}
+.cloud-auth-heading:before{content:"ACESSO AO SISTEMA";display:block;margin-bottom:12px;color:#123d65;font-size:.72rem;font-weight:750;letter-spacing:.16em}
+.cloud-auth-heading h2{margin:0 0 8px;font-size:clamp(1.9rem,2.6vw,2.35rem);font-weight:650;letter-spacing:-.04em;line-height:1.08;color:#111c28}
 .cloud-auth-heading p,.cloud-auth-switch{margin:0;color:#5e6a76;font-size:.9rem;line-height:1.55}
-.cloud-auth-form{display:grid;gap:26px;margin-top:42px}
+.cloud-auth-form{display:grid;gap:20px;margin-top:30px}
 .cloud-auth-form label{display:grid;gap:8px;color:#35424e;font-size:.79rem;font-weight:680}
-.cloud-auth-form input{width:100%;height:46px;padding:0;border:0;border-bottom:1px solid #9da8b2;border-radius:0;outline:none;background:transparent;color:#111c28;font-size:1rem;transition:border-color .18s ease,box-shadow .18s ease}
+.cloud-auth-form input{width:100%;height:42px;padding:0;-webkit-appearance:none;appearance:none;border:0!important;border-bottom:1px solid #9da8b2!important;border-radius:0;outline:0!important;box-shadow:none!important;background:transparent;color:#111c28;font-size:1rem;transition:border-color .18s ease,box-shadow .18s ease}
 .cloud-auth-form input::placeholder{color:#8b959f}
-.cloud-auth-form input:focus{border-bottom-color:#123d65;box-shadow:0 1px 0 #123d65}
+.cloud-auth-form input:focus,.cloud-auth-form input:focus-visible{border:0!important;border-bottom:1px solid #123d65!important;outline:0!important;box-shadow:inset 0 -1px 0 #123d65!important}
 
-.cloud-auth-submit{width:100%;min-height:50px;margin-top:3px;justify-content:center;border-radius:6px;background:#123d65!important;border-color:#123d65!important;color:#fff!important;font-weight:680}
+.cloud-auth-submit{width:100%;min-height:46px;margin-top:2px;justify-content:center;border-radius:6px;background:#123d65!important;border-color:#123d65!important;color:#fff!important;font-weight:680}
 .cloud-auth-submit:hover{background:#0c2f50!important;border-color:#0c2f50!important}
 .cloud-auth-secondary{width:auto;min-height:auto;padding:0!important;align-self:center;border:0!important;background:transparent!important;color:#123d65!important;text-decoration:underline;text-underline-offset:3px;box-shadow:none!important}
 .cloud-auth-link,.cloud-auth-back{border:0;background:transparent;color:#123d65;font-weight:680;cursor:pointer;text-decoration:none}
-.cloud-auth-link{margin-top:18px;align-self:center;font-size:.8rem}
+.cloud-auth-link{margin-top:12px;align-self:center;font-size:.8rem}
 .cloud-auth-link:hover,.cloud-auth-back:hover{text-decoration:underline;text-underline-offset:3px}
 .cloud-auth-back{display:inline-flex;align-items:center;gap:6px;margin:0 auto 30px;padding:0;align-self:flex-start}
 .cloud-auth-back svg{width:16px;height:16px}
-.cloud-auth-divider{display:flex;align-items:center;gap:12px;margin:24px auto;color:#7a858f;font-size:.72rem}
+.cloud-auth-divider{display:flex;align-items:center;gap:12px;margin:18px auto;color:#7a858f;font-size:.72rem}
 .cloud-auth-divider:before,.cloud-auth-divider:after{content:"";height:1px;background:#d8dde2;flex:1}
 .cloud-auth-switch{text-align:center;margin-bottom:10px}
 .cloud-auth-note{margin-top:18px;display:flex;gap:8px;align-items:flex-start;color:#5e6a76;font-size:.8rem;line-height:1.5}
@@ -58,8 +58,19 @@
   .cloud-auth-hero{padding:42px}
   .cloud-auth-hero ul{grid-template-columns:1fr;gap:11px;border:0;margin-top:38px}
   .cloud-auth-hero li{display:flex;align-items:center;padding:0}
-  .cloud-auth-panel{padding:52px}
+  .cloud-auth-panel{padding:36px 42px}
   .cloud-auth-hero h1{font-size:2.85rem}
+}
+
+@media(max-height:720px) and (min-width:721px){
+  .cloud-auth-panel{padding-top:24px;padding-bottom:24px}
+  .cloud-auth-heading:before{margin-bottom:9px}
+  .cloud-auth-heading h2{font-size:2rem;margin-bottom:6px}
+  .cloud-auth-form{margin-top:22px;gap:16px}
+  .cloud-auth-form input{height:38px}
+  .cloud-auth-submit{min-height:43px}
+  .cloud-auth-link{margin-top:9px}
+  .cloud-auth-divider{margin-top:13px;margin-bottom:13px}
 }
 
 @media(max-width:720px){
@@ -72,7 +83,7 @@
   .cloud-auth-panel{min-height:calc(100dvh - 190px);padding:38px 24px calc(48px + env(safe-area-inset-bottom));justify-content:flex-start}
   .cloud-auth-mobile-brand{display:none}
   .cloud-auth-heading h2{font-size:2rem}
-  .cloud-auth-form{margin-top:34px;gap:24px}
+  .cloud-auth-form{margin-top:28px;gap:20px}
   .cloud-auth-form input{font-size:16px}
   .cloud-auth-submit{min-height:50px}
 }

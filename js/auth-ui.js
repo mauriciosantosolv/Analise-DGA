@@ -1,4 +1,4 @@
-/** Interface de autenticação do CliqueObras — v4.2.12. */
+/** Interface de autenticação do CliqueObras — v4.2.13. */
 const AuthUI = (() => {
   const esc = value => String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   function friendlyError(err){
