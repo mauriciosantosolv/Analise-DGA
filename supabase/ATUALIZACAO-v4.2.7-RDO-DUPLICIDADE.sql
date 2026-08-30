@@ -1,30 +1,4 @@
 -- ============================================================================
--- CliqueObras v4.2.7 - Guardas de duplicidade do RDO
--- ============================================================================
--- JA APLICADO EM PRODUCAO (projeto ghxpcclqiabbknzjaapl) em 27/08/2026.
--- Este arquivo fica no repositorio apenas como historico/replicacao.
---
--- Problema 1 - mesmo colaborador em dois diarios no mesmo dia
---   O front ja chamava a RPC clique_obras_rdo_occupied_employees desde a v4.2.x,
---   mas ela NUNCA existiu no banco: toda chamada dava 404, o catch engolia o erro
---   e a unica protecao restante era a lista local State.rdos, que a RLS filtra.
---   Resultado real: ALBERTO VIEIRA DO CARMO ficou alocado em 26/08/2026 no
---   RDO-2026-0070 (obra 919, rascunho) e no RDO-2026-0018 (obra 693, enviado).
---
--- Problema 2 - RDO enviado sem valor HH configurado
---   RDO.hhConfigurationIssues() decide se o contrato e HH lendo State.projects.
---   O perfil "Apontador de RDO" nao enxerga o store projects, entao o tipo vinha
---   null, a validacao era pulada em silencio e o diario podia ser enviado com
---   colaborador sem valor HH no projeto.
---
--- Problema 3 - numeros de RDO repetidos
---   O numero vinha de State.rdos.length+1. O Apontador enxerga so os diarios do
---   projeto dele (17), entao gerou RDO-2026-0018, numero que ja existia.
---   No banco havia 18 numeros repetidos (RDO-2026-0034 aparecia 3 vezes).
---
--- As tres funcoes sao STABLE e SECURITY DEFINER, nao gravam nada e validam a
--- permissao de leitura do proprio store 'rdos' antes de responder.
--- ============================================================================
 
 create or replace function public.clique_obras_rdo_occupied_employees(
   p_organization_id uuid,
