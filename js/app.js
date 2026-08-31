@@ -349,8 +349,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.2.16 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.2.16 · dados locais';
+      el.textContent=`v4.2.18 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.2.18 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -629,6 +629,8 @@ const App = {
       this.lastCloudRefresh=Date.now();
     }
     await State.reload();
+    // v4.2.18 - jornada padrao para o encarregado, que nao le o store settings
+    try{ if(typeof RDO!=='undefined'&&typeof RDO.loadRemoteShiftDefaults==='function') await RDO.loadRemoteShiftDefaults(); }catch(error){}
     try{ repairedRdoCosts=await this.repairApprovedRdoCostsV401(); }catch(error){
       if(typeof console!=='undefined') console.warn('A reparação de custos dos RDOs será tentada novamente no próximo acesso.',error);
     }

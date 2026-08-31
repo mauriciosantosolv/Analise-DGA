@@ -80,13 +80,26 @@ Views.relatorios = {
     const projects=State.projects.slice().sort((a,b)=>U.projLabel(a).localeCompare(U.projLabel(b),'pt-BR'));
     const today=U.isoDate(new Date());
     UI.modal({title:'Histórico de Alocações',body:`
-      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, ociosos e folgas. O período é obrigatório para apurar corretamente quem ficou ocioso.</p>
+      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, ociosos, folgas e férias. A ociosidade é apurada de segunda a sexta; sábados e domingos trazem apenas o que foi lançado no RDO. O período é obrigatório.</p>
       <div class="form-grid">
         <div class="full"><label>Projeto</label><select id="allocation-project"><option value="">Todos os projetos</option>${projects.map(project=>`<option value="${U.esc(project.id)}">${U.esc(U.projLabel(project))}</option>`).join('')}</select></div>
         <div><label>Data inicial *</label><input id="allocation-date-from" type="date" value="${U.esc(today)}"></div>
         <div><label>Data final *</label><input id="allocation-date-to" type="date" value="${U.esc(today)}"></div>
         <div class="full"><label>Status do RDO</label><select id="allocation-status"><option value="">Todos os status</option><option>Rascunho</option><option>Enviado</option><option>Aprovado</option><option>Devolvido</option></select><small>Ao filtrar um status, o arquivo mostra apenas alocações e faltas vinculadas aos RDOs correspondentes.</small></div>
       </div>`,footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" onclick="Views.relatorios.exportAllocationHistory()"><i data-lucide="download"></i>Exportar Excel</button>`});
+  },
+  // v4.2.18 - sabado e domingo passam a trazer apenas o que foi lancado no
+  // RDO: ociosidade, folgas e ferias sao apuradas somente de segunda a sexta.
+  allocationHistoryWeekend(date){
+    const dia=String(date||'').slice(0,10);
+    if(typeof RDO!=='undefined'&&typeof RDO.dayType==='function'){
+      const tipo=RDO.dayType(dia,false);
+      return tipo==='saturday'||tipo==='sunday';
+    }
+    const match=dia.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!match) return false;
+    const semana=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]))).getUTCDay();
+    return semana===0||semana===6;
   },
   allocationHistoryDates(filters={}){
     const from=String(filters.dateFrom||''),to=String(filters.dateTo||'');
@@ -130,9 +143,27 @@ Views.relatorios = {
       });
     });
     if(!filters.projectId&&!filters.status){
+      // v4.2.18 - ferias: nos dias cobertos por um periodo o colaborador entra
+      // como "Ferias" e nao como "Ocioso", sem custo de ociosidade.
+      const crewList=(Array.isArray(State.crew)?State.crew:[]).filter(item=>item&&item.recordType!=='role');
+      this.allocationHistoryDates(filters).forEach(date=>{
+        if(this.allocationHistoryWeekend(date)) return;
+        crewList.forEach(employee=>{
+          if(typeof RDO==='undefined'||typeof RDO.onVacation!=='function'||!RDO.onVacation(employee,date)) return;
+          const employeeId=String(employee.id||'');
+          if(!employeeId||occupied.has(key(date,employeeId))) return;
+          rows.push({
+            employeeId,projectId:'',projectLabel:'',date,employeeName:employee.name||'Colaborador',registration:employee.registration||'',
+            role:employee.internalRole||'',situation:'Férias',start:'',end:'',breakMinutes:0,
+            regular:0,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+          });
+          occupied.add(key(date,employeeId));
+        });
+      });
       (Array.isArray(State.workforceStatus)?State.workforceStatus:[]).filter(item=>item&&item.status==='day_off').forEach(item=>{
         const date=String(item.date||'').slice(0,10),employeeId=String(item.employeeId||'');
         if(!employeeId||occupied.has(key(date,employeeId))) return;
+        if(this.allocationHistoryWeekend(date)) return;
         if(filters.dateFrom&&date<filters.dateFrom) return;
         if(filters.dateTo&&date>filters.dateTo) return;
         const employee=State.crew.find(row=>String(row.id)===employeeId)||{};
@@ -152,16 +183,19 @@ Views.relatorios = {
       const availableOn=(employee,date)=>typeof RDO!=='undefined'&&typeof RDO.crewActiveOn==='function'
         ?RDO.crewActiveOn(employee,date)
         :employee.active!==false;
-      this.allocationHistoryDates(filters).forEach(date=>activeCrew.forEach(employee=>{
-        if(!availableOn(employee,date)) return;
-        const employeeId=String(employee.id||'');
-        if(!employeeId||occupied.has(key(date,employeeId))) return;
-        rows.push({
-          employeeId,projectId:'',projectLabel:'',date,employeeName:employee.name||'Colaborador',registration:employee.registration||'',
-          role:employee.internalRole||'',situation:'Ocioso',start:'',end:'',breakMinutes:0,
-          regular:8.8,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+      this.allocationHistoryDates(filters).forEach(date=>{
+        if(this.allocationHistoryWeekend(date)) return;
+        activeCrew.forEach(employee=>{
+          if(!availableOn(employee,date)) return;
+          const employeeId=String(employee.id||'');
+          if(!employeeId||occupied.has(key(date,employeeId))) return;
+          rows.push({
+            employeeId,projectId:'',projectLabel:'',date,employeeName:employee.name||'Colaborador',registration:employee.registration||'',
+            role:employee.internalRole||'',situation:'Ocioso',start:'',end:'',breakMinutes:0,
+            regular:8.8,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+          });
         });
-      }));
+      });
     }
     return rows.sort((a,b)=>a.date.localeCompare(b.date)||a.projectLabel.localeCompare(b.projectLabel,'pt-BR')||a.employeeName.localeCompare(b.employeeName,'pt-BR'));
   },
@@ -182,7 +216,7 @@ Views.relatorios = {
     if(!source.length) return UI.toast('Nenhuma alocação encontrada para os filtros informados.','warn',5500);
     const rows=source.map(row=>({
       Projeto:row.projectLabel,Dia:U.date(row.date),Colaborador:row.employeeName,'Matrícula':row.registration,
-      'Função':row.role,'Situação':row.situation,Entrada:['Falta','Folga','Ocioso'].includes(row.situation)?'':row.start,'Saída':['Falta','Folga','Ocioso'].includes(row.situation)?'':row.end,'Intervalo':['Falta','Folga','Ocioso'].includes(row.situation)?'':U.durationMinutes(row.breakMinutes),
+      'Função':row.role,'Situação':row.situation,Entrada:['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':row.start,'Saída':['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':row.end,'Intervalo':['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':U.durationMinutes(row.breakMinutes),
       'Horas normais':row.regular,'HE 50%':row.overtime50,'HE 100%':row.overtime100,
       'Adicional noturno (h)':row.nightHours,Feriado:row.holiday?'Sim':'Não','Status do RDO':row.status,'Número do RDO':row.rdoNumber
     }));

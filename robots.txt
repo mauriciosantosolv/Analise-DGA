@@ -1,0 +1,5 @@
+# CliqueObras — https://cliqueobras.com/
+User-agent: *
+Allow: /
+
+Sitemap: https://cliqueobras.com/sitemap.xml

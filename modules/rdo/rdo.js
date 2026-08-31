@@ -156,8 +156,37 @@ const RDO = {
   // colaborador continua valendo para todos os dias ANTERIORES a essa data e
   // some a partir dela (inclusive). Sem a data o comportamento e exatamente o
   // de antes: inativo some de tudo.
+  // v4.2.18 - ferias. Os periodos ficam em crew.vacations, uma lista de
+  // {id,from,to} em AAAA-MM-DD dentro do proprio jsonb do colaborador (campo
+  // novo em store existente: nao exige mudanca no banco). A disponibilidade
+  // continua sendo avaliada dia a dia, pela mesma porta do "Inativo a partir
+  // de": crewActiveOn(colaborador, data).
+  vacationPeriods(employee){
+    return (Array.isArray(employee&&employee.vacations)?employee.vacations:[])
+      .map(item=>({
+        id:String(item&&item.id||''),
+        from:String(item&&item.from||'').slice(0,10),
+        to:String(item&&item.to||'').slice(0,10)
+      }))
+      .filter(item=>/^\d{4}-\d{2}-\d{2}$/.test(item.from)&&/^\d{4}-\d{2}-\d{2}$/.test(item.to)&&item.from<=item.to)
+      .sort((a,b)=>a.from.localeCompare(b.from));
+  },
+  vacationDays(period){
+    const from=String(period&&period.from||'').slice(0,10),to=String(period&&period.to||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to) return 0;
+    return Math.floor((Date.parse(`${to}T00:00:00Z`)-Date.parse(`${from}T00:00:00Z`))/86400000)+1;
+  },
+  vacationOn(employee,date){
+    const day=String(date||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    return this.vacationPeriods(employee).find(item=>day>=item.from&&day<=item.to)||null;
+  },
+  onVacation(employee,date){
+    return !!this.vacationOn(employee,date);
+  },
   crewActiveOn(employee,date){
     if(!employee) return false;
+    if(typeof this.onVacation==='function'&&this.onVacation(employee,date)) return false;
     const since=String(employee.inactiveSince||'').slice(0,10);
     if(/^\d{4}-\d{2}-\d{2}$/.test(since)){
       const day=String(date||'').slice(0,10);
@@ -219,7 +248,7 @@ const RDO = {
     return new Set(State.measurements.flatMap(m=>Array.isArray(m.rdoIds)?m.rdoIds.map(String):[]));
   },
   standardDailyHours(){
-    const configured=Number((State.settings||{}).rdoDailyHours);
+    const configured=Number(this.shiftSettings().rdoDailyHours);
     return configured>0&&configured<=24?configured:8.8;
   },
   dayType(date,isHoliday=false){
@@ -232,8 +261,38 @@ const RDO = {
   dayTypeLabel(date,isHoliday=false){
     return {holiday:'Feriado · horas a 100%',saturday:'Sábado · horas a 50%',sunday:'Domingo · horas a 100%',weekday:'Dia útil'}[this.dayType(date,isHoliday)];
   },
-  defaultShift(date=''){
+  // v4.2.18 - a jornada padrao mora no store 'settings', que a RLS esconde de
+  // quem so tem permissao nos diarios (o encarregado / Apontador de RDO). Sem
+  // as configuracoes, defaultShift caia no 07:30-17:18 embutido e o encarregado
+  // via um horario diferente do que a empresa configurou. loadRemoteShiftDefaults
+  // busca so as chaves da jornada por RPC (SECURITY DEFINER, revalidando
+  // can_view_store(org,'rdos')); shiftSettings completa o que State.settings nao
+  // trouxe. Sem nuvem, sem permissao ou com falha na RPC, tudo se comporta
+  // exatamente como antes.
+  remoteShiftDefaults:null,
+  async loadRemoteShiftDefaults(){
+    if(typeof Cloud==='undefined'||typeof Cloud.active!=='function'||!Cloud.active()) return null;
+    if(typeof Cloud.rdoShiftDefaults!=='function') return null;
+    if(typeof Cloud.canViewStore==='function'&&Cloud.canViewStore('settings')) return null;
+    try{
+      const data=await Cloud.rdoShiftDefaults();
+      if(data&&typeof data==='object'&&!Array.isArray(data)) this.remoteShiftDefaults=data;
+    }catch(err){}
+    return this.remoteShiftDefaults;
+  },
+  shiftSettings(){
     const settings=State.settings||{};
+    const remote=this.remoteShiftDefaults;
+    if(!remote) return settings;
+    const merged={...settings};
+    Object.keys(remote).forEach(chave=>{
+      const atual=merged[chave];
+      if(atual===undefined||atual===null||atual==='') merged[chave]=remote[chave];
+    });
+    return merged;
+  },
+  defaultShift(date=''){
+    const settings=this.shiftSettings();
     const type=this.dayType(date,false);
     const prefix=type==='saturday'?'rdoSaturday':type==='sunday'?'rdoSunday':'rdoShift';
     const fallbackStart=settings.rdoShiftStart||'07:30',fallbackEnd=settings.rdoShiftEnd||'17:18';
@@ -343,12 +402,12 @@ const RDO = {
     return this.paidHours(shift.start,shift.end,shift.breakMinutes)||this.standardDailyHours(date,holiday);
   },
   nightPremiumPct(){
-    const configured=Number((State.settings||{}).rdoNightPremiumPct);
+    const configured=Number(this.shiftSettings().rdoNightPremiumPct);
     return Number.isFinite(configured)&&configured>=0&&configured<=300?configured:20;
   },
   nightHours(start,end,breakMinutes=0){
     const from=this.timeMinutes(start),clockEnd=this.timeMinutes(end);
-    const nightStart=this.timeMinutes((State.settings||{}).rdoNightStart||'22:00');
+    const nightStart=this.timeMinutes(this.shiftSettings().rdoNightStart||'22:00');
     if(from==null||clockEnd==null||nightStart==null) return 0;
     let duration=clockEnd-from;
     if(duration<0) duration+=1440;
@@ -1745,6 +1804,22 @@ Views.rdos={
 Views.colaboradores={
   title:'Colaboradores',
   query:'',
+  // v4.2.18 - a etiqueta mostra as ferias em curso sem acrescentar elemento ao
+  // cartao (.crew-card e um grid de colunas fixas: um filho a mais quebraria o
+  // alinhamento).
+  statusTag(employee){
+    const hoje=typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10);
+    const ferias=typeof RDO!=='undefined'&&typeof RDO.vacationOn==='function'?RDO.vacationOn(employee,hoje):null;
+    if(ferias) return `<span class="tag tag-blue">Férias até ${U.date(ferias.to)}</span>`;
+    return `<span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):'Ativo'}</span>`;
+  },
+  // v4.2.18 - lista de periodos de ferias dentro do cadastro do colaborador.
+  vacationListMarkup(list){
+    const periodos=Array.isArray(list)?list:[];
+    const linhas=periodos.map((item,indice)=>`<div class="crew-vacation-row"><span><b>${U.date(item.from)} a ${U.date(item.to)}</b><small>${RDO.vacationDays(item)} dia(s)</small></span><button class="btn btn-ghost btn-sm" type="button" data-vacation-remove="${indice}" aria-label="Remover período de férias"><i data-lucide="trash-2"></i></button></div>`).join('');
+    return `<div class="crew-vacation-list">${linhas||'<small class="crew-vacation-empty">Nenhum período cadastrado.</small>'}</div>
+      <div class="crew-vacation-new"><label>De<input id="crew-vacation-from" type="date"></label><label>Até<input id="crew-vacation-to" type="date"></label><button class="btn btn-ghost btn-sm" type="button" id="crew-vacation-add"><i data-lucide="plus"></i>Adicionar período</button></div>`;
+  },
   avatar(employee,size='normal'){
     const photo=U.safeImageSrc(employee&&employee.photo||'');
     return photo
@@ -1763,7 +1838,7 @@ Views.colaboradores={
       <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
         ${this.avatar(employee)}
         <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
-        <span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):'Ativo'}</span>
+        ${this.statusTag(employee)}
         ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
       </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
     const search=document.getElementById('crew-search');
@@ -1803,8 +1878,34 @@ Views.colaboradores={
       <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
       <div><label>Custo padrão por hora <small>Opcional</small></label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'Obrigatório somente quando o colaborador for usado no RDO de um projeto HH. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
       <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
-      <div><label>Inativo a partir de <small>Opcional</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}><small>A partir desta data (inclusive) o colaborador deixa de aparecer no RDO, nas folgas, no Painel/TV e no Histórico de Alocações — nos dias anteriores ele continua sendo apurado normalmente. Em branco, o colaborador inativo some de todos os relatórios, como antes.</small></div>
+      <div><label>Inativo a partir de <small>Opcional</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}></div>
+      <div class="full"><label>Férias <small>Opcional</small></label><div id="crew-vacation-box"></div></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
+    let vacations=typeof RDO!=='undefined'&&typeof RDO.vacationPeriods==='function'?RDO.vacationPeriods(employee):[];
+    const paintVacations=()=>{
+      const box=document.getElementById('crew-vacation-box');
+      if(!box) return;
+      box.innerHTML=this.vacationListMarkup(vacations);
+      box.querySelectorAll('[data-vacation-remove]').forEach(button=>button.onclick=()=>{
+        vacations.splice(Number(button.dataset.vacationRemove),1);
+        paintVacations();
+      });
+      const add=document.getElementById('crew-vacation-add');
+      if(add) add.onclick=()=>{
+        const from=String((document.getElementById('crew-vacation-from')||{}).value||'').slice(0,10);
+        const to=String((document.getElementById('crew-vacation-to')||{}).value||'').slice(0,10);
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))
+          return UI.toast('Informe o início e o fim das férias.','warn');
+        if(from>to) return UI.toast('O início das férias não pode ser depois do fim.','warn',5000);
+        if(vacations.some(item=>from<=item.to&&to>=item.from))
+          return UI.toast('Este período se sobrepõe a outro já cadastrado.','warn',5500);
+        vacations.push({id:U.id(),from,to});
+        vacations.sort((a,b)=>a.from.localeCompare(b.from));
+        paintVacations();
+      };
+      U.icons();
+    };
+    paintVacations();
     const clearPhoto=()=>{
       photo='';
       document.getElementById('crew-photo-preview').innerHTML=`<span class="avatar-ph large">${U.initials(document.getElementById('crew-name').value||employee.name||'CO')}</span>`;
@@ -1871,6 +1972,7 @@ Views.colaboradores={
           inactiveSince:document.getElementById('crew-active').value==='false'
             ?String((document.getElementById('crew-inactive-since')||{}).value||'').slice(0,10)
             :'',
+          vacations:vacations.map(item=>({id:String(item.id||U.id()),from:item.from,to:item.to})),
           updatedAt:new Date().toISOString()
         });
         if(canEditCost&&rawCost!==''){

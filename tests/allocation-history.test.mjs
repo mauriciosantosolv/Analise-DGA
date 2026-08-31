@@ -44,8 +44,17 @@ context.State.crew.push(
   {id:'e3',name:'Carla',registration:'012',internalRole:'Técnica',active:true},
   {id:'e4',name:'Diego',registration:'013',internalRole:'Montador',active:true}
 );
+// v4.2.18 - 15/08/2026 e sabado: o relatorio traz apenas o que foi lancado no
+// RDO (Alocado e Falta). Folga e ociosidade so sao apuradas de segunda a sexta.
 context.State.workforceStatus=[{id:'day-off:2026-08-15:e3',date:'2026-08-15',employeeId:'e3',employeeName:'Carla',status:'day_off'}];
-const complete=context.Views.relatorios.allocationHistoryRows({dateFrom:'2026-08-15',dateTo:'2026-08-15'});
+const sabado=context.Views.relatorios.allocationHistoryRows({dateFrom:'2026-08-15',dateTo:'2026-08-15'});
+assert.equal(sabado.length,2);
+assert.equal(sabado.every(row=>['Alocado','Falta'].includes(row.situation)),true);
+assert.equal(sabado.some(row=>row.situation==='Folga'||row.situation==='Ocioso'),false);
+
+// 17/08/2026 e segunda: folga e ociosidade voltam a ser apuradas.
+context.State.workforceStatus=[{id:'day-off:2026-08-17:e3',date:'2026-08-17',employeeId:'e3',employeeName:'Carla',status:'day_off'}];
+const complete=context.Views.relatorios.allocationHistoryRows({dateFrom:'2026-08-17',dateTo:'2026-08-17'});
 assert.equal(complete.length,4);
 const dayOff=complete.find(row=>row.employeeId==='e3');
 assert.equal(dayOff.situation,'Folga');

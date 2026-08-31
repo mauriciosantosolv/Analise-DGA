@@ -742,6 +742,22 @@ const Cloud = (() => {
     }) || [];
   }
 
+  // v4.2.18 - jornada padrao do RDO para quem nao le o store 'settings'. O
+  // encarregado (perfil Apontador de RDO) enxerga apenas 'rdos' e 'crew', entao
+  // State.settings chega vazio e o formulario caia no 07:30-17:18 embutido em
+  // vez do horario configurado pela empresa. A funcao no banco e SECURITY
+  // DEFINER, devolve somente as chaves da jornada e revalida a permissao de
+  // leitura do proprio store 'rdos'. Quem ja le 'settings' nao chama nada.
+  async function rdoShiftDefaults(){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos') || canViewStore('settings')) return null;
+    return request('/rest/v1/rpc/clique_obras_rdo_shift_defaults_v4218',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({p_organization_id:organization().id})
+    });
+  }
+
   // v4.2.4 — cabeçalho do PDF do RDO (empresa, cliente, projeto e função
   // comercial). Necessário porque a RLS esconde settings/projects/clients/
   // labor_rates de quem só tem permissão nos diários. A função no banco é
@@ -1257,6 +1273,7 @@ const Cloud = (() => {
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
     nextRdoNumber,
+    rdoShiftDefaults,
     rdoHhGaps,
     omieRequest,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,

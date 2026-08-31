@@ -74,6 +74,15 @@
 .crew-filter-panel>span,.rate-filter-panel>span{flex:0 0 auto;color:var(--text3);font-size:.76rem}.rate-filter-panel label{width:min(420px,100%);margin:0}.rate-filter-panel select{margin-top:5px}
 .employee-form-photo{display:grid;grid-template-columns:80px minmax(0,1fr);align-items:center;gap:13px;margin-bottom:16px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2)}
 .employee-form-photo>div:nth-child(2){display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:5px}.employee-form-photo small{color:var(--text3);font-size:.72rem;line-height:1.4}.employee-form-photo>div:nth-child(2)>div{display:flex;gap:7px;flex-wrap:wrap;margin-top:3px}
+/* v4.2.18 - ferias no cadastro do colaborador */
+.crew-vacation-list{display:grid;gap:6px;margin-bottom:9px}
+.crew-vacation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+.crew-vacation-row>span{display:flex;min-width:0;flex-direction:column}
+.crew-vacation-row small{margin-top:2px;color:var(--text3);font-size:.72rem}
+.crew-vacation-empty{display:block;padding:8px 2px;color:var(--text3);font-size:.78rem}
+.crew-vacation-new{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
+.crew-vacation-new label{display:flex;min-width:120px;flex:1 1 120px;flex-direction:column;gap:4px;margin:0;font-size:.74rem;color:var(--text2)}
+.crew-vacation-new input{width:100%}
 .role-directory{display:grid;gap:8px}.role-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:7px;padding:10px 11px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}.role-row>span{display:flex;min-width:0;flex-direction:column}.role-row small{margin-top:2px;color:var(--text3)}
 .rate-card{grid-template-columns:minmax(220px,1fr) 150px 150px 20px;width:100%;color:var(--text);text-align:left}
 .rate-card.inactive{opacity:.58;background:var(--surface2)}
@@ -234,6 +243,7 @@
   .crew-filter-panel,.rate-filter-panel{align-items:stretch;flex-direction:column}.crew-filter-panel .rdo-search{min-width:0;width:100%}
   .crew-card{grid-template-columns:38px minmax(0,1fr) 34px;gap:9px;padding:11px}.crew-card>.tag{display:none}.crew-card .employee-avatar{width:38px;height:38px}
   .employee-form-photo{grid-template-columns:64px minmax(0,1fr);padding:10px}.employee-form-photo .employee-avatar.large,.employee-form-photo .avatar-ph.large{width:60px;height:60px}
+  .crew-vacation-new label{flex:1 1 100%}
   .rdo-worker-select{max-width:100%}.rdo-worker-select b,.rdo-worker-select small{max-width:100%}
   .rdo-worker-head{flex-wrap:wrap;row-gap:9px}
   .rdo-worker-actions{width:100%;flex:1 1 100%;align-items:center;justify-content:space-between;flex-direction:row;gap:9px}
