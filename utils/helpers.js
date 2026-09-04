@@ -101,6 +101,79 @@ Object.assign(U, {
         img.src = dataUrl;
       }catch(e){ done(''); }
     });
+  },
+
+  /* v4.2.19 - decodifica um File/Blob de imagem sem passar por base64.
+     Usa <img> + object URL de proposito: e o mesmo caminho que o navegador
+     usa para desenhar a foto na tela, entao a orientacao EXIF da camera do
+     celular ja vem aplicada (foto em pe continua em pe). Devolve null em
+     qualquer falha - quem chama decide o que fazer. */
+  decodeImageFile(file, timeoutMs=8000){
+    return new Promise(resolve => {
+      let url='';
+      let settled=false;
+      const finish = value => {
+        if(settled) return;
+        settled=true;
+        clearTimeout(timer);
+        if(url){ try{ URL.revokeObjectURL(url); }catch(e){} }
+        resolve(value||null);
+      };
+      const timer=setTimeout(()=>finish(null), Math.max(1000, Number(timeoutMs)||8000));
+      try{
+        url=URL.createObjectURL(file);
+        const img=new Image();
+        img.onload=()=>finish(img);
+        img.onerror=()=>finish(null);
+        img.src=url;
+      }catch(e){ finish(null); }
+    });
+  },
+
+  /* v4.2.19 - reduz uma foto antes de subir para a nuvem.
+     Tres regras de seguranca, nessa ordem:
+     1. arquivo que nao for JPG/PNG/WebP (PDF, por exemplo) passa INTACTO;
+     2. qualquer falha, timeout ou navegador sem suporte devolve o arquivo
+        ORIGINAL - comprimir nunca pode impedir o salvamento;
+     3. o resultado so e aceito se for pelo menos 10% menor que o original,
+        para nao reprocessar foto que ja veio pequena. */
+  async compressImageFile(file, options){
+    const opts=options||{};
+    const maxSide=Math.max(320, Number(opts.maxSide)||1280);
+    const quality=Math.max(.5, Math.min(.95, Number(opts.quality)||.75));
+    const keepRatio=Math.max(.5, Math.min(1, Number(opts.minGain)||.9));
+    if(!file || typeof document==='undefined') return file;
+    if(!/^image\/(?:jpeg|png|webp)$/i.test(String(file.type||''))) return file;
+    if(typeof HTMLCanvasElement==='undefined'
+      || typeof HTMLCanvasElement.prototype.toBlob!=='function') return file;
+    try{
+      const img=await U.decodeImageFile(file);
+      const width=(img&&(img.naturalWidth||img.width))||0;
+      const height=(img&&(img.naturalHeight||img.height))||0;
+      if(!width||!height) return file;
+      const scale=Math.min(1, maxSide/Math.max(width,height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(width*scale));
+      canvas.height=Math.max(1,Math.round(height*scale));
+      const ctx=canvas.getContext('2d');
+      if(!ctx) return file;
+      try{ ctx.imageSmoothingQuality='high'; }catch(e){}
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const blob=await new Promise(resolve => {
+        let done=false;
+        const finish=value=>{ if(!done){ done=true; clearTimeout(timer); resolve(value||null); } };
+        const timer=setTimeout(()=>finish(null),10000);
+        try{ canvas.toBlob(result=>finish(result),'image/jpeg',quality); }
+        catch(e){ finish(null); }
+      });
+      if(!blob || !blob.size || blob.size>=Number(file.size||0)*keepRatio) return file;
+      const name=String(file.name||'foto').replace(/\.[a-z0-9]+$/i,'')+'.jpg';
+      if(typeof File==='function'){
+        try{ return new File([blob],name,{type:'image/jpeg',lastModified:Date.now()}); }catch(e){}
+      }
+      try{ blob.name=name; }catch(e){}
+      return blob;
+    }catch(e){ return file; }
   }
 });
 

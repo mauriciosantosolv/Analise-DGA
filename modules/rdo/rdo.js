@@ -47,18 +47,39 @@ const RDO = {
     this.attachmentCache.set(key,rows.slice());
     return rows;
   },
+  // v4.2.19 - alvo da foto que vai para a nuvem. 1280 px cobre 300 DPI no
+  // tamanho em que a foto sai no PDF (2 colunas, ~91x56 mm), entao o diario
+  // impresso nao muda. Mexer aqui afeta apenas os anexos NOVOS; os que ja
+  // estao no bucket continuam sendo servidos como foram enviados.
+  attachmentImageLimits:{maxSide:1280,quality:.75},
+
+  // v4.2.19 - prepara o arquivo antes do upload. Qualquer problema devolve o
+  // arquivo original: a otimizacao nunca pode impedir o apontador de salvar o
+  // RDO no campo. O limite de 8 MB continua sendo medido no arquivo ORIGINAL,
+  // em validateAttachmentFile, exatamente como antes.
+  async prepareAttachmentFile(file){
+    if(!file) return file;
+    if(!/^image\/(?:jpeg|png|webp)$/i.test(String(file.type||''))) return file;
+    if(typeof U==='undefined' || typeof U.compressImageFile!=='function') return file;
+    try{
+      const out=await U.compressImageFile(file,this.attachmentImageLimits);
+      return (out && Number(out.size)>0 && Number(out.size)<Number(file.size||0)) ? out : file;
+    }catch(err){ return file; }
+  },
+
   async saveAttachment(rdo,file,description=''){
     this.validateAttachmentFile(file);
+    const upload=await this.prepareAttachmentFile(file);
     if(typeof Cloud!=='undefined' && Cloud.active())
-      return Cloud.uploadRdoAttachment(rdo.id,rdo.projectId,file,description);
+      return Cloud.uploadRdoAttachment(rdo.id,rdo.projectId,upload,description);
     const id=U.id();
-    const dataUrl=await this.fileDataUrl(file);
+    const dataUrl=await this.fileDataUrl(upload);
     const attachment={
       id,rdoId:String(rdo.id),projectId:String(rdo.projectId),
-      fileName:String(file.name||'arquivo').slice(0,180),
+      fileName:String(upload.name||'arquivo').slice(0,180),
       description:String(description||'').trim().slice(0,180),
-      mimeType:String(file.type||'application/octet-stream'),
-      sizeBytes:Number(file.size)||0,
+      mimeType:String(upload.type||'application/octet-stream'),
+      sizeBytes:Number(upload.size)||0,
       dataUrl,
       uploadedAt:new Date().toISOString()
     };
@@ -1408,7 +1429,7 @@ const RDO = {
               return UI.toast('Confirme a revisão antes de enviar.','warn',5500);
             const rdo=collect();
             busy=true;
-            UI.loading(true,pendingFiles.length?'Salvando diário e anexos…':'Salvando diário…');
+            UI.loading(true,pendingFiles.length?'Otimizando fotos e salvando diário…':'Salvando diário…');
             await this.save(rdo,'Rascunho');
             for(const pending of [...pendingFiles]){
               const attachment=await this.saveAttachment(rdo,pending.file,pending.description);

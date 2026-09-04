@@ -313,6 +313,7 @@ const Cloud = (() => {
     stopRealtime();
     if(!preserveQueue) clearCurrentQueue();
     saveSession(null);
+    await clearAttachmentCache();
     if(!accessToken) return;
     const controller=typeof AbortController!=='undefined' ? new AbortController() : null;
     const timeout=controller ? setTimeout(()=>controller.abort(),1500) : null;
@@ -1054,6 +1055,55 @@ const Cloud = (() => {
     return true;
   }
 
+  /* v4.2.19 - cache local das evidencias do RDO.
+     O caminho do objeto no bucket contem um UUID gerado no upload e nunca e
+     reaproveitado, entao o conteudo de um object_path e imutavel: cachear e
+     seguro e dispensa revalidacao. Sem isso, cada abertura do RDO rebaixava
+     todas as fotos (o object URL antigo era descartado em 5 min).
+     O cache e apagado no signOut para nao deixar foto de obra em maquina
+     compartilhada. Toda operacao e best-effort: falha de cache nunca pode
+     quebrar o download. */
+  const ATTACHMENT_CACHE='cliqueobras-rdo-evidencias-v1';
+  const ATTACHMENT_CACHE_MAX=6*1024*1024;
+
+  function attachmentCacheKey(objectPath){
+    return 'https://cliqueobras.local/rdo-evidencias/'+encodeURI(String(objectPath||''));
+  }
+  function attachmentCacheReady(){
+    return typeof caches!=='undefined' && caches && typeof caches.open==='function';
+  }
+  async function cachedAttachment(objectPath){
+    if(!attachmentCacheReady() || !objectPath) return null;
+    try{
+      const store=await caches.open(ATTACHMENT_CACHE);
+      const hit=await store.match(attachmentCacheKey(objectPath));
+      if(!hit) return null;
+      const blob=await hit.blob();
+      return (blob && blob.size) ? blob : null;
+    }catch(e){ return null; }
+  }
+  async function cacheAttachment(objectPath,blob){
+    if(!attachmentCacheReady() || !objectPath) return;
+    if(!blob || !blob.size || blob.size>ATTACHMENT_CACHE_MAX) return;
+    try{
+      const store=await caches.open(ATTACHMENT_CACHE);
+      await store.put(attachmentCacheKey(objectPath),new Response(blob,{
+        headers:{'Content-Type':blob.type||'application/octet-stream'}
+      }));
+    }catch(e){}
+  }
+  async function forgetAttachment(objectPath){
+    if(!attachmentCacheReady() || !objectPath) return;
+    try{
+      const store=await caches.open(ATTACHMENT_CACHE);
+      await store.delete(attachmentCacheKey(objectPath));
+    }catch(e){}
+  }
+  async function clearAttachmentCache(){
+    if(!attachmentCacheReady()) return;
+    try{ await caches.delete(ATTACHMENT_CACHE); }catch(e){}
+  }
+
   async function listRdoAttachments(rdoId){
     await ensureFresh();
     if(!organization() || !canViewStore('rdos')) return [];
@@ -1084,8 +1134,10 @@ const Cloud = (() => {
       `${id}-${safeStorageName(file.name)}`
     ].join('/');
     const bucket=await authenticatedStorage();
+    // v4.2.19 - o caminho tem UUID e nunca e reaproveitado, entao o objeto e
+    // imutavel: cache de 1 ano. Egress servido do cache da CDN custa menos.
     const upload=await bucket.upload(path,file,{
-      cacheControl:'3600',
+      cacheControl:'31536000',
       contentType:mime,
       upsert:false
     });
@@ -1134,6 +1186,7 @@ const Cloud = (() => {
     const bucket=await authenticatedStorage();
     const removed=await bucket.remove([String(row.objectPath||'')]);
     if(removed.error) throw removed.error;
+    await forgetAttachment(String(row.objectPath||''));
     await request(`/rest/v1/rdo_attachments?id=eq.${encodeURIComponent(String(row.id||''))}&organization_id=eq.${encodeURIComponent(organization().id)}`,{
       method:'DELETE',
       headers:authHeaders(false)
@@ -1142,9 +1195,13 @@ const Cloud = (() => {
   }
 
   async function downloadRdoAttachment(objectPath){
+    const path=String(objectPath||'');
+    const cached=await cachedAttachment(path);
+    if(cached) return cached;
     const bucket=await authenticatedStorage();
-    const result=await bucket.download(String(objectPath||''));
+    const result=await bucket.download(path);
     if(result.error) throw result.error;
+    await cacheAttachment(path,result.data);
     return result.data;
   }
 
