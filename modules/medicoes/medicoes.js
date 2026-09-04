@@ -136,7 +136,7 @@ Views.medicoes = {
             <td>${CashFlow.situationTag(m)}</td>
             <td class="num"><b>${U.money2(m.value)}</b></td>
             <td class="num">${U.money2(CashFlow.situation(m).received)}</td>
-            <td><div class="table-actions">${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.receiptForm(${U.jsArg(m.id)})" title="Medição Recebida"><i data-lucide="coins"></i></button>`:''}${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
+            <td><div class="table-actions">${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="CashFlow.receiptForm(${U.jsArg(m.id)})" title="Medição Recebida"><i data-lucide="coins"></i></button>`:''}${m.source==='rdo-hh'?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.print(${U.jsArg(m.id)})" title="Gerar PDF da medição"><i data-lucide="file-down"></i></button><button class="btn btn-ghost btn-sm" onclick="Views.medicoes.exportXlsx(${U.jsArg(m.id)})" title="Exportar medição em XLSX"><i data-lucide="file-spreadsheet"></i></button>`:''}${this.canEdit()?`<button class="btn btn-ghost btn-sm" onclick="Views.medicoes.form(${U.jsArg(m.id)})" title="Editar medição"><i data-lucide="pencil"></i></button>`:''}</div></td>
           </tr>`).join('')}</tbody>
         </table></div>
       </div>`;
@@ -316,6 +316,21 @@ Views.medicoes = {
     });
   },
 
+  // v4.2.21 - VALOR/H da coluna nova do relatorio de medicao.
+  // E o campo "Venda . hora normal" (saleRegular) do cadastro de valor HH do
+  // colaborador naquele projeto. Preferimos o valor CONGELADO no snapshot
+  // financeiro do RDO (foi o que realmente entrou na medicao) e so caimos no
+  // cadastro atual quando o RDO e anterior ao snapshot com as taxas.
+  // A guarda typeof existe porque os testes rodam este arquivo num vm com um
+  // RDO falso que so implementa crewMembers().
+  employeeHourRate(projectId,employeeId,snapshot){
+    const frozen=Number(snapshot&&snapshot.saleRegular);
+    if(Number.isFinite(frozen)&&frozen>0) return frozen;
+    const rate=(typeof RDO!=='undefined'&&typeof RDO.rateFor==='function')
+      ?RDO.rateFor(projectId,employeeId):null;
+    const current=Number(rate&&rate.saleRegular);
+    return Number.isFinite(current)&&current>0?current:0;
+  },
   measurementRows(measurement){
     return (measurement.rdoIds||[]).flatMap(rdoId=>{
       const rdo=State.rdos.find(item=>String(item.id)===String(rdoId));
@@ -340,12 +355,52 @@ Views.medicoes = {
           start:entry.start||'',end:entry.end||'',breakMinutes:Number(entry.breakMinutes)||0,
           regular,overtime50,overtime100,
           hours:regular+overtime50+overtime100,
+          employeeId:String(entry.employeeId||''),
+          hourRate:this.employeeHourRate(measurement.projectId,entry.employeeId,snapshot),
           value:Number(snapshot?.sale)||0
         };
       });
     }).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.employeeName).localeCompare(String(b.employeeName),'pt-BR'));
   },
 
+  // v4.2.21 - exportacao XLSX da medicao.
+  // Planilha simples: uma linha por colaborador/dia, com as MESMAS colunas do
+  // PDF e sem cabecalho, timbrado ou linha de total - dado puro para o Excel
+  // filtrar, ordenar e somar. Numeros saem como numero, nao como texto.
+  measurementSheetRows(measurement){
+    const round=value=>Math.round((Number(value)||0)*100)/100;
+    return this.measurementRows(measurement).map(row=>({
+      'Data':U.date(row.date),
+      'RDO':String(row.rdoNumber||''),
+      'Matrícula':String(row.registration||''),
+      'Colaborador':String(row.employeeName||''),
+      'Função':String(row.role||''),
+      'Valor/h':round(row.hourRate),
+      'Entrada':String(row.start||''),
+      'Intervalo':U.durationMinutes(row.breakMinutes),
+      'Saída':String(row.end||''),
+      'Normal':round(row.regular),
+      'HE 50%':round(row.overtime50),
+      'HE 100%':round(row.overtime100),
+      'Total':round(row.hours),
+      'Valor medido':round(row.value)
+    }));
+  },
+  exportXlsx(id){
+    const measurement=State.measurements.find(item=>String(item.id)===String(id));
+    if(!measurement) return UI.toast('Medição não encontrada.','warn');
+    if(measurement.source!=='rdo-hh') return UI.toast('A planilha detalhada de horas está disponível para medições HH.','info',5500);
+    if(typeof XLSX==='undefined') return UI.toast('Biblioteca de planilhas indisponível. Recarregue a página e tente de novo.','error',6500);
+    const rows=this.measurementSheetRows(measurement);
+    if(!rows.length) return UI.toast('Os RDOs desta medição não estão disponíveis para montar a planilha.','warn',6500);
+    const sheet=XLSX.utils.json_to_sheet(rows);
+    sheet['!cols']=[{wch:11},{wch:12},{wch:12},{wch:28},{wch:22},{wch:10},{wch:9},{wch:10},{wch:9},{wch:9},{wch:9},{wch:10},{wch:9},{wch:14}];
+    const book=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book,sheet,'Medicao');
+    const label=String(measurement.ref||measurement.id||'medicao').replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'');
+    XLSX.writeFile(book,`medicao-${label||'hh'}-${U.isoDate(new Date())}.xlsx`);
+    UI.toast('Planilha da medição exportada.','success',5000);
+  },
   async print(id){
     const measurement=State.measurements.find(item=>String(item.id)===String(id));
     if(!measurement) return UI.toast('Medição não encontrada.','warn');
@@ -354,9 +409,6 @@ Views.medicoes = {
     const customer=RDO.projectClient(measurement.projectId);
     const rows=this.measurementRows(measurement);
     if(!rows.length) return UI.toast('Os RDOs desta medição não estão disponíveis para montar o relatório.','warn',6500);
-    const grouped=rows.reduce((groups,row)=>{
-      (groups[row.date]=groups[row.date]||[]).push(row); return groups;
-    },{});
     const old=document.getElementById('measurement-print-report');
     if(old) old.remove();
     const report=document.createElement('section');
@@ -371,13 +423,9 @@ Views.medicoes = {
         <div class="measurement-print-number"><small>MEDIÇÃO</small><b>${U.esc(measurement.ref||measurement.id)}</b><span>${U.esc(measurement.status||'Aguardando aprovação')}</span></div>
       </header>
       <div class="measurement-print-facts"><div><small>Período</small><b>${U.date(measurement.periodFrom)} a ${U.date(measurement.periodTo)}</b></div><div><small>RDOs consolidados</small><b>${(measurement.rdoIds||[]).length}</b></div><div><small>Total de horas</small><b>${hours(measurement.hours||rows.reduce((sum,row)=>sum+row.hours,0))}</b></div><div><small>Valor total da medição</small><b>${U.money(measurement.value)}</b></div></div>
-      <table class="measurement-print-table"><thead><tr><th>Data</th><th>RDO</th><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Total</th><th>Valor medido</th></tr></thead><tbody>
-        ${Object.entries(grouped).map(([date,dayRows])=>{
-          const dayHours=dayRows.reduce((sum,row)=>sum+row.hours,0);
-          const dayValue=dayRows.reduce((sum,row)=>sum+row.value,0);
-          return `${dayRows.map(row=>`<tr><td>${U.date(row.date)}</td><td>${U.esc(row.rdoNumber)}</td><td>${U.esc(row.registration||'—')}</td><td>${U.esc(row.employeeName)}</td><td>${U.esc(row.role||'—')}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${hours(row.regular)}</td><td>${hours(row.overtime50)}</td><td>${hours(row.overtime100)}</td><td><b>${hours(row.hours)}</b></td><td><b>${U.money(row.value)}</b></td></tr>`).join('')}<tr class="measurement-day-total"><td colspan="11">Total de ${U.date(date)}</td><td>${hours(dayHours)}</td><td>${U.money(dayValue)}</td></tr>`;
-        }).join('')}
-      </tbody><tfoot><tr><td colspan="11">TOTAL DA MEDIÇÃO</td><td>${hours(rows.reduce((sum,row)=>sum+row.hours,0))}</td><td>${U.money(measurement.value)}</td></tr></tfoot></table>
+      <table class="measurement-print-table"><thead><tr><th>Data</th><th>RDO</th><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Valor/h</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Total</th><th>Valor medido</th></tr></thead><tbody>
+        ${rows.map(row=>`<tr><td>${U.date(row.date)}</td><td>${U.esc(row.rdoNumber)}</td><td>${U.esc(row.registration||'—')}</td><td>${U.esc(row.employeeName)}</td><td>${U.esc(row.role||'—')}</td><td>${U.money(row.hourRate)}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${hours(row.regular)}</td><td>${hours(row.overtime50)}</td><td>${hours(row.overtime100)}</td><td><b>${hours(row.hours)}</b></td><td><b>${U.money(row.value)}</b></td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="12">TOTAL DA MEDIÇÃO</td><td>${hours(rows.reduce((sum,row)=>sum+row.hours,0))}</td><td>${U.money(measurement.value)}</td></tr></tfoot></table>
       ${measurement.notes?`<section class="measurement-print-notes"><b>Observações</b><p>${U.esc(measurement.notes)}</p></section>`:''}
       <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
     document.body.appendChild(report);
@@ -404,7 +452,7 @@ Views.medicoes = {
         <div class="full"><label>Observações</label><textarea id="hh-status-notes" rows="2">${U.esc(measurement.notes||'')}</textarea></div>
       </div>`,
       footer:`${canDelete?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove(${U.jsArg(measurement.id)})"><i data-lucide="trash-2"></i>Excluir medição</button>`:''}
-        <button class="btn btn-ghost" onclick="Views.medicoes.print(${U.jsArg(measurement.id)})"><i data-lucide="file-down"></i>Gerar PDF</button><button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
+        <button class="btn btn-ghost" onclick="Views.medicoes.print(${U.jsArg(measurement.id)})"><i data-lucide="file-down"></i>Gerar PDF</button><button class="btn btn-ghost" onclick="Views.medicoes.exportXlsx(${U.jsArg(measurement.id)})"><i data-lucide="file-spreadsheet"></i>Exportar XLSX</button><button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
     });
     document.getElementById('hh-status-save').onclick=async()=>{
       await DB.put('measurements',{

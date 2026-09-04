@@ -148,6 +148,29 @@ const RDO = {
       return State.projects.map(p=>({id:String(p.id),label:U.projLabel(p),type:p.type||'Obra'}));
     return Cloud.rdoProjects().map(p=>({id:String(p.id),label:p.label,type:''}));
   },
+  // v4.2.21 - lista de projetos do SELETOR do formulario de RDO.
+  // allowedProjects() continua intacta de proposito: ela governa permissao
+  // (validacao do save), o rotulo do RDO e o filtro da listagem. Se ela
+  // encolhesse, RDO antigo de obra concluida sumiria da tela e nao salvaria
+  // mais. Aqui escondemos apenas do CADASTRO os projetos que nao estao
+  // "Em andamento".
+  // - o projeto do RDO em edicao permanece na lista mesmo encerrado (com o
+  //   status no rotulo), senao abrir um RDO antigo trocaria o projeto sozinho;
+  // - o perfil Apontador nao enxerga o store projects pela RLS: la o status
+  //   vem vazio e a lista continua sendo exatamente a que o admin liberou.
+  formProjects(currentProjectId=''){
+    const current=String(currentProjectId||'');
+    return this.allowedProjects().map(project=>{
+      const source=State.projects.find(item=>String(item.id)===String(project.id))||{};
+      return {...project,status:String(source.status||'').trim()};
+    }).filter(project=>
+      (current&&String(project.id)===current) || !project.status || project.status==='Em andamento'
+    ).map(project=>
+      project.status&&project.status!=='Em andamento'
+        ?{...project,label:`${project.label} · ${project.status}`}
+        :project
+    );
+  },
   projectLabel(projectId){
     const project=State.projects.find(p=>String(p.id)===String(projectId));
     if(project) return U.projLabel(project);
@@ -933,8 +956,9 @@ const RDO = {
   form(id=''){
     const existing=id?State.rdos.find(x=>String(x.id)===String(id)):null;
     if(existing && !this.canEdit(existing)) return this.detail(id);
-    const projects=this.allowedProjects();
+    const projects=this.formProjects(existing?.projectId||'');
     const crew=this.activeCrew(existing?.date||U.isoDate(new Date()));
+    if(!projects.length && this.allowedProjects().length) return UI.toast('Nenhum projeto com status “Em andamento”. Ajuste o status em Projetos para lançar RDO.','warn',7500);
     if(!projects.length) return UI.toast('Nenhum projeto foi disponibilizado para preenchimento de RDO.','warn',6500);
     if(!crew.length) return UI.toast('Cadastre a equipe antes de criar o primeiro RDO.','warn',6500);
     const initialDate=existing?.date||U.isoDate(new Date());
