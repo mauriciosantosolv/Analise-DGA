@@ -231,9 +231,14 @@ const RDO = {
   crewActiveOn(employee,date){
     if(!employee) return false;
     if(typeof this.onVacation==='function'&&this.onVacation(employee,date)) return false;
+    const day=String(date||'').slice(0,10);
+    // v4.5.1 - data de admissao (campo admissionDate, AAAA-MM-DD). Antes dela o
+    // colaborador nao existe para o sistema: nao gera custo de ociosidade e nao
+    // pode ser planejado. Sem a data, o comportamento e exatamente o de antes.
+    const admission=String(employee.admissionDate||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(admission)&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&day<admission) return false;
     const since=String(employee.inactiveSince||'').slice(0,10);
     if(/^\d{4}-\d{2}-\d{2}$/.test(since)){
-      const day=String(date||'').slice(0,10);
       return /^\d{4}-\d{2}-\d{2}$/.test(day)?day<since:employee.active!==false;
     }
     return employee.active!==false;
@@ -1856,7 +1861,7 @@ Views.colaboradores={
     const hoje=typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10);
     const ferias=typeof RDO!=='undefined'&&typeof RDO.vacationOn==='function'?RDO.vacationOn(employee,hoje):null;
     if(ferias) return `<span class="tag tag-blue">Férias até ${U.date(ferias.to)}</span>`;
-    return `<span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):'Ativo'}</span>`;
+    return `<span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):(employee.admissionDate?`Ativo desde ${U.date(employee.admissionDate)}`:'Ativo')}</span>`;
   },
   // v4.2.18 - lista de periodos de ferias dentro do cadastro do colaborador.
   vacationListMarkup(list){
@@ -1898,7 +1903,7 @@ Views.colaboradores={
   },
   form(id=''){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
-    const employee=id?RDO.crewMembers().find(x=>String(x.id)===String(id)):{id:U.id(),name:'',registration:'',photo:'',internalRole:'',active:true};
+    const employee=id?RDO.crewMembers().find(x=>String(x.id)===String(id)):{id:U.id(),name:'',registration:'',photo:'',internalRole:'',active:true,admissionDate:''};
     if(!employee) return;
     const roleNames=RDO.crewRoles().filter(role=>role.active!==false).map(role=>String(role.name||'').trim()).filter(Boolean);
     if(employee.internalRole&&!roleNames.some(name=>U.norm(name)===U.norm(employee.internalRole))) roleNames.push(employee.internalRole);
@@ -1922,8 +1927,9 @@ Views.colaboradores={
       <div><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}" autocomplete="name"></div>
       <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
       <div><label>Custo padrão por hora <small>Opcional</small></label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'Obrigatório somente quando o colaborador for usado no RDO de um projeto HH. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
-      <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
-      <div><label>Inativo a partir de <small>Opcional</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}></div>
+      <div><label>Data de admissão <small>Opcional</small></label><input id="crew-admission" type="date" value="${U.esc(String(employee.admissionDate||'').slice(0,10))}"><small>Antes dela o colaborador não conta como ocioso nem entra no Planejamento de Colaboradores.</small></div>
+      <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select><small>Inativo = não trabalha mais na empresa.</small></div>
+      <div><label>Inativo a partir de <small>Recomendado</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}><small>Com a data, os dias anteriores continuam apurados e o colaborador ainda pode ser lançado no RDO retroativo. Sem ela, ele some de todo o histórico.</small></div>
       <div class="full"><label>Férias <small>Opcional</small></label><div id="crew-vacation-box"></div></div>
     </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
     let vacations=typeof RDO!=='undefined'&&typeof RDO.vacationPeriods==='function'?RDO.vacationPeriods(employee):[];
@@ -1995,6 +2001,10 @@ Views.colaboradores={
     if(activeSelect&&inactiveSinceInput) activeSelect.onchange=()=>{
       inactiveSinceInput.disabled=activeSelect.value!=='false';
       if(inactiveSinceInput.disabled) inactiveSinceInput.value='';
+      // v4.5.1 - sem a data, o colaborador inativo desaparece tambem do passado
+      // e nao da mais para lanca-lo em RDO retroativo. Ja nasce preenchida com
+      // hoje; o usuario pode corrigir para a data real do desligamento.
+      else if(!inactiveSinceInput.value) inactiveSinceInput.value=U.isoDate(new Date());
     };
     document.getElementById('crew-save').onclick=async()=>{
       const name=document.getElementById('crew-name').value.trim();
@@ -2002,6 +2012,11 @@ Views.colaboradores={
       if(!name) return UI.toast('Informe o nome do colaborador','warn');
       if(registration&&RDO.crewMembers().some(item=>String(item.id)!==String(employee.id)&&U.norm(item.registration)===U.norm(registration)))
         return UI.toast('Esta matrícula já pertence a outro colaborador.','warn');
+      const admissionValue=String((document.getElementById('crew-admission')||{}).value||'').slice(0,10);
+      const inactiveValue=document.getElementById('crew-active').value==='false'
+        ?String((document.getElementById('crew-inactive-since')||{}).value||'').slice(0,10):'';
+      if(admissionValue&&inactiveValue&&admissionValue>inactiveValue)
+        return UI.toast('A data de admissão não pode ser posterior à data de desligamento.','warn',5200);
       const rawCost=canEditCost?document.getElementById('crew-hourly-cost').value:'';
       if(canEditCost && rawCost!=='' && U.num(rawCost)<0) return UI.toast('O custo por hora não pode ser negativo.','warn');
       try{
@@ -2014,9 +2029,8 @@ Views.colaboradores={
           photo,
           internalRole:document.getElementById('crew-role').value.trim(),
           active:document.getElementById('crew-active').value==='true',
-          inactiveSince:document.getElementById('crew-active').value==='false'
-            ?String((document.getElementById('crew-inactive-since')||{}).value||'').slice(0,10)
-            :'',
+          admissionDate:admissionValue,
+          inactiveSince:inactiveValue,
           vacations:vacations.map(item=>({id:String(item.id||U.id()),from:item.from,to:item.to})),
           updatedAt:new Date().toISOString()
         });

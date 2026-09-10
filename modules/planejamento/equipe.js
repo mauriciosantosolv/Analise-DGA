@@ -1,5 +1,13 @@
 /**
- * Planejamento de Colaboradores (equipe.js) — v4.5.0
+ * Planejamento de Colaboradores (equipe.js) — v4.5.1
+ *
+ * v4.5.1 — correções pedidas em 10/09/2026:
+ *  1. só colaborador ATIVO entra no planejamento (inativo = desligado);
+ *  2. cor da alocação não depende mais da obra (azul/amarelo/vermelho fixos);
+ *  3. escala de ocupação invertida (verde = cheio, vermelho = ocioso);
+ *  4. a necessidade da equipe aceita VÁRIAS funções (Eletricista I/II/I A/II A);
+ *  5. PDF do planejamento agrupado por obra + data de admissão do colaborador;
+ *  6. o seletor Semana/Mês/Trimestre agora acompanha o período em tela.
  *
  * Responsabilidades:
  * - CrewPlan: motor ÚNICO de dias úteis, conflitos e disponibilidade
@@ -196,6 +204,56 @@ const CrewPlan = {
     });
     return [...names.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   },
+  /* ---------- v4.5.1 — FAMÍLIA DE FUNÇÃO ----------
+     O cadastro tem "Eletricista I", "Eletricista II", "Eletricista I A" e
+     "Eletricista II A". Uma obra pede "5 eletricistas", não "5 de cada nível".
+     A família sai do PRÓPRIO nome já cadastrado: nenhum campo novo no banco,
+     nenhuma tela de cadastro, nada para recadastrar nas funções existentes. */
+  roleFamily(name){
+    return String(name||'').trim().replace(/\s+/g,' ')
+      .replace(/\s+[IVX]+(\s+[A-Za-z])?\.?$/i,'')
+      .replace(/\s+\d+(\s+[A-Za-z])?$/,'')
+      .trim();
+  },
+  /* Só vira atalho a família que agrupa 2 ou mais funções cadastradas. */
+  roleFamilies(){
+    const map=new Map();
+    this.roleNames().forEach(name=>{
+      const family=this.roleFamily(name);
+      if(!family||U.norm(family)===U.norm(name)) return;
+      const key=U.norm(family);
+      if(!map.has(key)) map.set(key,{name:family,roles:[]});
+      map.get(key).roles.push(name);
+    });
+    return [...map.values()].filter(item=>item.roles.length>1)
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  },
+
+  /* ---------- v4.5.1 — VÍNCULO DO COLABORADOR ----------
+     "Inativo" passou a significar DESLIGADO: quem não trabalha mais na empresa
+     sai do planejamento. O vínculo tem as duas pontas — antes da admissão e a
+     partir do desligamento não existe dia planejável, e nesse caso o
+     colaborador nem aparece na lista.
+     ⚠ crewMembers() continua devolvendo TODO MUNDO de propósito: o RDO
+     retroativo, o Histórico de Alocações e o nome numa alocação antiga
+     precisam enxergar o desligado. A regra "some do planejamento" mora AQUI. */
+  bondOverlaps(employee,from,to){
+    if(!employee) return false;
+    const admission=String(employee.admissionDate||'').slice(0,10);
+    const exit=String(employee.inactiveSince||'').slice(0,10);
+    if(this.isIso(admission)&&this.isIso(to)&&admission>String(to)) return false;
+    if(this.isIso(exit)&&this.isIso(from)&&exit<=String(from)) return false;
+    return true;
+  },
+  /* A lista de colaboradores DESTE módulo. Inativo sem data de desligamento
+     some de tudo (comportamento de sempre); com data, some quando o período
+     inteiro já está depois do desligamento. */
+  planningCrew(from='',to=''){
+    return this.crewMembers()
+      .filter(employee=>employee.active!==false
+        ||this.isIso(String(employee.inactiveSince||'').slice(0,10)))
+      .filter(employee=>this.bondOverlaps(employee,from,to));
+  },
   employeeRole(employee){
     return String((employee&&employee.internalRole)||'').trim();
   },
@@ -280,17 +338,39 @@ const CrewPlan = {
     if(report.category==='disponivel') return String(from||'');
     return '';
   },
+  /* ---------- v4.5.1 — POR QUE O DIA NÃO CONTA ----------
+     Com a data de admissão, "indisponível" passou a ter DOIS motivos: férias e
+     fora do vínculo (antes da admissão ou depois do desligamento). Escrever
+     "Férias/inativo" num dia anterior à admissão é mentira na tela — foi o que
+     o render da v4.5.1 mostrou. O motivo passa a ser calculado. */
+  offReason(employee,days){
+    const list=Array.isArray(days)?days:[days];
+    let vacation=0, bond=0;
+    list.forEach(day=>{
+      if(typeof RDO!=='undefined'&&RDO&&typeof RDO.onVacation==='function'&&RDO.onVacation(employee,day)) vacation++;
+      else bond++;
+    });
+    if(vacation&&bond) return {key:'misto',short:'Indisponível',
+      label:'férias e período fora do vínculo'};
+    if(vacation) return {key:'ferias',short:'Férias',label:'férias'};
+    return {key:'vinculo',short:'Sem vínculo',
+      label:'período fora do vínculo (antes da admissão ou após o desligamento)'};
+  },
+  /* Os dias úteis do período em que o colaborador não conta. */
+  offDaysOf(employee,from,to){
+    return this.businessDayList(from,to).filter(day=>!this.activeOn(employee,day));
+  },
   categoryLabel(category){
     return {disponivel:'Disponível',parcial:'Parcialmente disponível',alocado:'Alocado',
       conflito:'Conflito',indisponivel:'Indisponível'}[category]||'—';
   },
   /* Etiqueta curta para a coluna de nome do Gantt, onde "Parcialmente
      disponível" não cabe sem cortar o nome do colaborador ao lado. */
-  categoryTagShort(category){
+  categoryTagShort(category,reason){
     const cls={disponivel:'tag-green',parcial:'tag-amber',alocado:'tag-blue',
       conflito:'tag-red',indisponivel:'tag-gray'}[category]||'tag-gray';
     const label={disponivel:'Livre',parcial:'Parcial',alocado:'Alocado',
-      conflito:'Conflito',indisponivel:'Férias'}[category]||'—';
+      conflito:'Conflito',indisponivel:reason||'Indisponível'}[category]||'—';
     return `<span class="tag ${cls}">${U.esc(label)}</span>`;
   },
   categoryTag(category){
@@ -315,14 +395,18 @@ const CrewPlan = {
     if(report.pct>0) return 2;
     return 5;
   },
-  candidates({from,to,role='',minPct=0,onlyRole=true}={}){
-    const wanted=U.norm(role||'');
-    return this.crewMembers()
-      .filter(employee=>!wanted||!onlyRole||U.norm(this.employeeRole(employee))===wanted)
+  /* v4.5.1 — `roles` (várias funções) e `pool` (lista de colaboradores) são
+     acréscimos opcionais. Sem eles o comportamento é idêntico ao da v4.5.0:
+     uma função só e a lista completa. O ranking continua sendo um só. */
+  candidates({from,to,role='',minPct=0,onlyRole=true,roles=null,pool=null}={}){
+    const wanted=(Array.isArray(roles)&&roles.length?roles:(role?[role]:[]))
+      .map(name=>U.norm(name)).filter(Boolean);
+    return (Array.isArray(pool)?pool:this.crewMembers())
+      .filter(employee=>!wanted.length||!onlyRole||wanted.includes(U.norm(this.employeeRole(employee))))
       .map(employee=>{
         const report=this.availability(employee,from,to);
         return {...report,tier:this.tierOf(report),
-          roleMatch:!wanted||U.norm(report.role)===wanted};
+          roleMatch:!wanted.length||wanted.includes(U.norm(report.role))};
       })
       .filter(report=>report.pct>=Math.max(0,Number(minPct)||0))
       .sort((a,b)=>a.tier-b.tier
@@ -340,7 +424,7 @@ const CrewPlan = {
   capacityBuckets(from,to,crew){
     const days=this.businessDayList(from,to);
     if(!days.length) return [];
-    const people=Array.isArray(crew)?crew:this.crewMembers();
+    const people=Array.isArray(crew)?crew:this.planningCrew(from,to);
     const buckets=new Map();
     days.forEach(day=>{
       const key=this.weekStart(day)||day;
@@ -443,7 +527,7 @@ Views.planejamentoequipe = {
     const employeeId=String(this.filters.employee||'');
     const projectId=String(this.filters.project||'');
     const status=String(this.filters.status||'');
-    return CrewPlan.crewMembers()
+    return CrewPlan.planningCrew(from,to)
       .filter(employee=>!employeeId||String(employee.id)===employeeId)
       .filter(employee=>!role||U.norm(CrewPlan.employeeRole(employee))===role)
       .filter(employee=>{
@@ -464,21 +548,24 @@ Views.planejamentoequipe = {
     const canEdit=CrewPlan.canEdit();
     const roles=CrewPlan.roleNames();
     const projects=CrewPlan.planProjects();
+    const {from:periodFrom,to:periodTo}=this.period();
     $c().innerHTML=`
       <div class="toolbar crewplan-toolbar">
         <div><h2>Planejamento de Colaboradores</h2><small>Mapa futuro da capacidade da equipe: quem está onde, quando fica livre e quem cabe numa obra nova.</small></div>
         <div class="spacer"></div>
         ${canEdit?`<div class="toolbar-actions">
+          <button class="btn btn-ghost" onclick="Views.planejamentoequipe.printPlan()"><i data-lucide="printer"></i>PDF do planejamento</button>
           <button class="btn btn-ghost" onclick="Views.planejamentoequipe.findAvailable()"><i data-lucide="search"></i>Encontrar colaboradores disponíveis</button>
           <button class="btn btn-ghost" onclick="Views.planejamentoequipe.form()"><i data-lucide="plus"></i>Nova alocação</button>
           <button class="btn btn-primary" onclick="Views.planejamentoequipe.planNewProject()"><i data-lucide="wand-2"></i>Planejar nova obra</button>
         </div>`:`<div class="toolbar-actions">
+          <button class="btn btn-ghost" onclick="Views.planejamentoequipe.printPlan()"><i data-lucide="printer"></i>PDF do planejamento</button>
           <button class="btn btn-ghost" onclick="Views.planejamentoequipe.findAvailable()"><i data-lucide="search"></i>Encontrar colaboradores disponíveis</button>
         </div>`}
       </div>
       <div id="crewplan-kpis"></div>
       <div class="crewplan-filters">
-        <div><label for="cp-f-employee">Colaborador</label><select id="cp-f-employee"><option value="">Todos</option>${CrewPlan.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).map(employee=>`<option value="${U.esc(employee.id)}" ${String(this.filters.employee)===String(employee.id)?'selected':''}>${U.esc(employee.name||'Colaborador')}</option>`).join('')}</select></div>
+        <div><label for="cp-f-employee">Colaborador</label><select id="cp-f-employee"><option value="">Todos</option>${CrewPlan.planningCrew(periodFrom,periodTo).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).map(employee=>`<option value="${U.esc(employee.id)}" ${String(this.filters.employee)===String(employee.id)?'selected':''}>${U.esc(employee.name||'Colaborador')}</option>`).join('')}</select></div>
         <div><label for="cp-f-project">Obra</label><select id="cp-f-project"><option value="">Todas</option>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(this.filters.project)===String(project.id)?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
         <div><label for="cp-f-role">Função</label><select id="cp-f-role"><option value="">Todas</option>${roles.map(role=>`<option value="${U.esc(role)}" ${U.norm(this.filters.role)===U.norm(role)?'selected':''}>${U.esc(role)}</option>`).join('')}</select></div>
         <div><label for="cp-f-status">Status</label><select id="cp-f-status"><option value="">Todos</option>${CrewPlan.statuses.map(status=>`<option value="${U.esc(status)}" ${this.filters.status===status?'selected':''}>${U.esc(status)}</option>`).join('')}</select></div>
@@ -494,7 +581,7 @@ Views.planejamentoequipe = {
         <div class="spacer"></div>
         <div class="tabs crewplan-span">
           ${[['week','Semana'],['month','Mês'],['quarter','Trimestre']]
-            .map(([key,label])=>`<button class="tab ${this.span===key?'active':''}" onclick="Views.planejamentoequipe.span='${key}';Views.planejamentoequipe.draw()">${label}</button>`).join('')}
+            .map(([key,label])=>`<button class="tab ${this.span===key?'active':''}" data-cp-span="${key}" onclick="Views.planejamentoequipe.setSpan('${key}')">${label}</button>`).join('')}
         </div>
         <button class="icon-btn" aria-label="Período anterior" onclick="Views.planejamentoequipe.nav(-1)"><i data-lucide="chevron-left"></i></button>
         <b id="crewplan-period" class="crewplan-period"></b>
@@ -517,6 +604,19 @@ Views.planejamentoequipe = {
   clearFilters(){
     this.filters={employee:'',project:'',role:'',status:'',from:'',to:''};
     this.render();
+  },
+  /* ---------- v4.5.1 — CORREÇÃO DO SELETOR DE PERÍODO ----------
+     Até a v4.5.0 o clique fazia `span='week'` e chamava draw(). O draw()
+     redesenha os DADOS, mas quem pinta a aba ativa é o render() — então a
+     tela mostrava a semana com "Mês" ainda marcado. Corrigido aqui em vez de
+     trocar draw() por render(): render() reconstrói os filtros inteiros e
+     faria o usuário perder o foco e o scroll a cada troca de período. */
+  setSpan(span){
+    this.span=span;
+    document.querySelectorAll('.crewplan-span [data-cp-span]').forEach(button=>{
+      button.classList.toggle('active',button.dataset.cpSpan===span);
+    });
+    this.draw();
   },
   draw(){
     const period=document.getElementById('crewplan-period');
@@ -544,13 +644,19 @@ Views.planejamentoequipe = {
     const kpi=(label,value,sub,accent,icon)=>`<div class="kpi ${accent||''}">
       <div class="k-label"><i data-lucide="${icon}"></i>${U.esc(label)}</div>
       <div class="k-value">${value}</div><div class="k-sub">${U.esc(sub)}</div></div>`;
+    /* v4.5.1 — a escala foi INVERTIDA. Semana cheia é o resultado bom (não há
+       custo de ociosidade) e semana vazia é o custo. Verde = cheio, vermelho =
+       ocioso. Vale aqui e nas barras da aba Capacidade — e só nelas: no Gantt
+       vermelho continua querendo dizer CONFLITO. */
+    const teamPct=capacity?Math.round(used/capacity*100):0;
+    const fillAccent=pct=>pct>=85?'accent-green':pct>=60?'accent-amber':'accent-red';
     box.innerHTML=`<div class="kpi-grid">
       ${kpi('Colaboradores planejados',planned,`de ${reports.length} em tela`,'','users')}
       ${kpi('Alocados',count('alocado'),'ocupados o período inteiro','accent-blue','briefcase')}
-      ${kpi('Disponíveis',count('disponivel'),'sem nenhuma alocação','accent-green','user-check')}
-      ${kpi('Parcialmente disponíveis',count('parcial'),'têm dias úteis livres','accent-amber','clock')}
-      ${kpi('Com conflito',count('conflito'),'duas obras no mesmo dia','accent-red','alert-triangle')}
-      ${kpi('Capacidade da equipe',`${capacity?Math.round(used/capacity*100):0}%`,`${used} de ${capacity} dias úteis`,'','gauge')}
+      ${kpi('Ociosos',count('disponivel'),'sem obra no período — custo','accent-red','user-x')}
+      ${kpi('Parcialmente ociosos',count('parcial'),'têm dias úteis livres','accent-amber','clock')}
+      ${kpi('Com conflito',count('conflito'),'duas obras no mesmo dia','accent-amber','alert-triangle')}
+      ${kpi('Capacidade da equipe',`${teamPct}%`,`${used} de ${capacity} dias úteis ocupados`,fillAccent(teamPct),'gauge')}
     </div>`;
   },
 
@@ -606,17 +712,22 @@ Views.planejamentoequipe = {
       return `<div class="cp-cell cp-conflict" title="Conflito: ${U.esc(obras)}"><span>Conflito</span></div>`;
     }
     if(busyDays){
+      /* v4.5.1 — a cor não vem mais da obra. Alocado é SEMPRE azul, parcial
+         SEMPRE amarelo e conflito SEMPRE vermelho, em qualquer obra: a cor
+         passou a informar a SITUAÇÃO do colaborador, não qual obra é. */
       const first=active[0]||{};
-      const color=U.safeColor(App.projectColor(first.projectId));
       const label=CrewPlan.projectLabel(first.projectId);
+      const obras=[...new Set(active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' · ');
       const partial=busyDays<total-offDays||offDays>0;
       const done=active.every(row=>row.status==='Concluído');
       return `<div class="cp-cell cp-busy ${partial?'cp-partial':''} ${done?'cp-done':''}"
-        style="--cp-color:${color}" title="${U.esc(label)} — ${busyDays} de ${total} dia(s) útil(eis)${offDays?` · ${offDays} indisponível(eis)`:''}"
+        title="${U.esc(obras||label)} — ${busyDays} de ${total} dia(s) útil(eis)${offDays?` · ${offDays} indisponível(eis)`:''}${partial?' · parcial':''}"
         onclick="Views.planejamentoequipe.dayDetail(${U.jsArg(employee.id)},${U.jsArg(bucket.days[0])},${U.jsArg(bucket.days[bucket.days.length-1])})"><span>${U.esc(label)}</span></div>`;
     }
-    if(offDays===total)
-      return `<div class="cp-cell cp-off" title="Férias ou colaborador inativo"><span>Férias/inativo</span></div>`;
+    if(offDays===total){
+      const reason=CrewPlan.offReason(employee,rowsByDay.filter(item=>item.off).map(item=>item.day));
+      return `<div class="cp-cell cp-off" title="Não conta: ${U.esc(reason.label)}"><span>${U.esc(reason.short)}</span></div>`;
+    }
     // Célula livre fica VAZIA de propósito: o objetivo declarado do Gantt é
     // "tornar visualmente evidente os espaços vagos da equipe" — escrever
     // "Disponível" 200 vezes esconde justamente o que é para saltar aos olhos.
@@ -633,10 +744,12 @@ Views.planejamentoequipe = {
     const head=buckets.list.map(bucket=>`<div class="cp-col-head"><b>${U.esc(bucket.label)}</b><small>${U.esc(bucket.sub||'')}</small></div>`).join('');
     const rows=crew.map(employee=>{
       const report=CrewPlan.availability(employee,from,to);
+      const reason=report.offDays
+        ?CrewPlan.offReason(employee,CrewPlan.offDaysOf(employee,from,to)).short:'';
       return `<div class="cp-row">
         <div class="cp-name">
           <b>${U.esc(employee.name||'Colaborador')}</b>
-          <span class="cp-name-sub"><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small>${CrewPlan.categoryTagShort(report.category)}</span>
+          <span class="cp-name-sub"><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small>${CrewPlan.categoryTagShort(report.category,reason)}</span>
         </div>
         <div class="cp-track" style="grid-template-columns:repeat(${buckets.list.length},minmax(${buckets.kind==='day'?72:96}px,1fr))">
           ${buckets.list.map(bucket=>this.cellFor(employee,bucket)).join('')}
@@ -650,7 +763,7 @@ Views.planejamentoequipe = {
         <span><i class="cp-chip cp-busy"></i>Alocado</span>
         <span><i class="cp-chip cp-partial"></i>Parcial</span>
         <span><i class="cp-chip cp-conflict"></i>Conflito</span>
-        <span><i class="cp-chip cp-off"></i>Férias/inativo</span>
+        <span><i class="cp-chip cp-off"></i>Férias / sem vínculo</span>
         <small>Somente dias úteis (seg–sex). Sábados e domingos não consomem capacidade.</small>
       </div>
       <div class="cp-grid-scroll"><div class="cp-grid">
@@ -666,7 +779,7 @@ Views.planejamentoequipe = {
   /* ---------- 21. RESPONSIVIDADE — no celular, cards em vez de Gantt ---------- */
   mobileCard(employee,from,to){
     const report=CrewPlan.availability(employee,from,to);
-    const blocks=report.allocations.map(row=>`<div class="cp-card-block" style="--cp-color:${U.safeColor(App.projectColor(row.projectId))}">
+    const blocks=report.allocations.map(row=>`<div class="cp-card-block">
       <b>${U.date(row.start)} → ${U.date(row.end)}</b>
       <span><i data-lucide="hard-hat"></i>${U.esc(CrewPlan.projectLabel(row.projectId))}</span>
       <small>${U.esc(row.status)} · ${CrewPlan.businessDays(row.start,row.end)} dia(s) útil(eis)</small>
@@ -679,7 +792,7 @@ Views.planejamentoequipe = {
        disponível" com "Nenhuma alocação no período" logo abaixo — verdadeiro,
        mas parece contradição. O motivo tem que estar na tela. */
     const indisponivel=report.offDays
-      ?`<div class="cp-card-off"><i data-lucide="calendar-clock"></i>${report.offDays} dia(s) útil(eis) em férias ou com o colaborador inativo</div>`
+      ?`<div class="cp-card-off"><i data-lucide="calendar-clock"></i>${report.offDays} dia(s) útil(eis) em ${U.esc(CrewPlan.offReason(employee,CrewPlan.offDaysOf(employee,from,to)).label)}</div>`
       :'';
     return `<div class="cp-card">
       <div class="cp-card-head"><span><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small></span>${CrewPlan.categoryTag(report.category)}</div>
@@ -706,6 +819,119 @@ Views.planejamentoequipe = {
         </tr>`).join('')||'<tr><td colspan="7"><div class="empty">Nenhuma alocação neste intervalo.</div></td></tr>'}</tbody>
       </table></div></div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>'});
+  },
+
+  /* ---------- v4.5.1 — PDF DO PLANEJAMENTO ----------
+     Agrupado por OBRA porque é assim que a informação é repassada no grupo:
+     "quem vai para qual obra, em que dia". Fecha com o resumo por colaborador,
+     para conferir a carga de uma pessoa só.
+     ⚠ Passa pelo pipeline único de impressão (Exports.beginPrint). NUNCA
+     registrar afterprint direto aqui — foi o bug do PDF da v4.2.7. */
+  planRows(){
+    const {from,to}=this.period();
+    const ids=new Set(this.crew().map(employee=>String(employee.id)));
+    const statuses=this.filters.status
+      ?[this.filters.status]
+      :CrewPlan.statuses.filter(status=>status!=='Cancelado');
+    return CrewPlan.all()
+      .filter(row=>CrewPlan.valid(row))
+      .map(row=>CrewPlan.normalize(row))
+      .filter(row=>ids.has(row.employeeId))
+      .filter(row=>statuses.includes(row.status))
+      .filter(row=>CrewPlan.overlaps(row.start,row.end,from,to))
+      .filter(row=>!this.filters.project||row.projectId===String(this.filters.project))
+      .sort((a,b)=>a.start.localeCompare(b.start)
+        ||CrewPlan.employeeName(a.employeeId).localeCompare(CrewPlan.employeeName(b.employeeId),'pt-BR'));
+  },
+  async printPlan(){
+    const {from,to}=this.period();
+    const rows=this.planRows();
+    if(!rows.length)
+      return UI.toast('Não há alocação no período e nos filtros selecionados para gerar o PDF.','warn',5600);
+    const group=(list,key)=>{
+      const map=new Map();
+      list.forEach(row=>{
+        if(!map.has(row[key])) map.set(row[key],[]);
+        map.get(row[key]).push(row);
+      });
+      return map;
+    };
+    const byProject=group(rows,'projectId');
+    const byEmployee=group(rows,'employeeId');
+    /* Um PDF que manda a mesma pessoa para duas obras no mesmo dia sem avisar é
+       pior que PDF nenhum: quem lê no grupo não tem como perceber. */
+    const conflicted=new Set();
+    rows.forEach(row=>{
+      const clash=CrewPlan.conflictsFor({employeeId:row.employeeId,start:row.start,
+        end:row.end,excludeId:row.id})
+        .filter(other=>CrewPlan.overlaps(other.start,other.end,from,to));
+      if(clash.length) conflicted.add(row.id);
+    });
+    /* O PDF é do PERÍODO em tela: uma alocação que começa antes ou termina
+       depois aparece recortada, senão a contagem de dias mente. */
+    const clip=(start,end)=>({start:start<from?from:start,end:end>to?to:end});
+    const old=document.getElementById('crewplan-print-report');
+    if(old) old.remove();
+    const report=document.createElement('section');
+    report.id='crewplan-print-report';
+    const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
+    const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
+    const totalDays=CrewPlan.businessDays(from,to);
+    report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
+      <header class="crewplan-print-head">
+        <div class="crewplan-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>EMPRESA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Planejamento de colaboradores</span></div></div>
+        <div class="crewplan-print-period"><small>PERÍODO</small><b>${U.date(from)} → ${U.date(to)}</b><span>${totalDays} dia(s) útil(eis)</span></div>
+      </header>
+      <div class="crewplan-print-facts">
+        <div><small>Obras</small><b>${byProject.size}</b></div>
+        <div><small>Colaboradores</small><b>${byEmployee.size}</b></div>
+        <div><small>Alocações</small><b>${rows.length}</b></div>
+        <div><small>Emitido em</small><b>${new Date().toLocaleDateString('pt-BR')}</b></div>
+      </div>
+      ${conflicted.size?`<p class="crewplan-print-alert"><b>⚠ ${conflicted.size} alocação(ões) em conflito.</b> O mesmo colaborador aparece em duas obras no mesmo dia — as linhas marcadas precisam ser resolvidas antes de valer como escala.</p>`:''}
+      ${[...byProject.entries()]
+        .sort((a,b)=>CrewPlan.projectLabel(a[0]).localeCompare(CrewPlan.projectLabel(b[0]),'pt-BR'))
+        .map(([projectId,list])=>`<section class="crewplan-print-project">
+          <h3>${U.esc(CrewPlan.projectLabel(projectId))}<span>${new Set(list.map(row=>row.employeeId)).size} colaborador(es)</span></h3>
+          <table class="crewplan-print-table">
+            <thead><tr><th>Colaborador</th><th>Função</th><th>De</th><th>Até</th><th>Dias úteis</th><th>Status</th></tr></thead>
+            <tbody>${list.map(row=>{
+              const range=clip(row.start,row.end);
+              const employee=CrewPlan.crewMembers().find(item=>String(item.id)===row.employeeId);
+              return `<tr>
+                <td><b>${U.esc(CrewPlan.employeeName(row.employeeId))}</b></td>
+                <td>${U.esc(row.role||CrewPlan.employeeRole(employee)||'—')}</td>
+                <td>${U.date(range.start)}</td>
+                <td>${U.date(range.end)}</td>
+                <td class="num">${CrewPlan.businessDays(range.start,range.end)}</td>
+                <td>${U.esc(row.status)}${conflicted.has(row.id)?' <b class="crewplan-print-warn">⚠ conflito</b>':''}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </section>`).join('')}
+      <section class="crewplan-print-summary">
+        <h3>Resumo por colaborador<span>${byEmployee.size} pessoa(s)</span></h3>
+        <table class="crewplan-print-table">
+          <thead><tr><th>Colaborador</th><th>Função</th><th>Obras no período</th><th>Dias alocados</th><th>Dias ociosos</th></tr></thead>
+          <tbody>${[...byEmployee.entries()]
+            .sort((a,b)=>CrewPlan.employeeName(a[0]).localeCompare(CrewPlan.employeeName(b[0]),'pt-BR'))
+            .map(([employeeId,list])=>{
+              const employee=CrewPlan.crewMembers().find(item=>String(item.id)===employeeId);
+              const report=CrewPlan.availability(employee,from,to);
+              return `<tr>
+                <td><b>${U.esc(CrewPlan.employeeName(employeeId))}</b></td>
+                <td>${U.esc(CrewPlan.employeeRole(employee)||'—')}</td>
+                <td>${[...new Set(list.map(row=>CrewPlan.projectLabel(row.projectId)))].map(label=>U.esc(label)).join(' · ')}</td>
+                <td class="num">${report.busyDays}</td>
+                <td class="num">${report.freeDays}</td>
+              </tr>`;
+            }).join('')}</tbody>
+        </table>
+      </section>
+      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}. Somente dias úteis (segunda a sexta) — sábados e domingos não consomem capacidade.</footer>`;
+    document.body.appendChild(report);
+    UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
+    await Exports.beginPrint('printing-crewplan',report);
   },
 
   /* ---------- 7. VISÃO DISPONIBILIDADE ---------- */
@@ -741,13 +967,13 @@ Views.planejamentoequipe = {
       return '<div class="empty card"><i data-lucide="gauge"></i><br>Sem dias úteis ou sem colaboradores no período selecionado.</div>';
     return `<div class="card">
       <h3>Capacidade da equipe — ${U.esc(this.periodLabel())}</h3>
-      <small class="cp-muted">Percentual dos dias úteis da equipe já comprometidos com obras planejadas. Dias de férias e de colaborador inativo saem da conta.</small>
+      <small class="cp-muted">Percentual dos dias úteis da equipe já comprometidos com obras planejadas. <b>Verde = semana cheia</b> (sem custo de ociosidade); <b>vermelho = semana vazia</b> (dias pagos sem obra). Dias de férias, antes da admissão e após o desligamento saem da conta.</small>
       <div class="cp-capacity">
         ${buckets.map((bucket,index)=>`<div class="cp-capacity-row">
           <span class="cp-capacity-label"><b>Semana ${index+1}</b><small>${U.date(bucket.days[0])} → ${U.date(bucket.days[bucket.days.length-1])}</small></span>
-          <div class="cp-bar big"><div class="cp-bar-fill ${bucket.pct>=90?'crit':bucket.pct>=70?'warn':'ok'}" style="width:${Math.max(2,bucket.pct)}%"></div></div>
+          <div class="cp-bar big"><div class="cp-bar-fill ${bucket.pct>=85?'ok':bucket.pct>=60?'warn':'crit'}" style="width:${Math.max(2,bucket.pct)}%"></div></div>
           <b class="cp-capacity-pct">${bucket.pct}%</b>
-          <small class="cp-capacity-sub">${bucket.used}/${bucket.capacity} dias · ${bucket.idle} ocioso(s)</small>
+          <small class="cp-capacity-sub">${bucket.used}/${bucket.capacity} dias ocupados · <b>${bucket.idle}</b> dia(s) ocioso(s)</small>
         </div>`).join('')}
       </div>
     </div>`;
@@ -760,7 +986,7 @@ Views.planejamentoequipe = {
     const today=U.isoDate(new Date());
     const row=existing||{id:'',employeeId:'',projectId:'',role:'',start:today,
       end:CrewPlan.endAfterBusinessDays(today,10)||today,status:'Planejado',notes:''};
-    const crew=CrewPlan.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+    const crew=CrewPlan.planningCrew(row.start,row.end).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     const projects=CrewPlan.planProjects(row.projectId);
     UI.modal({title:existing?'Editar alocação':'Nova alocação',body:`
       <div class="form-grid">
@@ -883,7 +1109,7 @@ Views.planejamentoequipe = {
       box.innerHTML='<div class="empty">Informe um período válido.</div>';
       return;
     }
-    let list=CrewPlan.candidates({from,to,role,minPct});
+    let list=CrewPlan.candidates({from,to,role,minPct,pool:CrewPlan.planningCrew(from,to)});
     if(projectId) list=list.filter(report=>report.projects.includes(String(projectId)));
     const total=CrewPlan.businessDays(from,to);
     box.innerHTML=`<div class="cp-result-head"><b>${list.length}</b> colaborador(es) · período com <b>${total}</b> dia(s) útil(eis)</div>
@@ -960,14 +1186,36 @@ Views.planejamentoequipe = {
       sync();
     }
     if(this.wizard.step===2){
+      /* v4.5.1 — o atalho de família marca (ou desmarca) todos os níveis de uma
+         vez: "Eletricista · todos" cobre I, II, I A e II A com um clique. */
+      document.querySelectorAll('.cp-role-family').forEach(button=>{
+        button.onclick=()=>{
+          const wanted=String(button.dataset.family||'').split('|')
+            .map(name=>U.norm(name)).filter(Boolean);
+          const boxes=[...document.querySelectorAll('.cp-wz-role')]
+            .filter(box=>wanted.includes(U.norm(box.value)));
+          const target=!boxes.every(box=>box.checked);
+          boxes.forEach(box=>{ box.checked=target; });
+          const label=document.getElementById('cp-wz-picked');
+          if(label) label.textContent=`${[...document.querySelectorAll('.cp-wz-role')].filter(box=>box.checked).length} função(ões) marcada(s)`;
+        };
+      });
+      document.querySelectorAll('.cp-wz-role').forEach(box=>{
+        box.onchange=()=>{
+          const label=document.getElementById('cp-wz-picked');
+          if(label) label.textContent=`${[...document.querySelectorAll('.cp-wz-role')].filter(item=>item.checked).length} função(ões) marcada(s)`;
+        };
+      });
       const add=document.getElementById('cp-wz-add-role');
       if(add) add.onclick=()=>{
-        const role=document.getElementById('cp-wz-role').value;
+        const roles=[...document.querySelectorAll('.cp-wz-role')]
+          .filter(box=>box.checked).map(box=>box.value);
         const qty=Math.max(1,Math.floor(Number(document.getElementById('cp-wz-qty').value)||0));
-        if(!role) return UI.toast('Selecione a função.','warn');
-        if(this.wizard.needs.some(need=>U.norm(need.role)===U.norm(role)))
-          return UI.toast('Essa função já está na lista. Altere a quantidade.','warn');
-        this.wizard.needs.push({role,qty});
+        if(!roles.length) return UI.toast('Marque pelo menos uma função.','warn');
+        const key=roles.map(name=>U.norm(name)).sort().join('|');
+        if(this.wizard.needs.some(need=>need.key===key))
+          return UI.toast('Essa combinação de funções já está na lista. Altere a quantidade.','warn',5200);
+        this.wizard.needs.push({key,label:roles.join(' + '),roles,qty});
         document.getElementById('cp-wizard-body').innerHTML=this.wizardStep2();
         this.wizardBind(); U.icons();
       };
@@ -1014,51 +1262,68 @@ Views.planejamentoequipe = {
       <div class="full"><div class="cp-hint" id="cp-wz-hint"><i data-lucide="info"></i><span>Informe o período da obra.</span></div></div>
     </div>`;
   },
-  /* ETAPA 2 — necessidade da equipe */
+  /* ETAPA 2 — necessidade da equipe.
+     v4.5.1 — uma necessidade aceita VÁRIAS funções. O cadastro tem Eletricista
+     I, II, I A e II A e a obra pede "5 eletricistas", não "5 de cada nível".
+     Marcando os quatro, os 5 saem de qualquer um deles. */
   wizardStep2(){
     const wizard=this.wizard;
     const total=wizard.needs.reduce((sum,need)=>sum+need.qty,0);
+    const families=CrewPlan.roleFamilies();
+    const pool=CrewPlan.planningCrew(wizard.start,wizard.end);
+    const countOf=roles=>pool.filter(employee=>roles
+      .some(role=>U.norm(role)===U.norm(CrewPlan.employeeRole(employee)))).length;
+    const names=CrewPlan.roleNames();
     return `<p class="cp-muted">Obra <b>${U.esc(CrewPlan.projectLabel(wizard.projectId))}</b> · ${U.date(wizard.start)} → ${U.date(wizard.end)} · <b>${CrewPlan.businessDays(wizard.start,wizard.end)}</b> dia(s) útil(eis).</p>
       <div class="cp-need-form">
-        <div><label for="cp-wz-role">Função</label><select id="cp-wz-role"><option value="">Selecione…</option>${CrewPlan.roleNames().map(name=>`<option value="${U.esc(name)}">${U.esc(name)}</option>`).join('')}</select></div>
-        <div><label for="cp-wz-qty">Quantidade</label><input id="cp-wz-qty" type="number" min="1" step="1" value="1"></div>
-        <button class="btn btn-ghost" type="button" id="cp-wz-add-role"><i data-lucide="plus"></i>Adicionar função</button>
+        <div class="cp-role-pick">
+          <label>Função(ões) <small>marque quantas quiser</small></label>
+          ${families.length?`<div class="cp-role-families">${families.map(family=>`<button type="button" class="cp-role-family" data-family="${U.esc(family.roles.join('|'))}"><i data-lucide="layers"></i>${U.esc(family.name)} · todos (${family.roles.length})</button>`).join('')}</div>`:''}
+          <div class="cp-role-list">${names.map(name=>`<label class="cp-role-option"><input type="checkbox" class="cp-wz-role" value="${U.esc(name)}"><span>${U.esc(name)}</span><small>${countOf([name])}</small></label>`).join('')||'<div class="empty">Nenhuma função cadastrada.</div>'}</div>
+          <small class="cp-muted" id="cp-wz-picked">0 função(ões) marcada(s)</small>
+        </div>
+        <div class="cp-need-qty">
+          <label for="cp-wz-qty">Quantidade</label>
+          <input id="cp-wz-qty" type="number" min="1" step="1" value="1">
+          <button class="btn btn-ghost" type="button" id="cp-wz-add-role"><i data-lucide="plus"></i>Adicionar necessidade</button>
+        </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Função</th><th class="num" style="width:130px">Quantidade</th><th style="width:60px"></th></tr></thead>
+        <thead><tr><th>Necessidade</th><th class="num" style="width:130px">Quantidade</th><th style="width:60px"></th></tr></thead>
         <tbody>${wizard.needs.map((need,index)=>`<tr>
-          <td><b>${U.esc(need.role)}</b><br><small class="cp-muted">${CrewPlan.crewMembers().filter(employee=>U.norm(CrewPlan.employeeRole(employee))===U.norm(need.role)).length} colaborador(es) com essa função no cadastro</small></td>
+          <td><b>${U.esc(need.label)}</b><br><small class="cp-muted">${countOf(need.roles)} colaborador(es) ativo(s) com ${need.roles.length>1?'alguma dessas funções':'essa função'}</small></td>
           <td class="num"><input type="number" min="1" step="1" value="${need.qty}" data-need-qty="${index}" style="max-width:90px;text-align:right"></td>
-          <td><button class="btn btn-ghost btn-sm" type="button" data-need-remove="${index}" aria-label="Remover função"><i data-lucide="trash-2"></i></button></td>
-        </tr>`).join('')||'<tr><td colspan="3"><div class="empty">Nenhuma função informada ainda.</div></td></tr>'}</tbody>
+          <td><button class="btn btn-ghost btn-sm" type="button" data-need-remove="${index}" aria-label="Remover necessidade"><i data-lucide="trash-2"></i></button></td>
+        </tr>`).join('')||'<tr><td colspan="3"><div class="empty">Nenhuma necessidade informada ainda.</div></td></tr>'}</tbody>
         ${total?`<tfoot><tr><th>Equipe necessária</th><th class="num">${total}</th><th></th></tr></tfoot>`:''}
       </table></div>
-      <small class="cp-muted">As funções vêm do cadastro de Funções dos colaboradores — o assistente não cria estrutura paralela.</small>`;
+      <small class="cp-muted">As funções vêm do cadastro de Funções dos colaboradores — o assistente não cria estrutura paralela. A contagem considera somente colaboradores ativos com vínculo no período.</small>`;
   },
   /* ETAPAS 12 a 15 — análise, sugestão, montagem e déficit */
   wizardStep3(){
     const wizard=this.wizard;
     const {start,end}=wizard;
     const marks={1:'✓',2:'◐',4:'⚠',5:'✕'};
+    const pool=CrewPlan.planningCrew(start,end);
     const blocks=wizard.needs.map(need=>{
-      const picked=new Set(wizard.selection[need.role]||[]);
-      const list=CrewPlan.candidates({from:start,to:end,role:need.role});
+      const picked=new Set(wizard.selection[need.key]||[]);
+      const list=CrewPlan.candidates({from:start,to:end,roles:need.roles,pool});
       const found=picked.size;
       return `<div class="cp-need-block">
-        <div class="cp-need-head"><b>${U.esc(need.role)}</b>
+        <div class="cp-need-head"><b>${U.esc(need.label)}</b>
           <span class="tag ${found>=need.qty?'tag-green':'tag-amber'}">${found} de ${need.qty} selecionado(s)</span></div>
         ${list.map(report=>{
           const id=String(report.employeeId);
           const disabled=report.pct<=0&&report.tier>=5;
           return `<label class="cp-candidate ${picked.has(id)?'picked':''} ${disabled?'off':''}">
-            <input type="checkbox" data-pick="${U.esc(need.role)}" data-employee="${U.esc(id)}" ${picked.has(id)?'checked':''} ${disabled?'disabled':''}>
+            <input type="checkbox" data-pick="${U.esc(need.key)}" data-employee="${U.esc(id)}" ${picked.has(id)?'checked':''} ${disabled?'disabled':''}>
             <span class="cp-candidate-mark">${marks[report.tier]||'◐'}</span>
-            <span class="cp-candidate-main"><b>${U.esc(report.employee.name||'Colaborador')}</b>
-              <small>${report.pct}% disponível · ${report.freeDays} de ${report.totalDays} dia(s) útil(eis) livre(s)${report.offDays?` · ${report.offDays} em férias/inativo`:''}</small>
+            <span class="cp-candidate-main"><b>${U.esc(report.employee.name||'Colaborador')}</b>${need.roles.length>1?`<small class="cp-candidate-role">${U.esc(report.role||'Sem função')}</small>`:''}
+              <small>${report.pct}% disponível · ${report.freeDays} de ${report.totalDays} dia(s) útil(eis) livre(s)${report.offDays?` · ${report.offDays} dia(s) sem disponibilidade`:''}</small>
               <small>${report.allocations.length?report.allocations.map(row=>`${U.esc(CrewPlan.projectLabel(row.projectId))} até ${U.date(row.end)}`).join(' · '):'Nenhuma obra planejada no período'}</small></span>
             ${CrewPlan.categoryTag(report.category)}
           </label>`;
-        }).join('')||'<div class="empty">Nenhum colaborador cadastrado com essa função.</div>'}
+        }).join('')||`<div class="empty">Nenhum colaborador ativo com ${need.roles.length>1?'alguma dessas funções':'essa função'} no período.</div>`}
       </div>`;
     }).join('');
     return `<p class="cp-muted">O sistema apenas sugere: a decisão final de alocação continua com o gestor. Colaboradores com conflito aparecem marcados com ⚠ e os sem nenhum dia livre ficam desabilitados.</p>
@@ -1068,8 +1333,8 @@ Views.planejamentoequipe = {
   coverageMarkup(){
     const wizard=this.wizard;
     const needed=wizard.needs.reduce((sum,need)=>sum+need.qty,0);
-    const selected=wizard.needs.reduce((sum,need)=>sum+(wizard.selection[need.role]||[]).length,0);
-    const gaps=wizard.needs.filter(need=>(wizard.selection[need.role]||[]).length<need.qty);
+    const selected=wizard.needs.reduce((sum,need)=>sum+(wizard.selection[need.key]||[]).length,0);
+    const gaps=wizard.needs.filter(need=>(wizard.selection[need.key]||[]).length<need.qty);
     return `<div class="cp-coverage">
       <div><small>Equipe necessária</small><b>${needed}</b></div>
       <div><small>Equipe selecionada</small><b>${selected}</b></div>
@@ -1077,20 +1342,27 @@ Views.planejamentoequipe = {
     </div>
     ${gaps.length?`<div class="cp-gap"><b><i data-lucide="alert-triangle"></i> Não existem colaboradores suficientes selecionados para atender integralmente a equipe necessária nesse período.</b>
       <table class="cp-gap-table"><tbody>${wizard.needs.map(need=>{
-        const found=(wizard.selection[need.role]||[]).length;
-        return `<tr><td>${U.esc(need.role)}</td><td class="num">${need.qty} necessário(s)</td><td class="num">${found} encontrado(s)</td><td>${found>=need.qty?'<span class="tag tag-green">✓</span>':'<span class="tag tag-amber">⚠</span>'}</td></tr>`;
+        const found=(wizard.selection[need.key]||[]).length;
+        return `<tr><td>${U.esc(need.label)}</td><td class="num">${need.qty} necessário(s)</td><td class="num">${found} encontrado(s)</td><td>${found>=need.qty?'<span class="tag tag-green">✓</span>':'<span class="tag tag-amber">⚠</span>'}</td></tr>`;
       }).join('')}</tbody></table></div>`:''}`;
   },
   /* ETAPA 16 — prévia. Nada foi gravado até aqui. */
   wizardPreviewRows(){
     const wizard=this.wizard;
     const rows=[];
+    /* v4.5.1 — com várias funções por necessidade o mesmo colaborador pode ser
+       marcado em duas necessidades. Uma alocação por pessoa, sempre. A função
+       gravada é a DELE, não o rótulo combinado da necessidade. */
+    const seen=new Set();
     wizard.needs.forEach(need=>{
-      (wizard.selection[need.role]||[]).forEach(employeeId=>{
-        const employee=CrewPlan.crewMembers().find(item=>String(item.id)===String(employeeId));
+      (wizard.selection[need.key]||[]).forEach(employeeId=>{
+        const id=String(employeeId);
+        if(seen.has(id)) return;
+        const employee=CrewPlan.crewMembers().find(item=>String(item.id)===id);
         if(!employee) return;
+        seen.add(id);
         const report=CrewPlan.availability(employee,wizard.start,wizard.end);
-        rows.push({employee,role:need.role,report});
+        rows.push({employee,role:CrewPlan.employeeRole(employee)||need.label,report});
       });
     });
     return rows;

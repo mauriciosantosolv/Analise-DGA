@@ -1,5 +1,5 @@
 /**
- * Planejamento de Colaboradores (equipe.css) — v4.5.0
+ * Planejamento de Colaboradores (equipe.css) — v4.5.1
  *
  * Responsabilidades:
  * - filtros, linha do tempo (Gantt/matriz), visões Disponibilidade e Capacidade
@@ -35,7 +35,7 @@
 .cp-legend small{color:var(--text3)}
 .cp-chip{width:14px;height:10px;display:inline-block;border:1px solid var(--border)}
 .cp-chip.cp-free{background:var(--bg)}
-.cp-chip.cp-busy{background:var(--color-active-bg);border-color:var(--text3)}
+.cp-chip.cp-busy{background:var(--indigo-soft);border-color:var(--indigo)}
 .cp-chip.cp-partial{background:var(--amber-soft);border-color:var(--amber)}
 .cp-chip.cp-conflict{background:var(--red-soft);border-color:var(--red)}
 .cp-chip.cp-off{background:var(--color-status-nontargeted-bg)}
@@ -59,17 +59,21 @@
 .cp-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-cell.cp-free{background:var(--bg);color:var(--text3);border-style:dashed}
 .cp-cell.cp-off{background:var(--color-status-nontargeted-bg);color:var(--color-status-nontargeted-text)}
-.cp-cell.cp-busy{cursor:pointer;background:color-mix(in srgb,var(--cp-color) 14%,transparent);color:var(--cp-color);border-color:var(--cp-color)}
-.cp-cell.cp-busy:hover{background:color-mix(in srgb,var(--cp-color) 24%,transparent)}
-.cp-cell.cp-busy.cp-partial{border-style:dashed}
+/* v4.5.1 — a cor da célula NÃO vem mais da obra (era `--cp-color`, vindo de
+   App.projectColor). Ela informa a SITUAÇÃO do colaborador e é a mesma em
+   qualquer obra: azul alocado, amarelo parcial, vermelho conflito. */
+.cp-cell.cp-busy{cursor:pointer;background:var(--indigo-soft);color:var(--indigo);border-color:var(--indigo)}
+.cp-cell.cp-busy:hover{background:color-mix(in srgb,var(--indigo) 22%,transparent)}
+.cp-cell.cp-busy.cp-partial{background:var(--amber-soft);color:var(--amber);border-color:var(--amber);border-style:dashed}
+.cp-cell.cp-busy.cp-partial:hover{background:color-mix(in srgb,var(--amber) 22%,transparent)}
 .cp-cell.cp-busy.cp-done{opacity:.55}
 .cp-cell.cp-conflict{background:var(--red-soft);color:var(--red);border-color:var(--red);font-weight:700}
 
-/* Navegadores sem color-mix continuam legíveis (a cor da obra fica só na borda
-   e no texto; o fundo cai para o cinza neutro do tema). */
+/* Navegadores sem color-mix continuam legíveis: só o realce do hover cai para
+   o cinza neutro do tema — o fundo normal já não usa color-mix desde a v4.5.1. */
 @supports not (background:color-mix(in srgb,#000 10%,transparent)){
-  .cp-cell.cp-busy{background:var(--color-active-bg)}
-  .cp-cell.cp-busy:hover{background:var(--surface2)}
+  .cp-cell.cp-busy:hover,
+  .cp-cell.cp-busy.cp-partial:hover{background:var(--surface2)}
 }
 
 /* ===== Cards (celular) ===== */
@@ -79,10 +83,10 @@
 .cp-card-head span{display:flex;flex-direction:column;min-width:0}
 .cp-card-head b{font-size:.88rem}
 .cp-card-head small{font-size:.72rem;color:var(--text3)}
-.cp-card-block{border-left:3px solid var(--cp-color);padding:6px 0 6px 9px;margin-bottom:7px;display:flex;flex-direction:column;gap:2px}
+.cp-card-block{border-left:3px solid var(--indigo);padding:6px 0 6px 9px;margin-bottom:7px;display:flex;flex-direction:column;gap:2px}
 .cp-card-block b{font-size:.78rem}
 .cp-card-block span{display:inline-flex;align-items:center;gap:5px;font-size:.82rem;font-weight:600}
-.cp-card-block span svg{width:14px;height:14px;color:var(--cp-color)}
+.cp-card-block span svg{width:14px;height:14px;color:var(--indigo)}
 .cp-card-block small{font-size:.71rem;color:var(--text3)}
 .cp-card-empty{font-size:.78rem;color:var(--text3);padding:4px 0}
 .cp-card-free{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:var(--green);margin-top:2px}
@@ -194,4 +198,76 @@
   .crewplan-filter-actions{grid-column:1/-1}
   .cp-candidate{flex-wrap:wrap}
   .cp-candidate-main{flex-basis:100%;order:3}
+}
+
+
+/* =====================================================================
+   v4.5.1 — SELETOR DE VÁRIAS FUNÇÕES (assistente, etapa 2)
+   O cadastro tem Eletricista I, II, I A e II A e a obra pede "5
+   eletricistas". O <select> de uma opção só não dava conta.
+   ===================================================================== */
+.cp-need-form .cp-role-pick{grid-column:1/-1;min-width:0}
+.cp-role-families{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+.cp-role-family{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font:inherit;font-size:.74rem;font-weight:600;cursor:pointer}
+.cp-role-family:hover{border-color:var(--indigo);background:var(--indigo-soft);color:var(--indigo)}
+.cp-role-family svg{width:13px;height:13px}
+.cp-role-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px;max-height:184px;overflow:auto;padding:6px;border:1px solid var(--border);background:var(--bg)}
+.cp-role-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 7px;cursor:pointer;font-size:.8rem}
+.cp-role-option:hover{background:var(--surface2)}
+.cp-role-option input{margin:0;flex:0 0 auto}
+.cp-role-option span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-role-option small{color:var(--text3);font-size:.7rem;font-variant-numeric:tabular-nums}
+/* A quantidade e o botão dividem uma linha só: empilhados, empurravam a tabela
+   de necessidades para fora da primeira dobra do modal. */
+.cp-need-qty{display:grid;grid-template-columns:110px auto;align-items:end;gap:8px;min-width:0}
+.cp-need-qty label{grid-column:1/-1;margin-bottom:0}
+.cp-need-qty input{min-width:0}
+.cp-need-qty .btn{white-space:nowrap}
+.cp-candidate-role{color:var(--text3);font-size:.71rem;font-weight:600}
+
+/* =====================================================================
+   v4.5.1 — PDF DO PLANEJAMENTO (modo printing-crewplan)
+   Registrado em Exports.printModes / printReportIds. A montagem passa pelo
+   pipeline único de impressão — ver [[impressao-pdf-cliqueobras]].
+   ===================================================================== */
+#crewplan-print-report{display:none}
+
+@page crewplan-report{
+  size:A4 portrait;
+  margin:12mm;
+}
+
+@media print{
+  body.printing-crewplan{background:#fff!important}
+  body.printing-crewplan #app,
+  body.printing-crewplan #modal-overlay,
+  body.printing-crewplan #toasts,
+  body.printing-crewplan .loading-overlay{display:none!important}
+  body.printing-crewplan #crewplan-print-report{display:block!important;width:100%;padding:0;color:#27272a;background:#fff;font-family:Inter,Arial,sans-serif;page:crewplan-report}
+  .crewplan-print-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding-bottom:11px;border-bottom:2px solid #27272a}
+  .crewplan-print-company{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:9px}
+  .crewplan-print-company>img{display:grid;width:40px;height:40px;place-items:center;border:1px solid #e4e4e7;border-radius:8px;background:#fff;object-fit:contain}
+  .crewplan-print-company>div,.crewplan-print-period{display:flex;min-width:0;flex-direction:column}
+  .crewplan-print-head small{color:#71717a;font-size:7px;letter-spacing:.07em}
+  .crewplan-print-head b{margin-top:2px;font-size:11px}
+  .crewplan-print-head span{margin-top:2px;color:#52525b;font-size:8px}
+  .crewplan-print-period{align-items:flex-end;text-align:right}
+  .crewplan-print-period b{font-size:12px}
+  .crewplan-print-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:11px 0}
+  .crewplan-print-facts>div{display:flex;flex-direction:column;padding:7px 8px;border:1px solid #e4e4e7;border-radius:7px;background:#fafafa}
+  .crewplan-print-facts small{color:#71717a;font-size:7px}
+  .crewplan-print-facts b{margin-top:2px;font-size:10px}
+  /* Uma obra não pode começar no rodapé de uma página e continuar na outra
+     sem repetir o nome: quem recebe o PDF lê "quem vai para qual obra". */
+  .crewplan-print-project,.crewplan-print-summary{margin-top:12px;break-inside:avoid;page-break-inside:avoid}
+  .crewplan-print-project h3,.crewplan-print-summary h3{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 5px;padding-bottom:4px;border-bottom:1px solid #d4d4d8;font-size:10px}
+  .crewplan-print-project h3 span,.crewplan-print-summary h3 span{color:#71717a;font-size:7.5px;font-weight:600}
+  .crewplan-print-table{width:100%;border-collapse:collapse;font-size:8px}
+  .crewplan-print-table th,.crewplan-print-table td{padding:4px 6px;border:1px solid #e4e4e7;color:#27272a;text-align:left;vertical-align:middle}
+  .crewplan-print-table th{background:#f4f4f5;color:#52525b;font-size:7px;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}
+  .crewplan-print-table td.num,.crewplan-print-table th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .crewplan-print-table thead{display:table-header-group}
+  .crewplan-print-alert{margin:0 0 10px;padding:6px 8px;border:1px solid #f5c2c7;border-radius:6px;background:#fdf2f2;color:#842029;font-size:7.5px}
+  .crewplan-print-warn{color:#b02a37;white-space:nowrap}
+  #crewplan-print-report>footer{margin-top:10px;padding-top:6px;border-top:1px solid #e4e4e7;color:#71717a;font-size:6px;text-align:center}
 }

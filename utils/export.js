@@ -76,8 +76,8 @@ const Exports = {
         precoce nao apaga mais nada;
      4. dois cliques no botao cancelam o window.print() pendente do primeiro em
         vez de imprimir um relatorio que o segundo ja removeu. */
-  printModes:['printing-dashboard','printing-project','printing-rdo','printing-measurement','printing-provisions','printing-provisions-month'],
-  printReportIds:['project-print-report','rdo-print-report','measurement-print-report','provisions-print-report','provisions-month-print-report'],
+  printModes:['printing-dashboard','printing-project','printing-rdo','printing-measurement','printing-provisions','printing-provisions-month','printing-crewplan'],
+  printReportIds:['project-print-report','rdo-print-report','measurement-print-report','provisions-print-report','provisions-month-print-report','crewplan-print-report'],
   activePrint:null,
   clearPrintState(keepId){
     this.printModes.forEach(name=>document.body.classList.remove(name));
