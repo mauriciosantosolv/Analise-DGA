@@ -211,7 +211,11 @@
   .rdo-detail-workers>div{grid-template-columns:34px minmax(0,1fr) 70px}
   .rdo-detail-workers>div>span:nth-child(4),.rdo-detail-workers>div>span:nth-child(5){display:none}
   .rate-card{grid-template-columns:minmax(0,1fr) 100px 20px}.rate-card>span:nth-child(2){display:none}
-  .modal.rdo-composer-modal{width:100%;height:100dvh;max-height:100dvh;border-radius:0}
+  /* v4.5.3 — era `100dvh`. Ver a nota em css/components.css: a altura passa a
+     vir da camada #modal-overlay, que utils/helpers.js mantem do tamanho da
+     area visivel. E o que impede o teclado de empurrar a tela e nao devolver
+     quando o lider escreve a descricao do servico. */
+  .modal.rdo-composer-modal{width:100%;height:100%;max-height:100%;border-radius:0}
   .rdo-composer-modal .modal-head{flex:0 0 auto;padding:12px 14px}
   .rdo-composer-modal .modal-body{flex:1;min-height:0;padding:0}
   .rdo-composer-modal .modal-foot{grid-template-columns:auto 1fr auto auto;padding:9px 10px calc(9px + env(safe-area-inset-bottom));flex:0 0 auto}

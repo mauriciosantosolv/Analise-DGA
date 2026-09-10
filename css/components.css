@@ -1,3 +1,21 @@
+/**
+ * Componentes (components.css)
+ *
+ * Responsabilidades:
+ * - botões, cards, tags, progresso, modais, toasts
+ * - menu recolhível, estabilidade de layout, impressão/PDF
+ *   (estas últimas regras DEVEM permanecer no fim da cascata)
+ *
+ * Dependências:
+ * - css/variables.css
+ *
+ * Não modificar:
+ * - a posição deste arquivo como último <link> no index.html
+ *
+ * v4.3.0 — padrão sóbrio: cantos retos, sem sombra em elementos estáticos,
+ * cor só em badges de status. Exceções propositais: avatar (círculo) e
+ * badge/tag (raio pequeno, formato chip).
+ */
 /* ===== Coolicons ===== */
 .coolicon{display:inline-block;width:18px;height:18px;flex:0 0 auto;background-color:currentColor;-webkit-mask-image:var(--coolicon-url);mask-image:var(--coolicon-url);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;vertical-align:-.16em}
 .nav-item .coolicon,.icon-btn .coolicon{width:17px;height:17px}
@@ -176,7 +194,13 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   .nav-item{min-height:44px}
   .table-scroll{max-height:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
   .table-scroll table{min-width:680px}
-  .modal{width:100%;max-width:none;max-height:94vh;max-height:94dvh;border-radius:0}
+  /* v4.5.3 — `dvh` NAO encolhe com o teclado no iOS (ele so mexe no visual
+     viewport), e no Android encolhe. Passando a medir em % da propria camada
+     #modal-overlay, o modal segue a area realmente visivel nos dois casos: a
+     camada e ajustada por utils/helpers.js a partir do window.visualViewport.
+     Sem teclado aberto a camada tem a altura da tela, entao 94% = 94dvh e o
+     desenho de hoje nao muda em nada. */
+  .modal{width:100%;max-width:none;max-height:94vh;max-height:94%;border-radius:0}
   #modal-overlay{align-items:flex-end;padding:0}
   .modal-head{padding:14px}.modal-body{padding:14px}
   .modal-foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom));flex-wrap:wrap}

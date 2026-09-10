@@ -330,3 +330,70 @@ document.addEventListener('keydown', e => {
     }, 120);
   }, true);
 })();
+
+/* ============================================================================
+   v4.5.3 — O TECLADO EMPURRAVA A TELA E NÃO DEVOLVIA (compositor do RDO)
+
+   Sintoma relatado: o líder toca no campo "Serviço realizado" do RDO, a tela
+   sobe e, ao terminar, não volta sozinha — é preciso arrastar de volta.
+
+   ⚠ NÃO era tamanho de fonte. Medido: `#rdo-description` já está em 16px,
+   então o zoom automático do iOS (ver a trava da v4.5.2 logo acima) não é a
+   causa aqui. O mecanismo é outro:
+
+     1. `#modal-overlay` é `position:fixed; inset:0` e o documento NÃO rola
+        (`main{overflow:hidden}`, quem rola é `#content`);
+     2. o campo fica dentro de `.rdo-composer`, que rola por conta própria;
+     3. quando o teclado abre, o navegador precisa trazer o campo para a área
+        visível. Como o documento não pode rolar, o iOS desloca o VISUAL
+        VIEWPORT — e ao fechar o teclado ele não desfaz esse deslocamento.
+        É exatamente o "precisa puxar a tela de volta".
+
+   A correção: manter a camada do modal do tamanho da área REALMENTE visível,
+   lendo `window.visualViewport`. Assim o campo já nasce dentro da área visível,
+   quem rola é o contêiner do compositor (que é o certo) e o navegador nunca
+   precisa deslocar a tela — logo, não há o que desfazer.
+
+   No Android o `interactive-widget=resizes-content` do <meta viewport> já faz o
+   navegador encolher o layout sozinho; este código é inócuo lá.
+
+   ⚠ Quando não há teclado aberto, NADA é escrito no elemento: a camada fica
+   exatamente como o CSS a define. O desenho de hoje não muda em nada.
+   ============================================================================ */
+(function(){
+  const vv = window.visualViewport;
+  if(!vv) return;
+  const overlay = () => document.getElementById('modal-overlay');
+  // Folga: barras do navegador mudam a altura em alguns píxeis sem ser teclado.
+  const LIMIAR = 120;
+  let aplicado = false;
+
+  const limpar = layer => {
+    if(!aplicado) return;
+    aplicado = false;
+    if(!layer) return;
+    layer.style.top = '';
+    layer.style.height = '';
+  };
+
+  const ajustar = () => {
+    const layer = overlay();
+    if(!layer || !layer.classList.contains('open')) return limpar(layer);
+    const escondido = window.innerHeight - vv.height;
+    if(escondido < LIMIAR && vv.offsetTop < 1) return limpar(layer);
+    // Teclado aberto: a camada ocupa só o que sobrou, ancorada onde a área
+    // visível começa. `inset:0` define top e bottom; com `height` explícito o
+    // `bottom` é ignorado, então basta top + height.
+    layer.style.top = `${vv.offsetTop}px`;
+    layer.style.height = `${vv.height}px`;
+    aplicado = true;
+  };
+
+  vv.addEventListener('resize', ajustar);
+  vv.addEventListener('scroll', ajustar);
+  // O foco entra antes de o teclado terminar de abrir; o `resize` acima cobre o
+  // resto, mas este primeiro ajuste evita um quadro com a camada no tamanho
+  // antigo.
+  document.addEventListener('focusin', ajustar, true);
+  document.addEventListener('focusout', () => setTimeout(ajustar, 150), true);
+})();
