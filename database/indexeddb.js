@@ -12,11 +12,15 @@
    Stores: projects, budgets, purchases, planning, clients, categories, settings
    Regra: uploads sempre SOMAM ao banco; nada é apagado automaticamente. */
 const DB = (() => {
-  const NAME = 'ccf_obras', VERSION = 7;
+  // v4.5.0 - VERSION 7 -> 8 para criar o object store 'crew_allocations'.
+  const NAME = 'ccf_obras', VERSION = 8;
   const STORES = [
     'projects','budgets','purchases','planning','clients','categories','settings','measurements',
     'rdos','crew','labor_rates','rdo_financial','planning_history','workforce_status',
-    'forecasts','measurement_receipts'
+    'forecasts','measurement_receipts',
+    // v4.5.0 - planejamento de colaboradores. Entra no FIM da lista de
+    // proposito: State.reload() desestrutura este array por posicao.
+    'crew_allocations'
   ];
   const LOCAL_STORES = [...STORES,'rdo_attachments'];
   let db = null;
@@ -151,7 +155,7 @@ const DB = (() => {
 const State = {
   projects:[], budgets:[], purchases:[], planning:[], clients:[], categories:[], measurements:[], settings:{},
   rdos:[], crew:[], laborRates:[], rdoFinancial:[], planningHistory:[], workforceStatus:[], rdoAttachments:[],
-  forecasts:[], measurementReceipts:[],
+  forecasts:[], measurementReceipts:[], crewAllocations:[],
   filters:{ project:'', projects:[], client:'', category:'', status:'', type:'' },
   view:'dashboard',
   async reload(){
@@ -165,6 +169,8 @@ const State = {
     // v4.1.0 — fluxo de caixa por medições
     this.forecasts=await DB.all('forecasts');
     this.measurementReceipts=await DB.all('measurement_receipts');
+    // v4.5.0 - planejamento de colaboradores
+    this.crewAllocations=await DB.all('crew_allocations');
     this.settings = Object.fromEntries(st.map(s=>[s.id, s.value]));
   },
   async setSetting(k,v){ await DB.put('settings',{id:k,value:v}); this.settings[k]=v; },

@@ -1,0 +1,197 @@
+/**
+ * Planejamento de Colaboradores (equipe.css) — v4.5.0
+ *
+ * Responsabilidades:
+ * - filtros, linha do tempo (Gantt/matriz), visões Disponibilidade e Capacidade
+ * - assistente "Planejar nova obra" (etapas, candidatos, cobertura, prévia)
+ *
+ * Dependências:
+ * - css/variables.css (tokens), css/components.css (.card/.tag/.btn/.form-grid)
+ *
+ * Não modificar:
+ * - nenhum seletor de outro arquivo é redefinido aqui; todas as classes deste
+ *   arquivo têm o prefixo .cp-* ou .crewplan-* e só existem neste módulo.
+ *
+ * Desktop: matriz Gantt. Celular (<=860px): cards / timeline vertical.
+ */
+
+/* ===== Filtros ===== */
+.crewplan-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;padding:14px 16px;border:1px solid var(--border);background:var(--surface2);margin-bottom:14px}
+/* 1fr = minmax(auto,1fr) e nao encolhe: o <select> com o nome longo de uma
+   funcao ("ESPECIALISTA EM MANUTENCAO ELETRICA") empurra a coluna e estoura
+   a largura no celular. minmax(0,1fr) + min-width:0 no filho e a correcao. */
+.crewplan-filters>div{min-width:0}
+.crewplan-filters select,.crewplan-filters input{min-width:0;max-width:100%}
+.crewplan-filters label{margin-bottom:4px}
+.crewplan-filter-actions{display:flex;align-items:end}
+.crewplan-subbar{align-items:center}
+.crewplan-period{min-width:180px;text-align:center;font-size:.88rem}
+.crewplan-span .tab{padding:6px 11px}
+
+/* ===== Linha do tempo (Gantt/matriz) ===== */
+.cp-gantt{padding:14px 16px}
+.cp-legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px;font-size:.76rem;color:var(--text2)}
+.cp-legend span{display:inline-flex;align-items:center;gap:6px}
+.cp-legend small{color:var(--text3)}
+.cp-chip{width:14px;height:10px;display:inline-block;border:1px solid var(--border)}
+.cp-chip.cp-free{background:var(--bg)}
+.cp-chip.cp-busy{background:var(--color-active-bg);border-color:var(--text3)}
+.cp-chip.cp-partial{background:var(--amber-soft);border-color:var(--amber)}
+.cp-chip.cp-conflict{background:var(--red-soft);border-color:var(--red)}
+.cp-chip.cp-off{background:var(--color-status-nontargeted-bg)}
+
+.cp-grid-scroll{overflow-x:auto;max-height:62vh;overflow-y:auto}
+.cp-grid{min-width:640px}
+.cp-row{display:grid;grid-template-columns:250px minmax(0,1fr);border-bottom:1px solid var(--border)}
+.cp-row:last-child{border-bottom:0}
+.cp-head{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--border)}
+.cp-name{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:9px 12px 9px 0;border-right:1px solid var(--border);min-width:0}
+.cp-name b{font-size:.85rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-name-sub{display:flex;align-items:center;gap:7px;min-width:0}
+.cp-name small{font-size:.72rem;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.cp-name .tag{flex:0 0 auto;font-size:.68rem;padding:2px 7px}
+.cp-track{display:grid;gap:2px;padding:5px 0 5px 6px;min-width:0}
+.cp-col-head{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0}
+.cp-col-head b{font-size:.76rem;font-weight:700}
+.cp-col-head small{font-size:.66rem;color:var(--text3);text-transform:uppercase;letter-spacing:.02em}
+
+.cp-cell{display:flex;align-items:center;justify-content:center;height:30px;padding:0 5px;border:1px solid var(--border);font-size:.7rem;font-weight:600;overflow:hidden}
+.cp-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-cell.cp-free{background:var(--bg);color:var(--text3);border-style:dashed}
+.cp-cell.cp-off{background:var(--color-status-nontargeted-bg);color:var(--color-status-nontargeted-text)}
+.cp-cell.cp-busy{cursor:pointer;background:color-mix(in srgb,var(--cp-color) 14%,transparent);color:var(--cp-color);border-color:var(--cp-color)}
+.cp-cell.cp-busy:hover{background:color-mix(in srgb,var(--cp-color) 24%,transparent)}
+.cp-cell.cp-busy.cp-partial{border-style:dashed}
+.cp-cell.cp-busy.cp-done{opacity:.55}
+.cp-cell.cp-conflict{background:var(--red-soft);color:var(--red);border-color:var(--red);font-weight:700}
+
+/* Navegadores sem color-mix continuam legíveis (a cor da obra fica só na borda
+   e no texto; o fundo cai para o cinza neutro do tema). */
+@supports not (background:color-mix(in srgb,#000 10%,transparent)){
+  .cp-cell.cp-busy{background:var(--color-active-bg)}
+  .cp-cell.cp-busy:hover{background:var(--surface2)}
+}
+
+/* ===== Cards (celular) ===== */
+.cp-cards{display:none;flex-direction:column;gap:10px}
+.cp-card{border:1px solid var(--border);padding:11px 12px}
+.cp-card-head{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px}
+.cp-card-head span{display:flex;flex-direction:column;min-width:0}
+.cp-card-head b{font-size:.88rem}
+.cp-card-head small{font-size:.72rem;color:var(--text3)}
+.cp-card-block{border-left:3px solid var(--cp-color);padding:6px 0 6px 9px;margin-bottom:7px;display:flex;flex-direction:column;gap:2px}
+.cp-card-block b{font-size:.78rem}
+.cp-card-block span{display:inline-flex;align-items:center;gap:5px;font-size:.82rem;font-weight:600}
+.cp-card-block span svg{width:14px;height:14px;color:var(--cp-color)}
+.cp-card-block small{font-size:.71rem;color:var(--text3)}
+.cp-card-empty{font-size:.78rem;color:var(--text3);padding:4px 0}
+.cp-card-free{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:var(--green);margin-top:2px}
+.cp-card-off{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text3);margin:2px 0 4px}
+.cp-card-off svg{width:14px;height:14px;flex:0 0 auto}
+.cp-card-free svg{width:14px;height:14px}
+
+/* ===== Barras de disponibilidade e capacidade ===== */
+.cp-bar{height:6px;background:var(--border);overflow:hidden;margin-bottom:4px}
+.cp-bar.big{height:10px;margin-bottom:0}
+.cp-bar-fill{height:100%;background:var(--text3);transition:width .3s ease-out}
+.cp-bar-fill.ok{background:var(--green)}
+.cp-bar-fill.warn{background:var(--amber)}
+.cp-bar-fill.crit{background:var(--red)}
+.cp-muted{color:var(--text3)}
+.cp-capacity{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.cp-capacity-row{display:grid;grid-template-columns:170px minmax(0,1fr) 52px 150px;gap:12px;align-items:center}
+.cp-capacity-label{display:flex;flex-direction:column}
+.cp-capacity-label b{font-size:.82rem}
+.cp-capacity-label small{font-size:.71rem;color:var(--text3)}
+.cp-capacity-pct{font-size:.9rem;text-align:right;font-variant-numeric:tabular-nums}
+.cp-capacity-sub{font-size:.72rem;color:var(--text3)}
+
+/* ===== Modais: conflito, dicas, resultado ===== */
+.crewplan-conflict{border:1px solid var(--red);background:var(--red-soft);padding:12px 14px;margin-bottom:10px}
+/* `>` obrigatório: sem ele o display:flex atinge todo <b> do texto (nome do
+   colaborador, obra, datas) e cada um vira uma linha própria. */
+.crewplan-conflict>b{display:flex;align-items:center;gap:7px;color:var(--red);font-size:.92rem;margin-bottom:7px}
+.crewplan-conflict>b svg{width:17px;height:17px}
+.crewplan-conflict p b{color:var(--text);font-weight:700}
+.crewplan-conflict p{font-size:.86rem;line-height:1.55;margin-bottom:5px;color:var(--text)}
+.crewplan-conflict small{color:var(--text2);font-size:.78rem}
+.cp-hint{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border:1px solid var(--border);background:var(--surface2);font-size:.79rem;color:var(--text2);line-height:1.5}
+.cp-hint svg{width:15px;height:15px;flex:0 0 auto;margin-top:1px;color:var(--text3)}
+.cp-result{margin-top:14px}
+.cp-result-head{font-size:.83rem;color:var(--text2);margin-bottom:8px}
+
+/* ===== Assistente "Planejar nova obra" ===== */
+.cp-steps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.cp-step{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--border);font-size:.76rem;font-weight:600;color:var(--text3);background:var(--surface2)}
+.cp-step b{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--border);color:var(--text2);font-size:.68rem}
+.cp-step.active{color:var(--text);background:var(--bg);border-color:var(--text)}
+.cp-step.active b{background:var(--color-primary);color:var(--color-primary-text)}
+.cp-step.done{color:var(--green);border-color:var(--green)}
+.cp-step.done b{background:var(--green);color:#fff}
+
+.cp-need-form{display:grid;grid-template-columns:2fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}
+.cp-need-block{border:1px solid var(--border);margin-bottom:12px}
+.cp-need-head{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 12px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.cp-need-head b{font-size:.86rem}
+.cp-candidate{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;margin-bottom:0}
+.cp-candidate:last-child{border-bottom:0}
+.cp-candidate:hover{background:var(--surface2)}
+.cp-candidate.picked{background:var(--green-soft)}
+.cp-candidate.off{opacity:.5;cursor:not-allowed}
+.cp-candidate input{width:17px;height:17px;flex:0 0 auto;margin:0}
+.cp-candidate-mark{width:18px;text-align:center;font-size:.95rem;flex:0 0 auto}
+.cp-candidate-main{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.cp-candidate-main b{font-size:.85rem}
+.cp-candidate-main small{font-size:.72rem;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.cp-coverage{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);margin-top:14px}
+.cp-coverage div{background:var(--bg);padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+.cp-coverage small{font-size:.72rem;color:var(--text3);font-weight:600}
+.cp-coverage b{font-size:1.15rem;font-variant-numeric:tabular-nums}
+.cp-coverage b.ok{color:var(--green)}
+.cp-coverage b.warn{color:var(--amber)}
+.cp-gap{border:1px solid var(--amber);background:var(--amber-soft);padding:11px 13px;margin-top:12px}
+.cp-gap>b{display:flex;align-items:center;gap:7px;color:var(--amber);font-size:.85rem;margin-bottom:8px}
+.cp-gap>b svg{width:16px;height:16px}
+.cp-gap-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.cp-gap-table td{padding:4px 6px;border-top:1px solid var(--border)}
+.cp-gap-table tr:first-child td{border-top:0}
+
+.cp-preview-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px}
+.cp-preview-head div{background:var(--bg);padding:10px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.cp-preview-head small{font-size:.71rem;color:var(--text3);font-weight:600}
+.cp-preview-head b{font-size:.85rem;overflow:hidden;text-overflow:ellipsis}
+
+/* ===== Celular: sem Gantt comprimido, cards e timeline vertical ===== */
+@media(max-width:860px){
+  /* css/rdo.css tem, no celular, `.toolbar-actions .btn{flex:1;min-width:0}` —
+     serve para as duas ações curtas do RDO, mas espreme os TRÊS botões desta
+     tela numa linha só e corta o texto. Em vez de mexer naquela regra (que
+     vale para o sistema inteiro), esta tela pede a sua própria. */
+  .crewplan-toolbar .toolbar-actions{width:100%}
+  .crewplan-toolbar .toolbar-actions .btn{flex:1 1 100%;min-width:0;justify-content:center}
+  .cp-grid-scroll{display:none}
+  .cp-cards{display:flex}
+  .cp-gantt{padding:12px 13px}
+  .crewplan-period{min-width:120px}
+  .cp-capacity-row{grid-template-columns:minmax(0,1fr) 48px;grid-template-areas:'label pct' 'bar bar' 'sub sub';gap:5px 10px}
+  .cp-capacity-label{grid-area:label}
+  .cp-capacity-row .cp-bar{grid-area:bar}
+  .cp-capacity-pct{grid-area:pct}
+  .cp-capacity-sub{grid-area:sub}
+  .cp-need-form{grid-template-columns:1fr}
+  .cp-coverage{grid-template-columns:1fr}
+  .cp-steps .cp-step{font-size:.71rem;padding:5px 9px}
+}
+@media(max-width:520px){
+  /* css/dashboard.css joga .kpi-grid para uma coluna abaixo de 520px. Com os
+     seis indicadores deste módulo isso empurra a tela toda para baixo; aqui
+     (e só aqui) eles ficam em duas colunas. */
+  #crewplan-kpis .kpi-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:560px){
+  .crewplan-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:12px;gap:9px}
+  .crewplan-filter-actions{grid-column:1/-1}
+  .cp-candidate{flex-wrap:wrap}
+  .cp-candidate-main{flex-basis:100%;order:3}
+}

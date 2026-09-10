@@ -30,16 +30,21 @@ const App = {
     dashboard:['projects','budgets','purchases','planning','measurements','settings'],
     projetos:['projects'], orcamentos:['budgets'], financeiro:['purchases'],
     planejamento:['planning','planning_history'], rdos:['rdos','workforce_status'], medicoes:['measurements'],
+    // v4.5.0 - Planejamento de Colaboradores. A permissao vem de 'crew'
+    // (mapeada em Cloud.canViewStore/canEditStore e nas funcoes do Supabase),
+    // entao quem ja enxerga a equipe enxerga o planejamento dela.
+    planejamentoequipe:['crew_allocations'],
     colaboradores:['crew'], valoreshh:['labor_rates','rdo_financial'], clientes:['clients'],
     categorias:['categories'], basecalculo:['settings'],
     relatorios:['projects','budgets','purchases','planning','measurements','rdos','crew','workforce_status'],
-    backup:['projects','budgets','purchases','planning','planning_history','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial','workforce_status']
+    backup:['projects','budgets','purchases','planning','planning_history','clients','categories','settings','measurements','rdos','crew','labor_rates','rdo_financial','workforce_status','crew_allocations']
   },
   primaryStore(view=State.view){
     return ({projetos:'projects',orcamentos:'budgets',financeiro:'purchases',
       planejamento:'planning',rdos:'rdos',medicoes:'measurements',
       colaboradores:'crew',valoreshh:'labor_rates',clientes:'clients',
-      categorias:'categories',basecalculo:'settings'})[view] || '';
+      categorias:'categories',basecalculo:'settings',
+      planejamentoequipe:'crew_allocations'})[view] || '';
   },
   canOpenView(view){
     if(view==='configuracoes') return true;
@@ -53,7 +58,7 @@ const App = {
     return !stores.length || stores.some(store=>Cloud.canViewStore(store));
   },
   firstAllowedView(){
-    return ['dashboard','projetos','rdos','medicoes','colaboradores','orcamentos','financeiro','planejamento','clientes','categorias','basecalculo','relatorios','configuracoes']
+    return ['dashboard','projetos','rdos','medicoes','colaboradores','orcamentos','financeiro','planejamento','planejamentoequipe','clientes','categorias','basecalculo','relatorios','configuracoes']
       .find(view=>this.canOpenView(view)) || 'configuracoes';
   },
   applyNavigationPermissions(){
@@ -349,8 +354,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.2.21 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.2.21 · dados locais';
+      el.textContent=`v4.5.0 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.5.0 · dados locais';
   },
   showCloudLogin(){
     const old=document.getElementById('cloud-login'); if(old) old.remove();
@@ -421,6 +426,7 @@ const App = {
     rdos:['crew','labor_rates','rdo_financial','projects'],
     financeiro:['planning','planning_history','projects','categories'],
     planejamento:['projects','categories','purchases'],
+    planejamentoequipe:['crew','projects','settings'],
     projetos:['budgets','purchases','measurements','clients'],
     orcamentos:['projects','categories'],
     relatorios:['forecasts','measurement_receipts','planning_history','labor_rates','rdo_financial'],

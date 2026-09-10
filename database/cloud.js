@@ -338,12 +338,15 @@ const Cloud = (() => {
   }
   function canViewStore(store){
     if(!configured()) return true;
-    const permissionStore=store==='planning_history'?'planning':store==='workforce_status'?'rdos':store;
+    // v4.5.0 - 'crew_allocations' herda a permissao de 'crew': quem enxerga a
+    // equipe enxerga o planejamento dela. Nenhuma caixa nova em ALL_STORES,
+    // nenhuma permissao ja concedida muda de significado.
+    const permissionStore=store==='planning_history'?'planning':store==='workforce_status'?'rdos':store==='crew_allocations'?'crew':store;
     return fullAccess() || permissionList('view').includes(permissionStore);
   }
   function canEditStore(store){
     if(!configured()) return true;
-    const permissionStore=store==='planning_history'?'planning':store;
+    const permissionStore=store==='planning_history'?'planning':store==='crew_allocations'?'crew':store;
     return fullAccess() || permissionList('edit').includes(permissionStore);
   }
   function canManageUsers(){
