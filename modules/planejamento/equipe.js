@@ -1,5 +1,9 @@
 /**
- * Planejamento de Colaboradores (equipe.js) — v4.5.1
+ * Planejamento de Colaboradores (equipe.js) — v4.5.2
+ *
+ * v4.5.2 — o PDF virou GANTT PAISAGEM: mesma matriz da tela, mesmas cores,
+ * dia a dia quando o período cabe. `CrewPlan.bucketState()` passou a ser a
+ * porta única do retrato de uma COLUNA — tela e papel consomem o mesmo.
  *
  * v4.5.1 — correções pedidas em 10/09/2026:
  *  1. só colaborador ATIVO entra no planejamento (inativo = desligado);
@@ -270,9 +274,44 @@ const CrewPlan = {
       .find(item=>String(item.id)===String(projectId));
     return project?U.projLabel(project):'Projeto';
   },
+  /* v4.5.2 — código curto da obra, para a coluna estreita do Gantt impresso.
+     `U.projLabel` é "815 | USF Vila Nova"; o número da proposta é o que ele usa
+     no dia a dia e cabe em 10 mm. A legenda do PDF traz a tradução completa. */
+  projectShort(projectId){
+    const label=String(this.projectLabel(projectId)||'');
+    if(!label) return '';
+    const head=label.split('|')[0].trim();
+    return (head||label).slice(0,7);
+  },
   employeeName(employeeId){
     const employee=this.crewMembers().find(item=>String(item.id)===String(employeeId));
     return employee?String(employee.name||'Colaborador'):'Colaborador';
+  },
+  /* ---------- v4.5.2 — RETRATO DE UMA COLUNA DO GANTT ----------
+     A tela (`cellFor`) e o PDF (`printCell`) montam a MESMA célula com markup
+     diferente. Sem isto, a regra de "essa coluna está alocada / parcial / em
+     conflito" existiria em dois lugares e um dia divergiria. Aqui ela existe
+     uma vez só; lá em cima cada tela só decide como desenhar.
+     ⚠ `active` e `busyDays` contam apenas `activeStatuses` (Planejado). */
+  bucketState(employee,days){
+    const list=(Array.isArray(days)?days:[days]).map(day=>({
+      day,
+      off:!this.activeOn(employee,day),
+      rows:this.allocationsOf(employee&&employee.id,{from:day,to:day,statuses:this.statuses})
+        .filter(row=>day>=row.start&&day<=row.end)
+    }));
+    const active=list.filter(item=>!item.off)
+      .flatMap(item=>item.rows.filter(row=>this.activeStatuses.includes(row.status)));
+    const conflict=list.some(item=>!item.off
+      && item.rows.filter(row=>this.activeStatuses.includes(row.status)).length>1);
+    const offDays=list.filter(item=>item.off).length;
+    const busyDays=list.filter(item=>!item.off
+      && item.rows.some(row=>this.activeStatuses.includes(row.status))).length;
+    const total=list.length;
+    return {days:list,active,conflict,offDays,busyDays,total,
+      partial:busyDays>0&&(busyDays<total-offDays||offDays>0),
+      done:active.length>0&&active.every(row=>row.status==='Concluído'),
+      offList:list.filter(item=>item.off).map(item=>item.day)};
   },
   /* Mapa dia útil -> alocações ativas daquele colaborador naquele dia. */
   occupancyMap(employee,from,to){
@@ -693,20 +732,10 @@ Views.planejamentoequipe = {
       })};
   },
   cellFor(employee,bucket){
-    const rowsByDay=bucket.days.map(day=>({
-      day,
-      off:!CrewPlan.activeOn(employee,day),
-      rows:CrewPlan.allocationsOf(employee.id,{from:day,to:day,statuses:CrewPlan.statuses})
-        .filter(row=>day>=row.start&&day<=row.end)
-    }));
-    const active=rowsByDay.filter(item=>!item.off)
-      .flatMap(item=>item.rows.filter(row=>CrewPlan.activeStatuses.includes(row.status)));
-    const conflict=rowsByDay.some(item=>!item.off
-      && item.rows.filter(row=>CrewPlan.activeStatuses.includes(row.status)).length>1);
-    const offDays=rowsByDay.filter(item=>item.off).length;
-    const busyDays=rowsByDay.filter(item=>!item.off
-      && item.rows.some(row=>CrewPlan.activeStatuses.includes(row.status))).length;
-    const total=rowsByDay.length;
+    /* v4.5.2 — o retrato saiu daqui para `CrewPlan.bucketState()`, que o PDF
+       também consome. O que sobrou nesta função é só o desenho. */
+    const state=CrewPlan.bucketState(employee,bucket.days);
+    const {active,conflict,offDays,busyDays,total}=state;
     if(conflict){
       const obras=[...new Set(active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' × ');
       return `<div class="cp-cell cp-conflict" title="Conflito: ${U.esc(obras)}"><span>Conflito</span></div>`;
@@ -718,14 +747,14 @@ Views.planejamentoequipe = {
       const first=active[0]||{};
       const label=CrewPlan.projectLabel(first.projectId);
       const obras=[...new Set(active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' · ');
-      const partial=busyDays<total-offDays||offDays>0;
-      const done=active.every(row=>row.status==='Concluído');
+      const partial=state.partial;
+      const done=state.done;
       return `<div class="cp-cell cp-busy ${partial?'cp-partial':''} ${done?'cp-done':''}"
         title="${U.esc(obras||label)} — ${busyDays} de ${total} dia(s) útil(eis)${offDays?` · ${offDays} indisponível(eis)`:''}${partial?' · parcial':''}"
         onclick="Views.planejamentoequipe.dayDetail(${U.jsArg(employee.id)},${U.jsArg(bucket.days[0])},${U.jsArg(bucket.days[bucket.days.length-1])})"><span>${U.esc(label)}</span></div>`;
     }
     if(offDays===total){
-      const reason=CrewPlan.offReason(employee,rowsByDay.filter(item=>item.off).map(item=>item.day));
+      const reason=CrewPlan.offReason(employee,state.offList);
       return `<div class="cp-cell cp-off" title="Não conta: ${U.esc(reason.label)}"><span>${U.esc(reason.short)}</span></div>`;
     }
     // Célula livre fica VAZIA de propósito: o objetivo declarado do Gantt é
@@ -843,6 +872,55 @@ Views.planejamentoequipe = {
       .sort((a,b)=>a.start.localeCompare(b.start)
         ||CrewPlan.employeeName(a.employeeId).localeCompare(CrewPlan.employeeName(b.employeeId),'pt-BR'));
   },
+  /* ---------- v4.5.2 — COLUNAS DO GANTT IMPRESSO ----------
+     O papel em PAISAGEM é mais generoso que a coluna da tela: A4 deitado com
+     margem de 9 mm dá 279 mm úteis, então um mês inteiro (22 dias úteis) cabe
+     DIA A DIA. Na tela o limite é 10 dias porque a coluna concorre com o menu
+     lateral e com o celular. Mesma regra de agrupamento, limite diferente —
+     por isso é função nova ao lado de `buckets()`, e não um parâmetro nela. */
+  printBuckets(){
+    const {from,to}=this.period();
+    const days=CrewPlan.businessDayList(from,to);
+    if(!days.length) return {kind:'none',list:[]};
+    if(days.length<=31) return {kind:'day',list:days.map(day=>({key:day,days:[day],
+      label:String(day).slice(8,10),
+      sub:['dom','seg','ter','qua','qui','sex','sáb'][CrewPlan.weekday(day)]}))};
+    const grouped=new Map();
+    const monthly=days.length>140;
+    days.forEach(day=>{
+      const key=monthly?String(day).slice(0,7):(CrewPlan.weekStart(day)||day);
+      if(!grouped.has(key)) grouped.set(key,[]);
+      grouped.get(key).push(day);
+    });
+    return {kind:monthly?'month':'week',
+      list:[...grouped.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([key,list],index)=>{
+        const first=list[0], last=list[list.length-1];
+        return {key,days:list,
+          label:monthly
+            ?new Date(`${key}-01T00:00:00Z`).toLocaleDateString('pt-BR',{month:'short',timeZone:'UTC'})
+            :`SEM ${index+1}`,
+          sub:monthly?String(key).slice(0,4)
+            :`${String(first).slice(8,10)}–${String(last).slice(8,10)}`};
+      })};
+  },
+  /* A célula do Gantt impresso. Mesmo retrato da tela (`CrewPlan.bucketState`),
+     markup próprio: `<td>` em vez de `<div>`, sem onclick, e o texto carrega a
+     informação para o caso de sair impresso em preto e branco — o código da
+     obra, "!" no conflito, "//" fora do vínculo. A borda também sobrevive:
+     o Chrome só descarta o FUNDO quando "Gráficos de plano de fundo" está
+     desmarcado, nunca a borda nem a cor do texto. */
+  printCell(employee,bucket){
+    const state=CrewPlan.bucketState(employee,bucket.days);
+    if(state.conflict)
+      return `<td class="cpg-cell cpg-conflict" title="Conflito">!</td>`;
+    if(state.busyDays){
+      const code=CrewPlan.projectShort((state.active[0]||{}).projectId);
+      return `<td class="cpg-cell ${state.partial?'cpg-partial':'cpg-alloc'}">${U.esc(code)}</td>`;
+    }
+    if(state.offDays===state.total)
+      return `<td class="cpg-cell cpg-off">//</td>`;
+    return `<td class="cpg-cell"></td>`;
+  },
   async printPlan(){
     const {from,to}=this.period();
     const rows=this.planRows();
@@ -856,6 +934,7 @@ Views.planejamentoequipe = {
       });
       return map;
     };
+    const crew=this.crew();
     const byProject=group(rows,'projectId');
     const byEmployee=group(rows,'employeeId');
     /* Um PDF que manda a mesma pessoa para duas obras no mesmo dia sem avisar é
@@ -889,6 +968,38 @@ Views.planejamentoequipe = {
         <div><small>Emitido em</small><b>${new Date().toLocaleDateString('pt-BR')}</b></div>
       </div>
       ${conflicted.size?`<p class="crewplan-print-alert"><b>⚠ ${conflicted.size} alocação(ões) em conflito.</b> O mesmo colaborador aparece em duas obras no mesmo dia — as linhas marcadas precisam ser resolvidas antes de valer como escala.</p>`:''}
+      ${(()=>{
+        const buckets=this.printBuckets();
+        if(!buckets.list.length||!crew.length) return '';
+        return `<section class="crewplan-print-chart">
+          <div class="crewplan-print-legend">
+            <span><i class="cpg-chip cpg-alloc"></i>Alocado</span>
+            <span><i class="cpg-chip cpg-partial"></i>Parcial</span>
+            <span><i class="cpg-chip cpg-conflict"></i>Conflito (!)</span>
+            <span><i class="cpg-chip cpg-off"></i>Férias / sem vínculo (//)</span>
+            <span><i class="cpg-chip"></i>Livre</span>
+            <span class="cpg-keys"><b>Obras:</b> ${[...byProject.keys()]
+              .sort((a,b)=>CrewPlan.projectLabel(a).localeCompare(CrewPlan.projectLabel(b),'pt-BR'))
+              .map(id=>{
+                const full=String(CrewPlan.projectLabel(id)||'');
+                const rest=full.includes('|')?full.split('|').slice(1).join('|').trim():full;
+                return `<i>${U.esc(CrewPlan.projectShort(id))}</i> ${U.esc(rest||full)}`;
+              })
+              .join(' · ')}</span>
+          </div>
+          <table class="crewplan-print-gantt">
+            <thead>
+              <tr><th class="cpg-name" rowspan="2">Colaborador</th>${buckets.list.map(bucket=>`<th>${U.esc(bucket.label)}</th>`).join('')}</tr>
+              <tr>${buckets.list.map(bucket=>`<th class="cpg-sub">${U.esc(bucket.sub||'')}</th>`).join('')}</tr>
+            </thead>
+            <tbody>${crew.map(employee=>`<tr>
+              <th class="cpg-name"><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small></th>
+              ${buckets.list.map(bucket=>this.printCell(employee,bucket)).join('')}
+            </tr>`).join('')}</tbody>
+          </table>
+          <small class="crewplan-print-note">Somente dias úteis (segunda a sexta) — sábados e domingos não aparecem e não consomem capacidade. Uma linha sem nenhuma célula colorida é um colaborador ocioso no período inteiro.</small>
+        </section>`;
+      })()}
       ${[...byProject.entries()]
         .sort((a,b)=>CrewPlan.projectLabel(a[0]).localeCompare(CrewPlan.projectLabel(b[0]),'pt-BR'))
         .map(([projectId,list])=>`<section class="crewplan-print-project">
@@ -928,7 +1039,7 @@ Views.planejamentoequipe = {
             }).join('')}</tbody>
         </table>
       </section>
-      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}. Somente dias úteis (segunda a sexta) — sábados e domingos não consomem capacidade.</footer>`;
+      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}. Para as cores saírem no papel, marque <b>“Gráficos de plano de fundo”</b> na janela de impressão — sem isso, o contorno e o código da obra continuam legíveis em preto e branco.</footer>`;
     document.body.appendChild(report);
     UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
     await Exports.beginPrint('printing-crewplan',report);

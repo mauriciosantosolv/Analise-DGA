@@ -1,0 +1,57 @@
+/**
+ * Campos em aparelho de toque (mobile-forms.css) — v4.5.2
+ *
+ * Responsabilidades:
+ * - impedir o zoom automático do iOS ao focar um campo (e que ele não desfaz)
+ *
+ * Dependências:
+ * - nenhuma. É o ÚLTIMO arquivo do <head>, de propósito.
+ *
+ * Não modificar:
+ * - a ordem no index.html. Este arquivo precisa vir DEPOIS de rdo.css,
+ *   panel-tv.css e equipe.css, senão as regras com classe daqueles arquivos
+ *   ganham desta por especificidade e o zoom volta.
+ *
+ * POR QUE ISTO EXISTE
+ * -------------------
+ * O Safari do iPhone dá zoom sozinho quando o campo que recebeu o foco tem
+ * fonte menor que 16px — e, ao sair do campo, NÃO desfaz o zoom. O usuário fica
+ * com a tela ampliada e precisa dar pinça para voltar.
+ *
+ * `css/components.css` já tinha `input,select,textarea{font-size:16px}` dentro
+ * de `@media(max-width:860px)`, e ele resolve a maior parte do sistema. O que
+ * escapava eram as regras com CLASSE, que ganham da regra genérica por
+ * especificidade — medido em 10/09/2026 num viewport de iPhone (390px):
+ *
+ *   .tv-filter-bar select          →  9,9px   ← dava zoom
+ *   .tv-filter-bar input[search]   →  9,5px   ← dava zoom
+ *   .tv-field-date-bar input       →  9,9px   ← dava zoom
+ *
+ * Formulário de cadastro, filtros do Dashboard, filtros do Planejamento, login,
+ * busca e o assistente já estavam em 16px e NÃO davam zoom.
+ *
+ * `(pointer:coarse)` restringe a aparelho de toque, e `max-width:860px` deixa
+ * de fora o Painel/TV rodando numa TV ou monitor — a tela de parede continua
+ * com o tamanho de fonte homologado. Num aparelho de toque MAIOR que 860px
+ * (tablet em paisagem) quem segura é a trava de viewport em `utils/helpers.js`.
+ *
+ * Nada de `user-scalable=no` nem `maximum-scale` fixo no <head>: isso mataria a
+ * pinça de zoom do sistema inteiro, que é recurso de acessibilidade.
+ */
+
+@media (max-width:860px) and (pointer:coarse){
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea{
+    /* 16px é o limiar exato do iOS. Abaixo disso ele amplia; a partir daí, não.
+       `!important` porque o alvo são justamente as regras com classe que ganham
+       da regra genérica de components.css. */
+    font-size:16px!important;
+  }
+  /* A altura fixa daqueles campos foi calculada para uma fonte de ~10px; com
+     16px o texto encostaria na borda. Só no celular, e só neles. */
+  .tv-filter-bar select,
+  .tv-filter-bar input[type="search"],
+  .tv-field-date-bar input{height:auto;min-height:34px;padding-top:5px;padding-bottom:5px}
+  .tv-field-date-bar input{width:100%}
+}

@@ -274,3 +274,59 @@ document.addEventListener('keydown', e => {
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); document.getElementById('global-search').focus(); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='d'){ e.preventDefault(); App.toggleTheme(); }
 });
+
+/* ============================================================================
+   v4.5.2 — TRAVA DE ZOOM AO FOCAR UM CAMPO (iOS / PWA)
+
+   O Safari do iPhone amplia a página sozinho quando o campo focado tem fonte
+   menor que 16px, e ao sair do campo NÃO desfaz: o usuário fica com a tela
+   ampliada e precisa dar pinça para voltar.
+
+   A correção principal é de CSS (`css/mobile-forms.css`, fonte de 16px). Esta
+   aqui é o cinto de segurança para o que escapar dela — um campo novo, um
+   aparelho de toque acima de 860px, uma fonte menor que alguém acrescente
+   depois.
+
+   Como funciona: enquanto um campo está focado, o viewport fica com
+   `maximum-scale=1` (o iOS não tem como ampliar). Ao sair do campo, o atributo
+   volta ao original — e é justamente essa troca de volta que faz o iOS
+   reavaliar e devolver a escala para 1, desfazendo um zoom que já tenha
+   acontecido.
+
+   ⚠ NÃO fixar `maximum-scale`/`user-scalable=no` no <head>: isso mataria a
+   pinça de zoom do sistema inteiro, que é recurso de acessibilidade. Aqui a
+   trava dura só enquanto o campo está em edição.
+
+   Em Android e no desktop isto é inócuo: nenhum dos dois amplia ao focar.
+   ============================================================================ */
+(function(){
+  const meta = document.querySelector('meta[name="viewport"]');
+  if(!meta) return;
+  const base = meta.getAttribute('content') || 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+  // Se alguém já tiver posto maximum-scale no <head>, não sobrescrever o que veio.
+  if(/maximum-scale/i.test(base)) return;
+  const locked = base + ', maximum-scale=1';
+  const isField = target => {
+    const tag = target && target.tagName;
+    if(tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') return false;
+    const type = String((target.getAttribute && target.getAttribute('type')) || 'text').toLowerCase();
+    return !['checkbox','radio','range','hidden','button','submit','reset','file','color'].includes(type);
+  };
+  let restore = null;
+  document.addEventListener('focusin', event => {
+    if(!isField(event.target)) return;
+    if(restore){ clearTimeout(restore); restore = null; }
+    if(meta.getAttribute('content') !== locked) meta.setAttribute('content', locked);
+  }, true);
+  document.addEventListener('focusout', event => {
+    if(!isField(event.target)) return;
+    if(restore) clearTimeout(restore);
+    // O respiro evita a troca dupla quando o foco pula de um campo para o
+    // seguinte (Tab, ou "Avançar" do teclado do iOS).
+    restore = setTimeout(() => {
+      restore = null;
+      if(document.activeElement && isField(document.activeElement)) return;
+      meta.setAttribute('content', base);
+    }, 120);
+  }, true);
+})();

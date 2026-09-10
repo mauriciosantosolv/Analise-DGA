@@ -1,5 +1,5 @@
 /**
- * Planejamento de Colaboradores (equipe.css) — v4.5.1
+ * Planejamento de Colaboradores (equipe.css) — v4.5.2
  *
  * Responsabilidades:
  * - filtros, linha do tempo (Gantt/matriz), visões Disponibilidade e Capacidade
@@ -232,9 +232,12 @@
    ===================================================================== */
 #crewplan-print-report{display:none}
 
+/* v4.5.2 — PAISAGEM. O relatório é um Gantt: em retrato as colunas de dia
+   ficam com 6 mm e o código da obra não cabe. Deitado, a área útil vai de
+   186 mm para 279 mm e um mês inteiro entra dia a dia. */
 @page crewplan-report{
-  size:A4 portrait;
-  margin:12mm;
+  size:A4 landscape;
+  margin:9mm;
 }
 
 @media print{
@@ -253,7 +256,7 @@
   .crewplan-print-head span{margin-top:2px;color:#52525b;font-size:8px}
   .crewplan-print-period{align-items:flex-end;text-align:right}
   .crewplan-print-period b{font-size:12px}
-  .crewplan-print-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:11px 0}
+  .crewplan-print-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:9px 0}
   .crewplan-print-facts>div{display:flex;flex-direction:column;padding:7px 8px;border:1px solid #e4e4e7;border-radius:7px;background:#fafafa}
   .crewplan-print-facts small{color:#71717a;font-size:7px}
   .crewplan-print-facts b{margin-top:2px;font-size:10px}
@@ -267,6 +270,43 @@
   .crewplan-print-table th{background:#f4f4f5;color:#52525b;font-size:7px;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}
   .crewplan-print-table td.num,.crewplan-print-table th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   .crewplan-print-table thead{display:table-header-group}
+  /* ---------- Gantt impresso ----------
+     ⚠ O Chrome descarta `background` quando "Gráficos de plano de fundo" está
+     desmarcado na janela de impressão, mas NUNCA a borda nem a cor do texto.
+     Por isso cada estado carrega os três: fundo (bônus), borda e texto. Assim
+     o gráfico continua legível em preto e branco. */
+  .crewplan-print-chart{margin-top:4px;break-inside:auto}
+  .crewplan-print-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-bottom:6px;color:#52525b;font-size:6.6px}
+  .crewplan-print-legend>span{display:inline-flex;align-items:center;gap:4px}
+  .cpg-chip{display:inline-block;width:9px;height:7px;border:1px solid #a1a1aa;background:#fff}
+  .cpg-keys{color:#3f3f46}
+  .cpg-keys i{display:inline-block;padding:0 3px;border:1px solid #4338ca;color:#4338ca;font-style:normal;font-weight:800}
+  .crewplan-print-gantt{width:100%;table-layout:fixed;border-collapse:collapse;font-size:6.2px}
+  .crewplan-print-gantt th,.crewplan-print-gantt td{padding:1px;border:1px solid #d4d4d8;overflow:hidden;text-align:center;vertical-align:middle}
+  .crewplan-print-gantt thead th{background:#f4f4f5;color:#3f3f46;font-size:6.2px;font-weight:800}
+  .crewplan-print-gantt thead th.cpg-sub{color:#71717a;font-size:5px;font-weight:600;text-transform:uppercase}
+  .crewplan-print-gantt th.cpg-name{width:46mm;padding:2px 5px;background:#fff;text-align:left}
+  .crewplan-print-gantt thead th.cpg-name{background:#f4f4f5;vertical-align:bottom}
+  .crewplan-print-gantt tbody th.cpg-name b{display:block;overflow:hidden;color:#18181b;font-size:6.8px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+  .crewplan-print-gantt tbody th.cpg-name small{display:block;overflow:hidden;color:#71717a;font-size:5.4px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+  .crewplan-print-gantt thead{display:table-header-group}
+  .crewplan-print-gantt tr{break-inside:avoid;page-break-inside:avoid}
+  .cpg-cell{height:5.4mm;color:#d4d4d8;font-size:6px;font-weight:800;letter-spacing:-.02em}
+  .crewplan-print-gantt td.cpg-alloc{border-color:#4338ca;background:#eef2ff;color:#4338ca}
+  .crewplan-print-gantt td.cpg-partial{border:1px dashed #b45309;background:#fffbeb;color:#b45309}
+  .crewplan-print-gantt td.cpg-conflict{border-color:#b91c1c;background:#fee2e2;color:#b91c1c;font-size:7.5px}
+  .crewplan-print-gantt td.cpg-off{background:#f4f4f5;color:#a1a1aa}
+  .cpg-chip.cpg-alloc{border-color:#4338ca;background:#eef2ff}
+  .cpg-chip.cpg-partial{border:1px dashed #b45309;background:#fffbeb}
+  .cpg-chip.cpg-conflict{border-color:#b91c1c;background:#fee2e2}
+  .cpg-chip.cpg-off{border-color:#a1a1aa;background:#f4f4f5}
+  .crewplan-print-note{display:block;margin-top:5px;color:#71717a;font-size:6px}
+  /* ⚠ Nada de `break-before:page` no detalhe por obra. Duas razões: num
+     planejamento pequeno o Gantt e o detalhe cabem na MESMA folha, e forçar a
+     página 2 desperdiçaria papel; e `.crewplan-print-project:first-of-type` nem
+     casaria — `:first-of-type` olha o TIPO do elemento (`section`), e o
+     primeiro `<section>` do relatório é o do gráfico, não o da obra.
+     O `break-inside:avoid` de cada seção já impede a quebra feia. */
   .crewplan-print-alert{margin:0 0 10px;padding:6px 8px;border:1px solid #f5c2c7;border-radius:6px;background:#fdf2f2;color:#842029;font-size:7.5px}
   .crewplan-print-warn{color:#b02a37;white-space:nowrap}
   #crewplan-print-report>footer{margin-top:10px;padding-top:6px;border-top:1px solid #e4e4e7;color:#71717a;font-size:6px;text-align:center}
