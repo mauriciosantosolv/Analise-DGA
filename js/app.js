@@ -354,10 +354,11 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.5.4 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.5.4 · dados locais';
+      el.textContent=`v4.5.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.5.5 · dados locais';
   },
   showCloudLogin(){
+    this.bootShield('auth-gate');
     const old=document.getElementById('cloud-login'); if(old) old.remove();
     const el=document.createElement('div'); el.id='cloud-login'; el.className='cloud-login';
     el.innerHTML=`<div class="cloud-login-card">
@@ -525,8 +526,20 @@ const App = {
 
   _booted:false,
   // Tela de recuperação: qualquer falha de carregamento vira uma mensagem clara com ações
+  /* v4.5.5 — porta única da trava de boot (ver css/auth.css).
+     `'auth-gate'` = login na tela, sistema escondido atrás.
+     `null` = pode mostrar o sistema. **Todo caminho que termina em tela tem
+     que passar por aqui**, senão a página fica invisível até a rede de
+     segurança de 20 s do `index.html`. */
+  bootShield(state){
+    const root=document.documentElement;
+    if(!root||!root.classList) return;
+    root.classList.remove('boot-shield','auth-gate');
+    if(state) root.classList.add(state);
+  },
   fatal(err){
     try{ UI.loading(false); }catch(e){}
+    try{ this.bootShield(null); }catch(e){}
     const msg = (err && (err.message || err.toString())) || 'Erro desconhecido';
     let el = document.getElementById('fatal-screen');
     if(!el){ el = document.createElement('div'); el.id = 'fatal-screen'; document.body.appendChild(el); }
@@ -714,6 +727,9 @@ const App = {
     }
     // A preferência navCollapsed salva em versões anteriores é ignorada de
     // propósito: o menu no desktop agora é sempre visível (estabilidade).
+    /* Só aqui o sistema pode aparecer: sessão confirmada, base sincronizada e
+       a primeira tela prestes a ser desenhada. */
+    this.bootShield(null);
     const initialView=this.initHistory();
     this.go(initialView,{history:false});
     // v4.2.10 - aviso de boas-vindas removido a pedido do usuario.

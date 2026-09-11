@@ -41,6 +41,7 @@ const AuthUI = (() => {
         <button class="btn btn-primary cloud-auth-submit" type="submit">Entrar<i data-lucide="arrow-right"></i></button>
       </form>
       <button class="cloud-auth-link" data-mode="recover" type="button">Esqueci minha senha</button>
+      <p class="cloud-auth-hint"><i data-lucide="info"></i><span>Entrou por convite e nunca criou uma senha? Use <b>Esqueci minha senha</b> — o link do e-mail deixa você definir uma.</span></p>
       <div class="cloud-auth-divider"><span>ou</span></div>
       <p class="cloud-auth-switch">Ainda não possui conta? <button class="cloud-auth-signup" data-mode="signup" type="button">Criar uma conta</button></p>`);
   }
@@ -56,6 +57,21 @@ const AuthUI = (() => {
         <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="user-plus"></i>Criar conta</button>
       </form>
       <p class="cloud-auth-note"><i data-lucide="mail-check"></i>Você poderá precisar confirmar o endereço pelo e-mail recebido.</p>`);
+  }
+  /* ---------- v4.5.5 — A TELA QUE FALTAVA NO CONVITE ----------
+     O link do convite entrega uma SESSÃO VÁLIDA e nenhuma senha. Sem esta
+     tela, a pessoa entrava direto, usava o sistema, saía — e não voltava mais:
+     o login pede uma senha que nunca chegou a existir, e a única porta que
+     restava era "Criar uma conta". Aqui ela define a senha ANTES de entrar. */
+  function invite(message='',messageType='error'){
+    return shell(`<div class="cloud-auth-heading"><h2>Crie sua senha</h2><p>Seu acesso já está liberado. Defina uma senha para poder entrar sozinho das próximas vezes.</p></div>
+      <form id="cloud-auth-form" class="cloud-auth-form">
+        <label>Senha<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres"></label>
+        <label>Confirmar senha<input id="cloud-password-confirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repita a senha"></label>
+        ${feedback(message,messageType)}
+        <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="key-round"></i>Criar senha e entrar</button>
+      </form>
+      <p class="cloud-auth-note"><i data-lucide="shield-check"></i>O link do e-mail vale uma vez só. Com a senha criada, você entra pela tela normal sempre que precisar.</p>`);
   }
   function recover(message='',messageType='error'){
     return shell(`<button class="cloud-auth-back" data-mode="login" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
@@ -82,9 +98,12 @@ const AuthUI = (() => {
     if(busy) btn.textContent=label;
   }
   function show(mode='login',message='',messageType='error'){
+    /* v4.5.5 — enquanto qualquer tela de autenticação estiver no ar, o sistema
+       fica escondido atrás dela. Ver a trava de boot em css/auth.css. */
+    try{ if(typeof App!=='undefined'&&typeof App.bootShield==='function') App.bootShield('auth-gate'); }catch(e){}
     const old=document.getElementById('cloud-login'); if(old) old.remove();
     const el=document.createElement('div'); el.id='cloud-login'; el.className='cloud-login';
-    const views={login,signup,recover,reset};
+    const views={login,signup,recover,reset,invite};
     el.innerHTML=(views[mode]||login)(message,messageType);
     document.body.appendChild(el);
     el.querySelectorAll('[data-mode]').forEach(btn=>btn.onclick=()=>show(btn.dataset.mode));
@@ -127,6 +146,14 @@ const AuthUI = (() => {
           await Cloud.resetPassword(el.querySelector('#cloud-email').value.trim());
           display('Caso exista uma conta com este e-mail, o link de recuperação será enviado.','success');
           setBusy(form,false,'Enviar link');
+        }else if(mode==='invite'){
+          const password=el.querySelector('#cloud-password').value;
+          if(password!==el.querySelector('#cloud-password-confirm').value) throw new Error('As senhas não são iguais.');
+          setBusy(form,true,'Criando senha…');
+          await Cloud.updatePassword(password);
+          /* Ao contrário do 'reset', aqui NÃO se desconecta: ela acabou de vir
+             do e-mail e já tem sessão válida. Escolha dele: entra direto. */
+          location.reload();
         }else if(mode==='reset'){
           const password=el.querySelector('#cloud-password').value;
           if(password!==el.querySelector('#cloud-password-confirm').value) throw new Error('As senhas não são iguais.');
@@ -137,7 +164,7 @@ const AuthUI = (() => {
         }
       }catch(err){
         display(friendlyError(err));
-        setBusy(form,false,mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link':'Salvar nova senha');
+        setBusy(form,false,mode==='login'?'Entrar':mode==='signup'?'Criar conta':mode==='recover'?'Enviar link':mode==='invite'?'Criar senha e entrar':'Salvar nova senha');
         U.icons();
       }
     };
@@ -156,6 +183,16 @@ const AuthUI = (() => {
         const callback=await Cloud.consumeAuthCallback();
         if(callback && callback.error){ try{ UI.loading(false); }catch(e){} AuthUI.show('login',AuthUI.friendlyError(callback.error)); return; }
         if(callback && callback.type==='recovery'){ try{ UI.loading(false); }catch(e){} AuthUI.show('reset'); return; }
+        /* v4.5.5 — o convite também precisa de porta. O `type=invite` vinha
+           caindo aqui e seguindo direto para o sistema, deixando a conta SEM
+           senha para sempre. Só 'invite': o 'signup' (confirmação de e-mail) e o
+           'email_change' vêm de quem JÁ tem senha, e pedir uma nova ali seria
+           trocar a senha de quem não pediu. */
+        if(callback && callback.type==='invite' && callback.user){
+          try{ UI.loading(false); }catch(e){}
+          AuthUI.show('invite');
+          return;
+        }
       }
     }catch(err){ try{ UI.loading(false); }catch(e){} AuthUI.show('login',AuthUI.friendlyError(err)); return; }
     await originalInit();

@@ -1,5 +1,25 @@
 /* CliqueObras v4.2.15 — login sóbrio em tela dividida, sem cartão externo */
+/* ---------- v4.5.5 — TRAVA DE BOOT ----------
+   O `#app` inteiro está no HTML estático, então o navegador PINTA o sistema
+   antes de o JS descobrir se há sessão. Medido no boot real: **245 ms** de tela
+   interna exposta entre o fim do carregamento (`UI.loading(false)`) e a chegada
+   do login — e numa conexão real é mais, porque a sessão é renovada na rede.
+   `boot-shield` esconde o `#app` E força a tela de carregamento desde a
+   PRIMEIRA pintura (sem depender de o JS pôr a classe `.open`).
+   `auth-gate` mantém só o `#app` escondido enquanto o login está na tela.
+   ⚠ `visibility:hidden`, não `display:none`: o layout continua sendo calculado,
+   então nada que meça elemento durante o boot passa a medir zero. */
+html.boot-shield #app,html.auth-gate #app{visibility:hidden}
+html.boot-shield .loading-overlay{display:flex}
+
 .cloud-login{position:fixed;inset:0;z-index:900;overflow:auto;background:#f7f8f9;color:#111c28}
+/* ⚠ `display:flex` transforma CADA filho em item — inclusive o `<b>` no meio
+   da frase, que vira uma coluna própria e quebra o texto em três pedaços.
+   Por isso a frase inteira vai dentro de UM `<span>`: os itens do flex passam a
+   ser dois (ícone + texto), e aí o `<b>` volta a ser texto em negrito. */
+.cloud-auth-hint{display:flex;align-items:flex-start;gap:7px;margin-top:10px;color:#5b6b7c;font-size:.78rem;line-height:1.35;text-align:left}
+.cloud-auth-hint>svg{width:14px;height:14px;flex:0 0 auto;margin-top:2px}
+.cloud-auth-hint>span{min-width:0}
 .cloud-auth-shell{width:100%;min-height:100dvh;display:grid;grid-template-columns:minmax(480px,1.09fr) minmax(420px,.91fr);background:#f7f8f9}
 
 .cloud-auth-hero{position:relative;isolation:isolate;overflow:hidden;min-height:100dvh;padding:clamp(38px,5vw,74px);display:flex;flex-direction:column;color:#fff;background:linear-gradient(155deg,rgba(7,25,42,.55) 0%,rgba(7,24,41,.72) 52%,rgba(4,15,27,.92) 100%),url('../assets/login-obra.jpg') center 58%/cover no-repeat}

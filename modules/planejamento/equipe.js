@@ -283,6 +283,21 @@ const CrewPlan = {
     const head=label.split('|')[0].trim();
     return (head||label).slice(0,7);
   },
+  /* ---------- v4.5.5 — O CLIENTE DA OBRA ----------
+     Metade das obras dele se chama "FORNECIMENTO DE MÃO DE OBRA (HH)": o nome
+     não distingue nada e ainda saía truncado na célula. O CLIENTE distingue.
+     `project.client` é texto livre no cadastro de Projetos (não é id).
+     ⚠ Sem cliente preenchido, cai no nome da obra — a célula nunca fica com o
+     código sozinho e nada piora para quem não cadastrou cliente. */
+  projectClient(projectId){
+    if(!projectId) return '';
+    const list=(typeof State!=='undefined'&&Array.isArray(State.projects))?State.projects:[];
+    const project=list.find(item=>String(item.id)===String(projectId));
+    const client=String((project&&project.client)||'').trim();
+    if(client) return client;
+    const label=String(this.projectLabel(projectId)||'');
+    return label.includes('|')?label.split('|').slice(1).join('|').trim():label;
+  },
   employeeName(employeeId){
     const employee=this.crewMembers().find(item=>String(item.id)===String(employeeId));
     return employee?String(employee.name||'Colaborador'):'Colaborador';
@@ -803,7 +818,10 @@ Views.planejamentoequipe = {
          saltar por cima da cor da obra. Sem `palette` (chamada de duas vias), a
          classe sai vazia e a célula volta ao azul da v4.5.1. */
       const first=active[0]||{};
-      const label=CrewPlan.projectLabel(first.projectId);
+      /* v4.5.5 — "877.09 · PETROBRAS" no lugar de
+         "877.09 | FORNECIMENTO DE MÃO D…". O rótulo completo continua no balão. */
+      const label=[CrewPlan.projectShort(first.projectId),CrewPlan.projectClient(first.projectId)]
+        .filter(Boolean).join(' · ');
       const obras=[...new Set(active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' · ');
       const partial=state.partial;
       const done=state.done;
@@ -950,11 +968,10 @@ Views.planejamentoequipe = {
   projectKeyMarkup(palette,prefix){
     return [...palette.keys()]
       .sort((a,b)=>CrewPlan.projectLabel(a).localeCompare(CrewPlan.projectLabel(b),'pt-BR'))
-      .map(id=>{
-        const full=String(CrewPlan.projectLabel(id)||'');
-        const rest=full.includes('|')?full.split('|').slice(1).join('|').trim():full;
-        return `<i class="${prefix}-key ${CrewPlan.paletteClass(id,palette,prefix)}">${U.esc(CrewPlan.projectShort(id))}</i> ${U.esc(rest||full)}`;
-      }).join(' \u00b7 ');
+      /* v4.5.5 — "877.09 PETROBRAS", e não mais o nome da obra: era ele que
+         fazia a legenda ocupar duas linhas e não dizia qual obra era qual. */
+      .map(id=>`<i class="${prefix}-key ${CrewPlan.paletteClass(id,palette,prefix)}">${U.esc(CrewPlan.projectShort(id))}</i> ${U.esc(CrewPlan.projectClient(id))}`)
+      .join(' \u00b7 ');
   },
   /* ---------- v4.5.2 — COLUNAS DO GANTT IMPRESSO ----------
      O papel em PAISAGEM é mais generoso que a coluna da tela: A4 deitado com
@@ -1102,8 +1119,12 @@ Views.planejamentoequipe = {
        as três seções ocupavam da folha 2 em diante e disputavam o espaço que
        agora é do gráfico. O que sobrou do cabeçalho é uma linha: sem empresa,
        período e data, o PDF que circula no grupo não diz de que semana é. */
+    /* v4.5.5 — conta o texto que a legenda REALMENTE leva agora (código +
+       cliente). Contar o rótulo antigo reservaria linha de legenda a mais e
+       roubaria altura do gráfico. */
     const legendChars=[...palette.keys()]
-      .reduce((soma,id)=>soma+String(CrewPlan.projectLabel(id)||'').length+4,0);
+      .reduce((soma,id)=>soma+String(CrewPlan.projectShort(id)).length
+        +String(CrewPlan.projectClient(id)||'').length+4,0);
     const metrics=this.printMetrics({rows:crew.length,cols:buckets.list.length,
       projects:palette.size,legendChars,alert:conflicted.size>0});
     if(metrics.tight) report.classList.add('cpg-tight');
