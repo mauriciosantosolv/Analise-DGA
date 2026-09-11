@@ -107,9 +107,12 @@ assert.equal(livre.busyDays, 0);
 assert.equal(livre.offDays, 0);
 
 // nem a tela nem o PDF podem remontar a regra por conta própria
-assert.match(source, /cellFor\(employee,bucket\)\{[\s\S]{0,400}CrewPlan\.bucketState\(employee,bucket\.days\)/,
+/* ⚠ v4.5.4 acrescentou um 3º parâmetro OPCIONAL (`palette`) às duas. O que
+   este teste guarda é outra coisa: que nenhuma das duas remonte a regra de
+   "essa coluna está alocada/parcial/em conflito" por conta própria. */
+assert.match(source, /cellFor\(employee,bucket(?:,palette)?\)\{[\s\S]{0,400}CrewPlan\.bucketState\(employee,bucket\.days\)/,
   'cellFor tem que consumir bucketState');
-assert.match(source, /printCell\(employee,bucket\)\{[\s\S]{0,200}CrewPlan\.bucketState\(employee,bucket\.days\)/,
+assert.match(source, /printCell\(employee,bucket(?:,palette)?\)\{[\s\S]{0,200}CrewPlan\.bucketState\(employee,bucket\.days\)/,
   'printCell tem que consumir bucketState');
 
 /* ================= 2. colunas do Gantt impresso ================= */

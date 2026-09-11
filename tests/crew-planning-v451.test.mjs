@@ -176,9 +176,13 @@ assert.equal(context.RDO.crewActiveOn(byId('e8'), '2024-01-08'), true);
 assert.equal(context.RDO.crewActiveOn(byId('e9'), '2020-01-02'), false);
 
 /* ================= 6. CORES E ESCALA (lidas do código de verdade) ================= */
-// A célula do Gantt não pode mais tirar a cor da obra.
-assert.equal(source.includes('App.projectColor'), false,
-  'a cor da célula não pode mais vir da obra (item 2 do pedido)');
+/* ⚠ v4.5.4 — a cor da célula VOLTOU a ser a da obra, a pedido dele. O que a
+   v4.5.1 tirou e continua proibido é a FONTE antiga: o helper de cor indexado
+   por posição em `State.projects` (apagar uma obra reembaralhava todas as
+   cores) e a injeção inline de `--cp-color`. A cor da v4.5.4 vem por CLASSE,
+   de um hash do ID da obra — prova disso no `crew-project-colors`. */
+assert.equal(source.includes('App' + '.projectColor'), false,
+  'a cor não pode voltar a sair do helper por posição do js/app.js');
 assert.equal(source.includes('--cp-color:${'), false,
   'nenhuma cor de obra é mais injetada inline');
 

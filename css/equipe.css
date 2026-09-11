@@ -59,15 +59,69 @@
 .cp-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-cell.cp-free{background:var(--bg);color:var(--text3);border-style:dashed}
 .cp-cell.cp-off{background:var(--color-status-nontargeted-bg);color:var(--color-status-nontargeted-text)}
-/* v4.5.1 — a cor da célula NÃO vem mais da obra (era `--cp-color`, vindo de
-   App.projectColor). Ela informa a SITUAÇÃO do colaborador e é a mesma em
-   qualquer obra: azul alocado, amarelo parcial, vermelho conflito. */
+/* v4.5.1 — a cor da célula deixou de vir da obra (era `--cp-color`, injetado
+   inline a partir da posição no cadastro) e passou a informar a SITUAÇÃO.
+   v4.5.4 — a cor da obra voltou, por CLASSE (`.cp-obra-N`, mais abaixo), presa
+   ao ID da obra. As regras daqui viraram o padrão de quando não há paleta. */
 .cp-cell.cp-busy{cursor:pointer;background:var(--indigo-soft);color:var(--indigo);border-color:var(--indigo)}
 .cp-cell.cp-busy:hover{background:color-mix(in srgb,var(--indigo) 22%,transparent)}
 .cp-cell.cp-busy.cp-partial{background:var(--amber-soft);color:var(--amber);border-color:var(--amber);border-style:dashed}
 .cp-cell.cp-busy.cp-partial:hover{background:color-mix(in srgb,var(--amber) 22%,transparent)}
 .cp-cell.cp-busy.cp-done{opacity:.55}
 .cp-cell.cp-conflict{background:var(--red-soft);color:var(--red);border-color:var(--red);font-weight:700}
+
+/* ===== v4.5.4 — UMA COR POR OBRA =====
+   Dez matizes separados no círculo cromático, todos em versão suave: o fundo
+   quase branco e o contorno/texto na versão escura do mesmo matiz. Assim oito
+   obras lado a lado se distinguem sem o Gantt virar vitral.
+   ⚠ NÃO há vermelho nem cinza na paleta: são de Conflito e Férias, que são
+   ESTADO e continuam vencendo a cor da obra. O slot vem de
+   `CrewPlan.projectPalette` (hash do ID da obra), nunca da posição no cadastro.
+   ⚠ As regras abaixo vêm DEPOIS de `.cp-busy.cp-partial` de propósito: têm a
+   mesma especificidade (3 classes) e sobrescrevem cor/fundo/contorno, mas não
+   declaram `border-style` — então o TRACEJADO do parcial sobrevive. */
+:root{
+  --cp-obra-0:#4338CA;   --cp-obra-0-soft:#EEF2FF;   /* indigo */
+  --cp-obra-1:#15803D;   --cp-obra-1-soft:#F0FDF4;   /* verde */
+  --cp-obra-2:#A21CAF;   --cp-obra-2-soft:#FDF4FF;   /* fucsia */
+  --cp-obra-3:#3F6212;   --cp-obra-3-soft:#F7FEE7;   /* limao */
+  --cp-obra-4:#1E40AF;   --cp-obra-4-soft:#EFF6FF;   /* marinho */
+  --cp-obra-5:#A16207;   --cp-obra-5-soft:#FEFCE8;   /* ocre */
+  --cp-obra-6:#0369A1;   --cp-obra-6-soft:#F0F9FF;   /* azul */
+  --cp-obra-7:#0F766E;   --cp-obra-7-soft:#F0FDFA;   /* teal */
+  --cp-obra-8:#155E75;   --cp-obra-8-soft:#ECFEFF;   /* petroleo */
+}
+.cp-chip.cp-chip-partial{background:var(--bg);border-color:var(--text3);border-style:dashed}
+.cp-legend-keys{margin-top:-6px;gap:6px 14px;font-size:.74rem}
+.cp-legend-keys b{color:var(--text2)}
+.cp-obra-key{display:inline-block;padding:0 4px;border:1px solid currentColor;border-radius:3px;font-style:normal;font-weight:800;font-size:.7rem}
+.cp-cell.cp-busy.cp-obra-0{background:var(--cp-obra-0-soft);color:var(--cp-obra-0);border-color:var(--cp-obra-0)}
+.cp-cell.cp-busy.cp-obra-0:hover{background:color-mix(in srgb,var(--cp-obra-0) 18%,transparent)}
+.cp-obra-key.cp-obra-0{color:var(--cp-obra-0);background:var(--cp-obra-0-soft)}
+.cp-cell.cp-busy.cp-obra-1{background:var(--cp-obra-1-soft);color:var(--cp-obra-1);border-color:var(--cp-obra-1)}
+.cp-cell.cp-busy.cp-obra-1:hover{background:color-mix(in srgb,var(--cp-obra-1) 18%,transparent)}
+.cp-obra-key.cp-obra-1{color:var(--cp-obra-1);background:var(--cp-obra-1-soft)}
+.cp-cell.cp-busy.cp-obra-2{background:var(--cp-obra-2-soft);color:var(--cp-obra-2);border-color:var(--cp-obra-2)}
+.cp-cell.cp-busy.cp-obra-2:hover{background:color-mix(in srgb,var(--cp-obra-2) 18%,transparent)}
+.cp-obra-key.cp-obra-2{color:var(--cp-obra-2);background:var(--cp-obra-2-soft)}
+.cp-cell.cp-busy.cp-obra-3{background:var(--cp-obra-3-soft);color:var(--cp-obra-3);border-color:var(--cp-obra-3)}
+.cp-cell.cp-busy.cp-obra-3:hover{background:color-mix(in srgb,var(--cp-obra-3) 18%,transparent)}
+.cp-obra-key.cp-obra-3{color:var(--cp-obra-3);background:var(--cp-obra-3-soft)}
+.cp-cell.cp-busy.cp-obra-4{background:var(--cp-obra-4-soft);color:var(--cp-obra-4);border-color:var(--cp-obra-4)}
+.cp-cell.cp-busy.cp-obra-4:hover{background:color-mix(in srgb,var(--cp-obra-4) 18%,transparent)}
+.cp-obra-key.cp-obra-4{color:var(--cp-obra-4);background:var(--cp-obra-4-soft)}
+.cp-cell.cp-busy.cp-obra-5{background:var(--cp-obra-5-soft);color:var(--cp-obra-5);border-color:var(--cp-obra-5)}
+.cp-cell.cp-busy.cp-obra-5:hover{background:color-mix(in srgb,var(--cp-obra-5) 18%,transparent)}
+.cp-obra-key.cp-obra-5{color:var(--cp-obra-5);background:var(--cp-obra-5-soft)}
+.cp-cell.cp-busy.cp-obra-6{background:var(--cp-obra-6-soft);color:var(--cp-obra-6);border-color:var(--cp-obra-6)}
+.cp-cell.cp-busy.cp-obra-6:hover{background:color-mix(in srgb,var(--cp-obra-6) 18%,transparent)}
+.cp-obra-key.cp-obra-6{color:var(--cp-obra-6);background:var(--cp-obra-6-soft)}
+.cp-cell.cp-busy.cp-obra-7{background:var(--cp-obra-7-soft);color:var(--cp-obra-7);border-color:var(--cp-obra-7)}
+.cp-cell.cp-busy.cp-obra-7:hover{background:color-mix(in srgb,var(--cp-obra-7) 18%,transparent)}
+.cp-obra-key.cp-obra-7{color:var(--cp-obra-7);background:var(--cp-obra-7-soft)}
+.cp-cell.cp-busy.cp-obra-8{background:var(--cp-obra-8-soft);color:var(--cp-obra-8);border-color:var(--cp-obra-8)}
+.cp-cell.cp-busy.cp-obra-8:hover{background:color-mix(in srgb,var(--cp-obra-8) 18%,transparent)}
+.cp-obra-key.cp-obra-8{color:var(--cp-obra-8);background:var(--cp-obra-8-soft)}
 
 /* Navegadores sem color-mix continuam legíveis: só o realce do hover cai para
    o cinza neutro do tema — o fundo normal já não usa color-mix desde a v4.5.1. */
@@ -247,15 +301,17 @@
   body.printing-crewplan #toasts,
   body.printing-crewplan .loading-overlay{display:none!important}
   body.printing-crewplan #crewplan-print-report{display:block!important;width:100%;padding:0;color:#27272a;background:#fff;font-family:Inter,Arial,sans-serif;page:crewplan-report}
-  .crewplan-print-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding-bottom:11px;border-bottom:2px solid #27272a}
-  .crewplan-print-company{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:9px}
-  .crewplan-print-company>img{display:grid;width:40px;height:40px;place-items:center;border:1px solid #e4e4e7;border-radius:8px;background:#fff;object-fit:contain}
+  /* v4.5.4 — cabeçalho de UMA linha. O que era um bloco de 14 mm com três
+     linhas virou 9 mm: cada milímetro aqui é um milímetro a mais de gráfico. */
+  .crewplan-print-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding-bottom:5px;border-bottom:1.5px solid #27272a}
+  .crewplan-print-company{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:7px}
+  .crewplan-print-company>img{display:grid;width:22px;height:22px;place-items:center;border:1px solid #e4e4e7;border-radius:5px;background:#fff;object-fit:contain}
   .crewplan-print-company>div,.crewplan-print-period{display:flex;min-width:0;flex-direction:column}
   .crewplan-print-head small{color:#71717a;font-size:7px;letter-spacing:.07em}
-  .crewplan-print-head b{margin-top:2px;font-size:11px}
-  .crewplan-print-head span{margin-top:2px;color:#52525b;font-size:8px}
+  .crewplan-print-head b{font-size:9.5px;line-height:1.2}
+  .crewplan-print-head span{color:#52525b;font-size:7px;line-height:1.25}
   .crewplan-print-period{align-items:flex-end;text-align:right}
-  .crewplan-print-period b{font-size:12px}
+  .crewplan-print-period b{font-size:9.5px}
   .crewplan-print-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:9px 0}
   .crewplan-print-facts>div{display:flex;flex-direction:column;padding:7px 8px;border:1px solid #e4e4e7;border-radius:7px;background:#fafafa}
   .crewplan-print-facts small{color:#71717a;font-size:7px}
@@ -275,23 +331,35 @@
      desmarcado na janela de impressão, mas NUNCA a borda nem a cor do texto.
      Por isso cada estado carrega os três: fundo (bônus), borda e texto. Assim
      o gráfico continua legível em preto e branco. */
+  /* v4.5.4 — as medidas do Gantt vêm de `Views.planejamentoequipe.printMetrics`,
+     via variáveis no próprio `#crewplan-print-report`. O fallback de cada
+     `var()` é exatamente o valor fixo da v4.5.2: se por algum motivo o JS não
+     escrever as variáveis, o PDF sai como saía antes, e não quebrado. */
   .crewplan-print-chart{margin-top:4px;break-inside:auto}
   .crewplan-print-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-bottom:6px;color:#52525b;font-size:6.6px}
   .crewplan-print-legend>span{display:inline-flex;align-items:center;gap:4px}
   .cpg-chip{display:inline-block;width:9px;height:7px;border:1px solid #a1a1aa;background:#fff}
   .cpg-keys{color:#3f3f46}
   .cpg-keys i{display:inline-block;padding:0 3px;border:1px solid #4338ca;color:#4338ca;font-style:normal;font-weight:800}
-  .crewplan-print-gantt{width:100%;table-layout:fixed;border-collapse:collapse;font-size:6.2px}
-  .crewplan-print-gantt th,.crewplan-print-gantt td{padding:1px;border:1px solid #d4d4d8;overflow:hidden;text-align:center;vertical-align:middle}
+  .crewplan-print-gantt{width:100%;table-layout:fixed;border-collapse:collapse;font-size:var(--cpg-cell-font,6.2px)}
+  /* ⚠ `box-sizing:border-box` é o que faz `--cpg-row` valer de verdade. Com o
+     `content-box` do padrão, o padding e a borda somam POR FORA: medi 3,76 mm
+     pedidos virarem 4,55 mm de linha, e 40 linhas estouravam a folha em
+     31 mm — o cálculo do `printMetrics` dizia que cabia e não cabia. */
+  .crewplan-print-gantt th,.crewplan-print-gantt td{box-sizing:border-box;padding:1px;border:1px solid #d4d4d8;overflow:hidden;text-align:center;vertical-align:middle}
   .crewplan-print-gantt thead th{background:#f4f4f5;color:#3f3f46;font-size:6.2px;font-weight:800}
   .crewplan-print-gantt thead th.cpg-sub{color:#71717a;font-size:5px;font-weight:600;text-transform:uppercase}
-  .crewplan-print-gantt th.cpg-name{width:46mm;padding:2px 5px;background:#fff;text-align:left}
+  .crewplan-print-gantt th.cpg-name{width:var(--cpg-name,46mm);padding:1px 4px;background:#fff;text-align:left}
   .crewplan-print-gantt thead th.cpg-name{background:#f4f4f5;vertical-align:bottom}
-  .crewplan-print-gantt tbody th.cpg-name b{display:block;overflow:hidden;color:#18181b;font-size:6.8px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
-  .crewplan-print-gantt tbody th.cpg-name small{display:block;overflow:hidden;color:#71717a;font-size:5.4px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+  .crewplan-print-gantt tbody th.cpg-name b{display:block;overflow:hidden;color:#18181b;font-size:var(--cpg-name-font,6.8px);font-weight:700;line-height:1.15;text-overflow:ellipsis;white-space:nowrap}
+  .crewplan-print-gantt tbody th.cpg-name small{display:block;overflow:hidden;color:#71717a;font-size:var(--cpg-role-font,5.4px);font-weight:600;line-height:1.15;text-overflow:ellipsis;white-space:nowrap}
+  /* ⚠ Com a linha em menos de 4,3 mm não cabem NOME e FUNÇÃO empilhados.
+     Quem sai é a função: o nome é a chave da linha, a função é contexto — e
+     ela continua na tela e no filtro. */
+  .cpg-tight .crewplan-print-gantt tbody th.cpg-name small{display:none}
   .crewplan-print-gantt thead{display:table-header-group}
   .crewplan-print-gantt tr{break-inside:avoid;page-break-inside:avoid}
-  .cpg-cell{height:5.4mm;color:#d4d4d8;font-size:6px;font-weight:800;letter-spacing:-.02em}
+  .cpg-cell{height:var(--cpg-row,5.4mm);color:#d4d4d8;font-size:var(--cpg-cell-font,6px);font-weight:800;letter-spacing:-.02em}
   .crewplan-print-gantt td.cpg-alloc{border-color:#4338ca;background:#eef2ff;color:#4338ca}
   .crewplan-print-gantt td.cpg-partial{border:1px dashed #b45309;background:#fffbeb;color:#b45309}
   .crewplan-print-gantt td.cpg-conflict{border-color:#b91c1c;background:#fee2e2;color:#b91c1c;font-size:7.5px}
@@ -300,6 +368,34 @@
   .cpg-chip.cpg-partial{border:1px dashed #b45309;background:#fffbeb}
   .cpg-chip.cpg-conflict{border-color:#b91c1c;background:#fee2e2}
   .cpg-chip.cpg-off{border-color:#a1a1aa;background:#f4f4f5}
+  /* v4.5.4 — a MESMA paleta da tela (tokens `--cp-obra-*` no `:root`, fora do
+     `@media print`, herdados aqui). Uma obra não pode ser verde na tela e roxa
+     no papel: quem confere o PDF ao lado do monitor perderia a referência.
+     ⚠ Estas regras vêm DEPOIS de `td.cpg-partial`, que usa o atalho
+     `border:1px dashed`. Como aqui só se declara `border-color`, o TRACEJADO
+     do parcial sobrevive — e é ele, não mais a cor âmbar, que diz "parcial".
+     ⚠ Conflito e Férias NÃO têm slot: continuam vermelho com "!" e cinza com
+     "//", porque são exceção e têm de saltar por cima da cor da obra. */
+  .crewplan-print-gantt td.cpg-obra-0{border-color:var(--cp-obra-0);background:var(--cp-obra-0-soft);color:var(--cp-obra-0)}
+  .cpg-obra-key.cpg-obra-0{border-color:var(--cp-obra-0);background:var(--cp-obra-0-soft);color:var(--cp-obra-0)}
+  .crewplan-print-gantt td.cpg-obra-1{border-color:var(--cp-obra-1);background:var(--cp-obra-1-soft);color:var(--cp-obra-1)}
+  .cpg-obra-key.cpg-obra-1{border-color:var(--cp-obra-1);background:var(--cp-obra-1-soft);color:var(--cp-obra-1)}
+  .crewplan-print-gantt td.cpg-obra-2{border-color:var(--cp-obra-2);background:var(--cp-obra-2-soft);color:var(--cp-obra-2)}
+  .cpg-obra-key.cpg-obra-2{border-color:var(--cp-obra-2);background:var(--cp-obra-2-soft);color:var(--cp-obra-2)}
+  .crewplan-print-gantt td.cpg-obra-3{border-color:var(--cp-obra-3);background:var(--cp-obra-3-soft);color:var(--cp-obra-3)}
+  .cpg-obra-key.cpg-obra-3{border-color:var(--cp-obra-3);background:var(--cp-obra-3-soft);color:var(--cp-obra-3)}
+  .crewplan-print-gantt td.cpg-obra-4{border-color:var(--cp-obra-4);background:var(--cp-obra-4-soft);color:var(--cp-obra-4)}
+  .cpg-obra-key.cpg-obra-4{border-color:var(--cp-obra-4);background:var(--cp-obra-4-soft);color:var(--cp-obra-4)}
+  .crewplan-print-gantt td.cpg-obra-5{border-color:var(--cp-obra-5);background:var(--cp-obra-5-soft);color:var(--cp-obra-5)}
+  .cpg-obra-key.cpg-obra-5{border-color:var(--cp-obra-5);background:var(--cp-obra-5-soft);color:var(--cp-obra-5)}
+  .crewplan-print-gantt td.cpg-obra-6{border-color:var(--cp-obra-6);background:var(--cp-obra-6-soft);color:var(--cp-obra-6)}
+  .cpg-obra-key.cpg-obra-6{border-color:var(--cp-obra-6);background:var(--cp-obra-6-soft);color:var(--cp-obra-6)}
+  .crewplan-print-gantt td.cpg-obra-7{border-color:var(--cp-obra-7);background:var(--cp-obra-7-soft);color:var(--cp-obra-7)}
+  .cpg-obra-key.cpg-obra-7{border-color:var(--cp-obra-7);background:var(--cp-obra-7-soft);color:var(--cp-obra-7)}
+  .crewplan-print-gantt td.cpg-obra-8{border-color:var(--cp-obra-8);background:var(--cp-obra-8-soft);color:var(--cp-obra-8)}
+  .cpg-obra-key.cpg-obra-8{border-color:var(--cp-obra-8);background:var(--cp-obra-8-soft);color:var(--cp-obra-8)}
+  .cpg-chip.cpg-partial{border:1px dashed #71717a;background:#fff}
+  .cpg-obra-key{display:inline-block;padding:0 3px;border:1px solid #4338ca;border-radius:2px;color:#4338ca;font-style:normal;font-weight:800}
   .crewplan-print-note{display:block;margin-top:5px;color:#71717a;font-size:6px}
   /* ⚠ Nada de `break-before:page` no detalhe por obra. Duas razões: num
      planejamento pequeno o Gantt e o detalhe cabem na MESMA folha, e forçar a
@@ -307,7 +403,7 @@
      casaria — `:first-of-type` olha o TIPO do elemento (`section`), e o
      primeiro `<section>` do relatório é o do gráfico, não o da obra.
      O `break-inside:avoid` de cada seção já impede a quebra feia. */
-  .crewplan-print-alert{margin:0 0 10px;padding:6px 8px;border:1px solid #f5c2c7;border-radius:6px;background:#fdf2f2;color:#842029;font-size:7.5px}
+  .crewplan-print-alert{margin:0 0 4px;padding:4px 7px;border:1px solid #f5c2c7;border-radius:5px;background:#fdf2f2;color:#842029;font-size:7px}
   .crewplan-print-warn{color:#b02a37;white-space:nowrap}
   #crewplan-print-report>footer{margin-top:10px;padding-top:6px;border-top:1px solid #e4e4e7;color:#71717a;font-size:6px;text-align:center}
 }

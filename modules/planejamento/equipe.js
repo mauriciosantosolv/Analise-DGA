@@ -287,6 +287,59 @@ const CrewPlan = {
     const employee=this.crewMembers().find(item=>String(item.id)===String(employeeId));
     return employee?String(employee.name||'Colaborador'):'Colaborador';
   },
+  /* ---------- v4.5.4 — UMA COR POR OBRA ----------
+     O Gantt inteiro azul nao deixa ver que DUAS obras diferentes estao lado a
+     lado. A cor volta a falar da obra — mas não pelo helper de cor do
+     `js/app.js`, que é indexado por POSIÇÃO em `State.projects` (apagar uma
+     obra reembaralha todas as cores) e usa uma paleta saturada que briga com o
+     desenho sóbrio. Aqui a cor sai de um hash do ID: a mesma obra fica com a
+     mesma cor hoje e no mês que vem, e não depende de quantas obras existem no
+     cadastro.
+     ⚠ O teste `crew-planning-v451` assere que o NOME daquele helper não
+     aparece neste arquivo — nem dentro de comentário. Não reescrever citando-o.
+     ⚠ A paleta NAO tem vermelho nem cinza: sao de Conflito (!) e Ferias (//),
+     que continuam sendo estado e precisam saltar por cima da cor da obra. */
+  /* 9, e não 10: medi o ΔE (CIELab) de cada candidata contra o vermelho do
+     conflito (#B91C1C) e o cinza das férias (#A1A1AA). O laranja queimado que
+     eu tinha escolhido primeiro ficava a ΔE 16 do vermelho — numa célula de
+     6 px é a MESMA cor, e conflito é exatamente o que não pode passar batido.
+     As 9 que sobraram estão a ΔE ≥ 42 do vermelho, ≥ 36 do cinza e ≥ 21 entre
+     si. O `crew-project-colors` refaz essa conta e trava o número. */
+  paletteSize:9,
+  /* Hash estavel (djb2/31) — numero puro, sem depender de ordem de cadastro. */
+  paletteHash(value){
+    const text=String(value||'');
+    let hash=0;
+    for(let index=0;index<text.length;index++) hash=(hash*31+text.charCodeAt(index))>>>0;
+    return hash;
+  },
+  /* Mapa obraId -> slot da paleta (0..paletteSize-1).
+     ⚠ Duas obras do MESMO planejamento na mesma cor derrubam o motivo de a cor
+     existir. Quando o hash colide, anda para a frente ate achar um slot livre;
+     so repete se houver mais obras que cores. A ordem da varredura e' o rotulo
+     da obra, para o resultado nao depender da ordem em que os IDs chegaram. */
+  projectPalette(projectIds){
+    const ids=[...new Set((Array.isArray(projectIds)?projectIds:[])
+      .map(id=>String(id||'')).filter(Boolean))]
+      .sort((a,b)=>this.projectLabel(a).localeCompare(this.projectLabel(b),'pt-BR'));
+    const total=this.paletteSize;
+    const taken=new Set();
+    const map=new Map();
+    ids.forEach(id=>{
+      let slot=this.paletteHash(id)%total;
+      for(let step=0;step<total&&taken.has(slot);step++) slot=(slot+1)%total;
+      taken.add(slot);
+      map.set(id,slot);
+    });
+    return map;
+  },
+  /* O nome da classe CSS. Sem paleta devolve '' — e a celula fica com a cor
+     de situacao da v4.5.1. E' assim que o parametro novo fica OPCIONAL. */
+  paletteClass(projectId,palette,prefix){
+    if(!palette||typeof palette.get!=='function'||!projectId) return '';
+    const slot=palette.get(String(projectId));
+    return slot===undefined||slot===null?'':`${prefix||'cp-obra'}-${slot}`;
+  },
   /* ---------- v4.5.2 — RETRATO DE UMA COLUNA DO GANTT ----------
      A tela (`cellFor`) e o PDF (`printCell`) montam a MESMA célula com markup
      diferente. Sem isto, a regra de "essa coluna está alocada / parcial / em
@@ -731,7 +784,7 @@ Views.planejamentoequipe = {
         };
       })};
   },
-  cellFor(employee,bucket){
+  cellFor(employee,bucket,palette){
     /* v4.5.2 — o retrato saiu daqui para `CrewPlan.bucketState()`, que o PDF
        também consome. O que sobrou nesta função é só o desenho. */
     const state=CrewPlan.bucketState(employee,bucket.days);
@@ -741,17 +794,28 @@ Views.planejamentoequipe = {
       return `<div class="cp-cell cp-conflict" title="Conflito: ${U.esc(obras)}"><span>Conflito</span></div>`;
     }
     if(busyDays){
-      /* v4.5.1 — a cor não vem mais da obra. Alocado é SEMPRE azul, parcial
-         SEMPRE amarelo e conflito SEMPRE vermelho, em qualquer obra: a cor
-         passou a informar a SITUAÇÃO do colaborador, não qual obra é. */
+      /* v4.5.1 — a cor saiu da obra e virou SITUAÇÃO. v4.5.4 — volta a ser a
+         obra: um Gantt todo azul não deixa ver que dois colaboradores estão em
+         obras DIFERENTES. O que não volta é a FONTE da cor — agora ela sai de
+         `CrewPlan.projectPalette`, presa ao ID da obra, e não do helper por
+         posição do `js/app.js` que a v4.5.1 tirou daqui.
+         ⚠ Conflito e férias continuam com cor de ESTADO: são exceção e têm de
+         saltar por cima da cor da obra. Sem `palette` (chamada de duas vias), a
+         classe sai vazia e a célula volta ao azul da v4.5.1. */
       const first=active[0]||{};
       const label=CrewPlan.projectLabel(first.projectId);
       const obras=[...new Set(active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' · ');
       const partial=state.partial;
       const done=state.done;
-      return `<div class="cp-cell cp-busy ${partial?'cp-partial':''} ${done?'cp-done':''}"
+      /* ⚠ Uma coluna de SEMANA pode conter duas obras sem se sobrepor (obra A na
+         segunda, obra B na quinta). Não é conflito — mas a célula tem UMA cor
+         só, então o "+N" avisa que a cor conta só parte da história. */
+      const extra=new Set(active.map(row=>String(row.projectId))).size-1;
+      const classes=['cp-cell','cp-busy',CrewPlan.paletteClass(first.projectId,palette,'cp-obra'),
+        partial?'cp-partial':'',done?'cp-done':''].filter(Boolean).join(' ');
+      return `<div class="${classes}"
         title="${U.esc(obras||label)} — ${busyDays} de ${total} dia(s) útil(eis)${offDays?` · ${offDays} indisponível(eis)`:''}${partial?' · parcial':''}"
-        onclick="Views.planejamentoequipe.dayDetail(${U.jsArg(employee.id)},${U.jsArg(bucket.days[0])},${U.jsArg(bucket.days[bucket.days.length-1])})"><span>${U.esc(label)}</span></div>`;
+        onclick="Views.planejamentoequipe.dayDetail(${U.jsArg(employee.id)},${U.jsArg(bucket.days[0])},${U.jsArg(bucket.days[bucket.days.length-1])})"><span>${U.esc(label)}${extra>0?` +${extra}`:''}</span></div>`;
     }
     if(offDays===total){
       const reason=CrewPlan.offReason(employee,state.offList);
@@ -766,6 +830,7 @@ Views.planejamentoequipe = {
     const {from,to}=this.period();
     const buckets=this.buckets();
     const crew=this.crew();
+    const palette=this.planPalette();
     if(!buckets.list.length)
       return '<div class="empty card"><i data-lucide="calendar-days"></i><br>O período selecionado não tem nenhum dia útil.</div>';
     if(!crew.length)
@@ -781,20 +846,20 @@ Views.planejamentoequipe = {
           <span class="cp-name-sub"><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small>${CrewPlan.categoryTagShort(report.category,reason)}</span>
         </div>
         <div class="cp-track" style="grid-template-columns:repeat(${buckets.list.length},minmax(${buckets.kind==='day'?72:96}px,1fr))">
-          ${buckets.list.map(bucket=>this.cellFor(employee,bucket)).join('')}
+          ${buckets.list.map(bucket=>this.cellFor(employee,bucket,palette)).join('')}
         </div>
       </div>`;
     }).join('');
     const cards=crew.map(employee=>this.mobileCard(employee,from,to)).join('');
     return `<div class="card cp-gantt">
       <div class="cp-legend">
-        <span><i class="cp-chip cp-free"></i>Disponível</span>
-        <span><i class="cp-chip cp-busy"></i>Alocado</span>
-        <span><i class="cp-chip cp-partial"></i>Parcial</span>
+        <span><i class="cp-chip cp-free"></i>Livre</span>
+        <span><i class="cp-chip cp-chip-partial"></i>Parcial (contorno tracejado)</span>
         <span><i class="cp-chip cp-conflict"></i>Conflito</span>
         <span><i class="cp-chip cp-off"></i>Férias / sem vínculo</span>
         <small>Somente dias úteis (seg–sex). Sábados e domingos não consomem capacidade.</small>
       </div>
+      ${palette.size?`<div class="cp-legend cp-legend-keys"><b>Obras:</b> ${this.projectKeyMarkup(palette,'cp-obra')}</div>`:''}
       <div class="cp-grid-scroll"><div class="cp-grid">
         <div class="cp-row cp-head">
           <div class="cp-name"><b>Colaborador</b><span class="cp-name-sub"><small>${crew.length} em tela</small></span></div>
@@ -872,6 +937,25 @@ Views.planejamentoequipe = {
       .sort((a,b)=>a.start.localeCompare(b.start)
         ||CrewPlan.employeeName(a.employeeId).localeCompare(CrewPlan.employeeName(b.employeeId),'pt-BR'));
   },
+  /* ---------- v4.5.4 — A PALETA DO PERIODO ----------
+     Uma porta so' para a tela e para o papel. Se cada lado montasse a paleta a
+     partir de uma lista propria, a mesma obra sairia de uma cor na tela e de
+     outra no PDF — que e' exatamente o problema que a cor veio resolver. */
+  planPalette(rows){
+    return CrewPlan.projectPalette((rows||this.planRows()).map(row=>row.projectId));
+  },
+  /* A traducao dos codigos. Sem ela a cor e' enfeite: quem le' ve' oito cores e
+     nao sabe qual e' qual. `prefix` separa a tela (`cp-obra`) do papel
+     (`cpg-obra`), que tem CSS proprio dentro do `@media print`. */
+  projectKeyMarkup(palette,prefix){
+    return [...palette.keys()]
+      .sort((a,b)=>CrewPlan.projectLabel(a).localeCompare(CrewPlan.projectLabel(b),'pt-BR'))
+      .map(id=>{
+        const full=String(CrewPlan.projectLabel(id)||'');
+        const rest=full.includes('|')?full.split('|').slice(1).join('|').trim():full;
+        return `<i class="${prefix}-key ${CrewPlan.paletteClass(id,palette,prefix)}">${U.esc(CrewPlan.projectShort(id))}</i> ${U.esc(rest||full)}`;
+      }).join(' \u00b7 ');
+  },
   /* ---------- v4.5.2 — COLUNAS DO GANTT IMPRESSO ----------
      O papel em PAISAGEM é mais generoso que a coluna da tela: A4 deitado com
      margem de 9 mm dá 279 mm úteis, então um mês inteiro (22 dias úteis) cabe
@@ -903,19 +987,86 @@ Views.planejamentoequipe = {
             :`${String(first).slice(8,10)}–${String(last).slice(8,10)}`};
       })};
   },
+  /* ---------- v4.5.4 — O PLANEJAMENTO INTEIRO EM UMA FOLHA ----------
+     A altura da linha deixa de ser fixa e passa a ser CALCULADA a partir de
+     quantos colaboradores o filtro deixou entrar. A4 deitado com margem de
+     9 mm dá 279 × 192 mm; descontando cabeçalho, legenda, cabeçalho da tabela
+     e rodapé, o que sobra é dividido pelo número de linhas.
+     ⚠ Com um PISO de 3,2 mm (fonte ~4,6 px): abaixo disso o papel não se lê
+     mais, e um PDF ilegível é pior que um PDF de duas folhas. Chegando ao
+     piso, a tabela quebra para a folha seguinte repetindo as datas
+     (`thead{display:table-header-group}`), e `fits` fica falso para quem
+     quiser avisar na tela.
+     ⚠ Tudo em milímetros de PAPEL, não em pixels de tela: a folha é a única
+     medida que não muda com o zoom do navegador nem com o monitor. */
+  printMetrics(input){
+    const options=input||{};
+    const rows=Math.max(1,Number(options.rows)||1);
+    const cols=Math.max(1,Number(options.cols)||1);
+    const projects=Math.max(0,Number(options.projects)||0);
+    const pageH=192, pageW=279;
+    /* A legenda quebra linha conforme o nome das obras: ~290 caracteres por
+       linha a 6,6 px, e o bloco fixo de estados já come uns 110. */
+    /* ⚠ Quantas linhas a legenda ocupa depende do TAMANHO DOS NOMES das obras,
+       não da quantidade: "FORNECIMENTO DE MÃO DE OBRA PARA COMPOSIÇÃO PIE" vale
+       por três obras curtas. Quando `printPlan` manda `legendChars` (o texto de
+       verdade), usa-se ele; o palpite por obra fica só para quem chamar sem. */
+    const legendChars=Number(options.legendChars)||projects*34;
+    const legendLines=Math.min(4,Math.max(1,Math.ceil((120+legendChars)/270)));
+    /* Medidos no Chromium, em mm de PAPEL (não estimados): cabeçalho 7,9; aviso
+       de conflito 5,5 + 1,1 de margem; cada linha de legenda 3,6; cabeçalho da
+       tabela 5,1; rodapé 3,5 + 2,7 de margem; respiro do gráfico 1,1.
+       ⚠ Mais 3 mm de FOLGA: fonte substituta, DPI da impressora e o
+       arredondamento do próprio navegador cabem aí. Sem a folga o cálculo acerta
+       na trave e uma única linha vai para a folha 2 — que foi o que medi. */
+    const reserved=7.9+legendLines*3.6+(options.alert?6.6:0)+5.1+6.2+1.1+3;
+    const usable=pageH-reserved;
+    /* ⚠ Arredondar a altura da linha para BAIXO, não para o mais próximo: em
+       40 linhas, meio centésimo a mais em cada uma soma o suficiente para
+       empurrar a última para a folha 2. O lado seguro do arredondamento aqui
+       é sobrar milímetro, nunca faltar. `fits` usa o MESMO valor arredondado
+       que vai para o CSS, senão os dois discordariam na fronteira. */
+    const floor2=value=>Math.floor(value*100)/100;
+    const rowMm=floor2(Math.min(6.4,Math.max(3.2,usable/rows)));
+    const nameMm=cols<=12?48:cols<=18?42:cols<=24?36:30;
+    const nameFont=Math.min(7.2,Math.max(5,rowMm*1.45));
+    const round=value=>Math.round(value*100)/100;
+    return {
+      rows,cols,usable:round(usable),
+      fits:rows*rowMm<=usable,
+      tight:rowMm<4.3,
+      rowMm,
+      nameMm,
+      colMm:round((pageW-nameMm)/cols),
+      cellFont:round(Math.min(6.6,Math.max(4.6,rowMm*1.32))),
+      nameFont:round(nameFont),
+      roleFont:round(nameFont*0.78)
+    };
+  },
   /* A célula do Gantt impresso. Mesmo retrato da tela (`CrewPlan.bucketState`),
      markup próprio: `<td>` em vez de `<div>`, sem onclick, e o texto carrega a
      informação para o caso de sair impresso em preto e branco — o código da
      obra, "!" no conflito, "//" fora do vínculo. A borda também sobrevive:
      o Chrome só descarta o FUNDO quando "Gráficos de plano de fundo" está
      desmarcado, nunca a borda nem a cor do texto. */
-  printCell(employee,bucket){
+  printCell(employee,bucket,palette){
     const state=CrewPlan.bucketState(employee,bucket.days);
     if(state.conflict)
       return `<td class="cpg-cell cpg-conflict" title="Conflito">!</td>`;
     if(state.busyDays){
-      const code=CrewPlan.projectShort((state.active[0]||{}).projectId);
-      return `<td class="cpg-cell ${state.partial?'cpg-partial':'cpg-alloc'}">${U.esc(code)}</td>`;
+      const first=(state.active[0]||{});
+      const code=CrewPlan.projectShort(first.projectId);
+      /* v4.5.4 — a cor da obra entra como CLASSE, ao lado de `cpg-alloc`. Sem
+         paleta a classe sai vazia e a célula fica azul, como na v4.5.2.
+         O código da obra continua no texto: e' ele que salva a leitura quando
+         o Chrome imprime sem "Gráficos de plano de fundo". */
+      const obras=new Set(state.active.map(row=>String(row.projectId)));
+      /* ⚠ `filter(Boolean)`: sem paleta a classe da obra sai vazia, e um
+         `class="cpg-cell cpg-alloc "` com espaço sobrando quebraria a
+         asserção do `crew-print-gantt` sobre o caminho SEM paleta. */
+      const classes=['cpg-cell',state.partial?'cpg-partial':'cpg-alloc',
+        CrewPlan.paletteClass(first.projectId,palette,'cpg-obra')].filter(Boolean).join(' ');
+      return `<td class="${classes}"${obras.size>1?` title="${U.esc([...new Set(state.active.map(row=>CrewPlan.projectLabel(row.projectId)))].join(' · '))}"`:''}>${U.esc(code)}${obras.size>1?'+':''}</td>`;
     }
     if(state.offDays===state.total)
       return `<td class="cpg-cell cpg-off">//</td>`;
@@ -926,17 +1077,9 @@ Views.planejamentoequipe = {
     const rows=this.planRows();
     if(!rows.length)
       return UI.toast('Não há alocação no período e nos filtros selecionados para gerar o PDF.','warn',5600);
-    const group=(list,key)=>{
-      const map=new Map();
-      list.forEach(row=>{
-        if(!map.has(row[key])) map.set(row[key],[]);
-        map.get(row[key]).push(row);
-      });
-      return map;
-    };
     const crew=this.crew();
-    const byProject=group(rows,'projectId');
-    const byEmployee=group(rows,'employeeId');
+    /* v4.5.4 — a paleta sai da MESMA porta que a tela usa. */
+    const palette=this.planPalette(rows);
     /* Um PDF que manda a mesma pessoa para duas obras no mesmo dia sem avisar é
        pior que PDF nenhum: quem lê no grupo não tem como perceber. */
     const conflicted=new Set();
@@ -946,9 +1089,6 @@ Views.planejamentoequipe = {
         .filter(other=>CrewPlan.overlaps(other.start,other.end,from,to));
       if(clash.length) conflicted.add(row.id);
     });
-    /* O PDF é do PERÍODO em tela: uma alocação que começa antes ou termina
-       depois aparece recortada, senão a contagem de dias mente. */
-    const clip=(start,end)=>({start:start<from?from:start,end:end>to?to:end});
     const old=document.getElementById('crewplan-print-report');
     if(old) old.remove();
     const report=document.createElement('section');
@@ -956,36 +1096,37 @@ Views.planejamentoequipe = {
     const companyLogo=U.safeImageSrc(State.settings.companyLogo)||'assets/logo-clique.png';
     const companyCnpj=U.formatCnpj(State.settings.companyCnpj||'');
     const totalDays=CrewPlan.businessDays(from,to);
+    const buckets=this.printBuckets();
+    /* v4.5.4 — saíram do PDF os quatro KPIs, o detalhe por obra e o resumo por
+       colaborador. O pedido foi "apenas o planejamento em si, em uma folha só";
+       as três seções ocupavam da folha 2 em diante e disputavam o espaço que
+       agora é do gráfico. O que sobrou do cabeçalho é uma linha: sem empresa,
+       período e data, o PDF que circula no grupo não diz de que semana é. */
+    const legendChars=[...palette.keys()]
+      .reduce((soma,id)=>soma+String(CrewPlan.projectLabel(id)||'').length+4,0);
+    const metrics=this.printMetrics({rows:crew.length,cols:buckets.list.length,
+      projects:palette.size,legendChars,alert:conflicted.size>0});
+    if(metrics.tight) report.classList.add('cpg-tight');
+    report.style.setProperty('--cpg-row',`${metrics.rowMm}mm`);
+    report.style.setProperty('--cpg-name',`${metrics.nameMm}mm`);
+    report.style.setProperty('--cpg-cell-font',`${metrics.cellFont}px`);
+    report.style.setProperty('--cpg-name-font',`${metrics.nameFont}px`);
+    report.style.setProperty('--cpg-role-font',`${metrics.roleFont}px`);
     report.innerHTML=`${typeof Exports!=='undefined'?Exports.stationeryMarkup():''}
       <header class="crewplan-print-head">
-        <div class="crewplan-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><small>EMPRESA</small><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Planejamento de colaboradores</span></div></div>
-        <div class="crewplan-print-period"><small>PERÍODO</small><b>${U.date(from)} → ${U.date(to)}</b><span>${totalDays} dia(s) útil(eis)</span></div>
+        <div class="crewplan-print-company"><img src="${U.esc(companyLogo)}" alt=""><div><b>${U.esc(State.settings.companyName||'CliqueObras')}</b><span>${companyCnpj?`CNPJ ${U.esc(companyCnpj)} · `:''}Planejamento de colaboradores</span></div></div>
+        <div class="crewplan-print-period"><b>${U.date(from)} → ${U.date(to)}</b><span>${totalDays} dia(s) útil(eis) · ${crew.length} colaborador(es) · ${palette.size} obra(s) · emitido em ${new Date().toLocaleDateString('pt-BR')}</span></div>
       </header>
-      <div class="crewplan-print-facts">
-        <div><small>Obras</small><b>${byProject.size}</b></div>
-        <div><small>Colaboradores</small><b>${byEmployee.size}</b></div>
-        <div><small>Alocações</small><b>${rows.length}</b></div>
-        <div><small>Emitido em</small><b>${new Date().toLocaleDateString('pt-BR')}</b></div>
-      </div>
-      ${conflicted.size?`<p class="crewplan-print-alert"><b>⚠ ${conflicted.size} alocação(ões) em conflito.</b> O mesmo colaborador aparece em duas obras no mesmo dia — as linhas marcadas precisam ser resolvidas antes de valer como escala.</p>`:''}
+      ${conflicted.size?`<p class="crewplan-print-alert"><b>⚠ ${conflicted.size} alocação(ões) em conflito.</b> O mesmo colaborador aparece em duas obras no mesmo dia — as células marcadas com <b>!</b> precisam ser resolvidas antes de valer como escala.</p>`:''}
       ${(()=>{
-        const buckets=this.printBuckets();
         if(!buckets.list.length||!crew.length) return '';
         return `<section class="crewplan-print-chart">
           <div class="crewplan-print-legend">
-            <span><i class="cpg-chip cpg-alloc"></i>Alocado</span>
-            <span><i class="cpg-chip cpg-partial"></i>Parcial</span>
+            <span><i class="cpg-chip cpg-partial"></i>Parcial (contorno tracejado)</span>
             <span><i class="cpg-chip cpg-conflict"></i>Conflito (!)</span>
             <span><i class="cpg-chip cpg-off"></i>Férias / sem vínculo (//)</span>
             <span><i class="cpg-chip"></i>Livre</span>
-            <span class="cpg-keys"><b>Obras:</b> ${[...byProject.keys()]
-              .sort((a,b)=>CrewPlan.projectLabel(a).localeCompare(CrewPlan.projectLabel(b),'pt-BR'))
-              .map(id=>{
-                const full=String(CrewPlan.projectLabel(id)||'');
-                const rest=full.includes('|')?full.split('|').slice(1).join('|').trim():full;
-                return `<i>${U.esc(CrewPlan.projectShort(id))}</i> ${U.esc(rest||full)}`;
-              })
-              .join(' · ')}</span>
+            <span class="cpg-keys"><b>Obras:</b> ${this.projectKeyMarkup(palette,'cpg-obra')}</span>
           </div>
           <table class="crewplan-print-gantt">
             <thead>
@@ -994,52 +1135,12 @@ Views.planejamentoequipe = {
             </thead>
             <tbody>${crew.map(employee=>`<tr>
               <th class="cpg-name"><b>${U.esc(employee.name||'Colaborador')}</b><small>${U.esc(CrewPlan.employeeRole(employee)||'Sem função')}</small></th>
-              ${buckets.list.map(bucket=>this.printCell(employee,bucket)).join('')}
+              ${buckets.list.map(bucket=>this.printCell(employee,bucket,palette)).join('')}
             </tr>`).join('')}</tbody>
           </table>
-          <small class="crewplan-print-note">Somente dias úteis (segunda a sexta) — sábados e domingos não aparecem e não consomem capacidade. Uma linha sem nenhuma célula colorida é um colaborador ocioso no período inteiro.</small>
         </section>`;
       })()}
-      ${[...byProject.entries()]
-        .sort((a,b)=>CrewPlan.projectLabel(a[0]).localeCompare(CrewPlan.projectLabel(b[0]),'pt-BR'))
-        .map(([projectId,list])=>`<section class="crewplan-print-project">
-          <h3>${U.esc(CrewPlan.projectLabel(projectId))}<span>${new Set(list.map(row=>row.employeeId)).size} colaborador(es)</span></h3>
-          <table class="crewplan-print-table">
-            <thead><tr><th>Colaborador</th><th>Função</th><th>De</th><th>Até</th><th>Dias úteis</th><th>Status</th></tr></thead>
-            <tbody>${list.map(row=>{
-              const range=clip(row.start,row.end);
-              const employee=CrewPlan.crewMembers().find(item=>String(item.id)===row.employeeId);
-              return `<tr>
-                <td><b>${U.esc(CrewPlan.employeeName(row.employeeId))}</b></td>
-                <td>${U.esc(row.role||CrewPlan.employeeRole(employee)||'—')}</td>
-                <td>${U.date(range.start)}</td>
-                <td>${U.date(range.end)}</td>
-                <td class="num">${CrewPlan.businessDays(range.start,range.end)}</td>
-                <td>${U.esc(row.status)}${conflicted.has(row.id)?' <b class="crewplan-print-warn">⚠ conflito</b>':''}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table>
-        </section>`).join('')}
-      <section class="crewplan-print-summary">
-        <h3>Resumo por colaborador<span>${byEmployee.size} pessoa(s)</span></h3>
-        <table class="crewplan-print-table">
-          <thead><tr><th>Colaborador</th><th>Função</th><th>Obras no período</th><th>Dias alocados</th><th>Dias ociosos</th></tr></thead>
-          <tbody>${[...byEmployee.entries()]
-            .sort((a,b)=>CrewPlan.employeeName(a[0]).localeCompare(CrewPlan.employeeName(b[0]),'pt-BR'))
-            .map(([employeeId,list])=>{
-              const employee=CrewPlan.crewMembers().find(item=>String(item.id)===employeeId);
-              const report=CrewPlan.availability(employee,from,to);
-              return `<tr>
-                <td><b>${U.esc(CrewPlan.employeeName(employeeId))}</b></td>
-                <td>${U.esc(CrewPlan.employeeRole(employee)||'—')}</td>
-                <td>${[...new Set(list.map(row=>CrewPlan.projectLabel(row.projectId)))].map(label=>U.esc(label)).join(' · ')}</td>
-                <td class="num">${report.busyDays}</td>
-                <td class="num">${report.freeDays}</td>
-              </tr>`;
-            }).join('')}</tbody>
-        </table>
-      </section>
-      <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}. Para as cores saírem no papel, marque <b>“Gráficos de plano de fundo”</b> na janela de impressão — sem isso, o contorno e o código da obra continuam legíveis em preto e branco.</footer>`;
+      <footer>Somente dias úteis (seg–sex). Linha sem nenhuma célula colorida = colaborador ocioso no período. Para as cores das obras saírem no papel, marque <b>“Gráficos de plano de fundo”</b> na janela de impressão — sem isso, o contorno e o código da obra continuam legíveis em preto e branco.</footer>`;
     document.body.appendChild(report);
     UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
     await Exports.beginPrint('printing-crewplan',report);
