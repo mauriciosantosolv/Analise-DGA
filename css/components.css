@@ -212,3 +212,10 @@ main,#content-wrap,#content,.two-col,.card,.chart-card,.table-wrap,.kpi,.kpi-gri
   .batch-filters{grid-template-columns:1fr}
   .permission-grid{grid-template-columns:1fr}
 }
+
+/* v4.5.6 - redesenho vindo da nuvem: sem animacao de entrada (era a "piscada") */
+#content.co-quiet-render .card,#content.co-quiet-render .kpi{animation:none!important}
+#cloud-update-notice{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-popover);font-size:.85rem;max-width:calc(100vw - 32px)}
+#cloud-update-notice[hidden]{display:none}
+#cloud-update-notice>span{display:inline-flex;align-items:center;gap:8px;min-width:0}
+#cloud-update-notice svg{width:15px;height:15px;flex:none}

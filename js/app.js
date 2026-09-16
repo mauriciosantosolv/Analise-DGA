@@ -172,6 +172,8 @@ const App = {
     this.render({resetScroll:changed || options.resetScroll===true});
   },
   render(options={}){
+    // v4.5.6 - todo redesenho limpa a atualizacao da nuvem que estava em espera
+    if(typeof this.settleCloudRender==='function') this.settleCloudRender(options.quiet===true);
     const content=document.getElementById('content');
     const previousScroll=content ? content.scrollTop : 0;
     const v = Views[State.view] || Views.dashboard;
@@ -354,8 +356,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.5.5 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.5.5 · dados locais';
+      el.textContent=`v4.5.6 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.5.6 · dados locais';
   },
   showCloudLogin(){
     this.bootShield('auth-gate');
@@ -411,6 +413,103 @@ const App = {
       this.syncQueued=false;
       await this.syncCloudNow(false,options);
     }
+  },
+  /* v4.5.6 - atualizacao da nuvem sem piscar e sem apagar o que esta sendo digitado.
+     Antes: cada mudanca vinda de outro usuario/aparelho (ou da carga do Omie)
+     redesenhava a tela inteira na hora, (1) reiniciando a animacao de entrada
+     dos cartoes e dos graficos - a "piscada" - e (2) recriando os campos das
+     telas com formulario na pagina (Configuracoes, Base de calculo, filtros...),
+     o que apagava o que ainda nao tinha sido salvo.
+     Agora a sincronizacao de fundo continua igual (syncCloudNow nao mudou), mas
+     o redesenho passa por aqui: se ha campo alterado/focado ou janela aberta,
+     ele espera e aparece um aviso "Atualizar"; senao, redesenha sem animacao. */
+  editedFields:new Set(),
+  pendingCloudRender:false,
+  pendingCloudTimer:null,
+  isEditableField(el){
+    if(!el || el.nodeType!==1) return false;
+    if(el.isContentEditable) return true;
+    const tag=String(el.tagName||'').toUpperCase();
+    if(tag==='TEXTAREA' || tag==='SELECT') return true;
+    if(tag!=='INPUT') return false;
+    const type=String(el.type||'text').toLowerCase();
+    return !['button','submit','reset','checkbox','radio','hidden','image','file'].includes(type);
+  },
+  watchContentEdits(){
+    const content=document.getElementById('content');
+    if(!content || content.dataset.editWatch) return;
+    content.dataset.editWatch='1';
+    const mark=e=>{
+      const el=e.target;
+      if(e.isTrusted===false || !el || el.nodeType!==1) return;
+      const tag=String(el.tagName||'').toUpperCase();
+      if(this.isEditableField(el) || tag==='INPUT') this.editedFields.add(el);
+    };
+    content.addEventListener('input',mark,true);
+    content.addEventListener('change',mark,true);
+  },
+  // ha algo na tela que um redesenho apagaria?
+  userIsEditing(){
+    const content=document.getElementById('content');
+    if(!content) return false;
+    for(const el of Array.from(this.editedFields)){
+      // campo que ja saiu da tela (salvou, trocou de tela, filtro redesenhou) nao conta mais
+      if(!el.isConnected || !content.contains(el)) this.editedFields.delete(el);
+    }
+    if(this.editedFields.size) return true;
+    const active=document.activeElement;
+    return !!(active && active!==content && content.contains(active) && this.isEditableField(active));
+  },
+  async backgroundCloudSync(shouldRender){
+    const before=this.lastCloudRefresh;
+    await this.syncCloudNow(false,{render:false});
+    if(shouldRender && this.lastCloudRefresh!==before) this.applyCloudRender();
+  },
+  applyCloudRender(){
+    const busy=(typeof UI!=='undefined' && UI.isModalOpen()) || this.userIsEditing();
+    if(!busy){ this.render({quiet:true}); return; }
+    this.pendingCloudRender=true;
+    this.showCloudUpdateNotice(true);
+    clearInterval(this.pendingCloudTimer);
+    // aplica sozinho assim que a pessoa terminar (salvou, fechou a janela, saiu do campo sem alterar)
+    this.pendingCloudTimer=setInterval(()=>{
+      if(!this.pendingCloudRender){ clearInterval(this.pendingCloudTimer); return; }
+      if(typeof document!=='undefined' && document.hidden) return;
+      if((typeof UI!=='undefined' && UI.isModalOpen()) || this.userIsEditing()) return;
+      this.render({quiet:true});
+    },1500);
+  },
+  settleCloudRender(quiet){
+    this.pendingCloudRender=false;
+    clearInterval(this.pendingCloudTimer);
+    this.pendingCloudTimer=null;
+    this.editedFields.clear();
+    this.showCloudUpdateNotice(false);
+    const content=typeof document!=='undefined' && document.getElementById('content');
+    // a classe fica ate o proximo redesenho normal: tira-la antes reiniciaria a animacao
+    if(content) content.classList.toggle('co-quiet-render',!!quiet);
+    if(typeof Chart!=='undefined' && Chart.defaults){
+      if(quiet){
+        if(this._chartAnimation===undefined) this._chartAnimation=Chart.defaults.animation;
+        Chart.defaults.animation=false;
+        setTimeout(()=>{ if(this._chartAnimation!==undefined){ Chart.defaults.animation=this._chartAnimation; this._chartAnimation=undefined; } },0);
+      }
+    }
+  },
+  showCloudUpdateNotice(show){
+    if(typeof document==='undefined') return;
+    let el=document.getElementById('cloud-update-notice');
+    if(!show){ if(el) el.hidden=true; return; }
+    if(!el){
+      el=document.createElement('div');
+      el.id='cloud-update-notice';
+      el.setAttribute('role','status');
+      el.innerHTML='<span><i data-lucide="refresh-cw"></i>Há dados novos da nuvem</span><button type="button" class="btn btn-sm btn-primary" title="Redesenha a tela. O que não foi salvo nesta tela será perdido.">Atualizar</button>';
+      el.querySelector('button').onclick=()=>this.render({quiet:true});
+      document.body.appendChild(el);
+      if(typeof U!=='undefined' && U.icons) U.icons();
+    }
+    el.hidden=false;
   },
   // v4.2.5 - qual tabela mudou no evento recebido do Realtime
   changedStoreOf(payload){
@@ -472,7 +571,7 @@ const App = {
       this.realtimeChangedStores=new Set();
       this.realtimeBurstStart=0;
       this.realtimeDirty=false;
-      await this.syncCloudNow(false,{render:this.touchesCurrentView(stores)});
+      await this.backgroundCloudSync(this.touchesCurrentView(stores));
       if(change.kind==='organization') this.applyBranding();
     };
     const waited=now-this.realtimeBurstStart;
@@ -716,6 +815,7 @@ const App = {
       if(e.key==='Escape') this.closeMobileMenu();
     });
     document.getElementById('content').addEventListener('click',e=>this.guardReadOnlyAction(e),true);
+    this.watchContentEdits();
     this.initSearch();
     this.applyTheme(State.settings.theme || 'light');
     this.applyBranding();
@@ -755,7 +855,7 @@ const App = {
       const stores=this.realtimeChangedStores;
       this.realtimeChangedStores=new Set();
       this.realtimeDirty=false;
-      this.syncCloudNow(false,{render:stale || this.touchesCurrentView(stores)});
+      this.backgroundCloudSync(stale || this.touchesCurrentView(stores));
     });
    }catch(err){ this.fatal(err); }
   }
