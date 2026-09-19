@@ -1,15 +1,17 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { enforceRateLimit, json, preflight, readJson, rejectUntrustedOrigin } from "../_shared/security.ts";
 import { batchPayableEntries, buildPayableEntries, buildReceivableEntries, chunk, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, isOmieMissingEntryError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
+import { accountListParams, buildRemessaEntries, entradaId, entradaListParams, entradaTouches, filterPayablesForRemessa, isEmptyListError, isMissingTableError, listRows, OMIE_REMESSA_API, parseAccount, parseEntrada, parseRemessa, parseStatus, remessaId, remessaListParams, shapeOf, statusIsStale, totalPages } from "./remessa.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
-const ACTIONS=new Set(["status","connect","catalog","save-config","sync","disconnect","scheduled"]);
+const ACTIONS=new Set(["status","connect","catalog","save-config","sync","disconnect","scheduled","remessa-config","remessa-save","remessa-preview","remessa-probe"]);
 
 type Payload={
   action?:string; organizationId?:string; appKey?:string; appSecret?:string;
   initialSyncDate?:string; autoSync?:boolean; autoIntervalMinutes?:number;
   projectMappings?:unknown[]; categoryMappings?:unknown[]; projectCodes?:string[];
+  remessaProjects?:unknown[]; cardAccounts?:unknown[]; projectCode?:string;
 };
 
 function env(name:string){return String(Deno.env.get(name)??"");}
@@ -127,7 +129,7 @@ Deno.serve(async(request:Request)=>{
     ]);
     if(connectionError) throw connectionError;
     const last=Array.isArray(runs)&&runs[0]?runs[0]:null;
-    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status,receivables:(last.details as any)?.receivables??null,orphans:(last.details as any)?.orphans??null}:null}};
+    return {connected:!!connection,connection:mapConnection(connection),projectMappings:(projects||[]).map(mapProject),categoryMappings:(categories||[]).map(mapCategory),summary:{projects:(projects||[]).filter((x:any)=>x.enabled).length,categories:(categories||[]).filter((x:any)=>x.enabled).length,lastRun:last?{imported:last.imported_count,updated:last.updated_count,cancelled:last.cancelled_count,skipped:last.skipped_count,status:last.status,receivables:(last.details as any)?.receivables??null,orphans:(last.details as any)?.orphans??null,remessas:(last.details as any)?.remessas??null}:null}};
   }
 
   async function supplierDirectory(orgId:string,payables:Record<string,unknown>[],creds:{app_key:string;app_secret:string}){
@@ -195,6 +197,136 @@ Deno.serve(async(request:Request)=>{
     return directory;
   }
 
+  // ---------------------------------------------------------------------------
+  // v4.5.7 — Custo por NOTA DE REMESSA (ver remessa.mjs para as regras).
+  // Tudo aqui é NOVO e só roda para projetos com "custo por remessa" ativado.
+  // Sem nenhum projeto ativado a sincronização segue exatamente como antes.
+  // ---------------------------------------------------------------------------
+  async function loadRemessaConfig(orgId:string){
+    const [{data:projectRows,error:projectError},{data:cardRows,error:cardError}]=await Promise.all([
+      admin.from("omie_remessa_projects").select("omie_project_code,enabled,enabled_at").eq("organization_id",orgId),
+      admin.from("omie_card_accounts").select("omie_account_code,account_name").eq("organization_id",orgId)
+    ]);
+    // Tabelas ainda não criadas (SQL da v4.5.7 não aplicado) = nenhum projeto
+    // em modo remessa. Qualquer OUTRO erro interrompe a sincronização, para
+    // nunca importar contas a pagar de um projeto em modo remessa sem filtro.
+    const missing=(projectError&&isMissingTableError(projectError))||(cardError&&isMissingTableError(cardError));
+    if(missing) return {ready:false,projects:new Set<string>(),cards:new Set<string>(),projectRows:[],cardRows:[]};
+    if(projectError||cardError) throw new Error("Não foi possível ler a configuração de custo por remessa.");
+    const enabledRows=(projectRows||[]).filter((row:any)=>row.enabled===true);
+    return {
+      ready:true,
+      projects:new Set<string>(enabledRows.map((row:any)=>String(row.omie_project_code))),
+      cards:new Set<string>((cardRows||[]).map((row:any)=>String(row.omie_account_code))),
+      projectRows:projectRows||[],cardRows:cardRows||[]
+    };
+  }
+
+  // v4.5.8 — listagem com os nomes EXATOS da documentação do Omie
+  // (ver remessa.mjs). "Não existem registros" vira lista vazia.
+  async function omieListExact(api:{endpoint:string;list:string;listKey:string},params:(page:number)=>Record<string,unknown>,creds:{app_key:string;app_secret:string},maxPages=50){
+    const rows:Record<string,unknown>[]=[];
+    let pages=0;
+    for(let page=1;page<=maxPages;page++){
+      let data:Record<string,unknown>;
+      try{ data=await omieCall(api.endpoint,api.list,params(page),creds); }
+      catch(error){ if(isEmptyListError(error)) break; throw error; }
+      pages=page;
+      const list=listRows(data,api.listKey);
+      rows.push(...list);
+      if(page>=totalPages(data)||!list.length) return {rows,pages,truncated:false};
+    }
+    return {rows,pages,truncated:pages>=maxPages};
+  }
+
+  async function rowHash(row:unknown){
+    const bytes=new TextEncoder().encode(JSON.stringify(row));
+    const digest=await crypto.subtle.digest("SHA-256",bytes);
+    return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+  }
+
+  // Situação da NF (StatusRemessa / StatusNotaEnt) com cache privado por
+  // organização. Consulta só o que é preciso (ver statusIsStale) e no máximo
+  // "budget.left" chamadas por execução; o que ficar para trás é resolvido
+  // na execução seguinte (sem lançar nem estornar nada no meio do caminho).
+  async function statusesFor(orgId:string,kind:"rem"|"ne",api:{endpoint:string;status:string;statusKey:string},items:{id:string;row:Record<string,unknown>}[],creds:{app_key:string;app_secret:string},budget:{left:number;consulted:number;cached:number;waiting:number}){
+    const result=new Map<string,any>();
+    if(!items.length) return result;
+    const cache=new Map<string,{hash:string;summary:any;raw:any;refreshedAt:string}>();
+    let cacheReady=true;
+    const keys=items.map(item=>`${kind}:${item.id}`);
+    for(let offset=0;offset<keys.length;offset+=250){
+      const {data,error}=await admin.from("omie_remessa_cache").select("remessa_id,row_hash,summary,refreshed_at").eq("organization_id",orgId).in("remessa_id",keys.slice(offset,offset+250));
+      if(error){ if(isMissingTableError(error)){cacheReady=false;break;} throw new Error("Não foi possível ler o cache de remessas."); }
+      for(const row of data||[]) cache.set(String(row.remessa_id),{hash:String(row.row_hash),summary:(row.summary as any)?.parsed??null,raw:(row.summary as any)?.status??null,refreshedAt:String(row.refreshed_at||"")});
+    }
+    const work:{id:string;key:string;hash:string;stale:boolean;priority:number}[]=[];
+    for(const item of items){
+      const key=`${kind}:${item.id}`,hash=await rowHash(item.row),cached=cache.get(key);
+      const stale=statusIsStale(cached?{hash:cached.hash,summary:cached.summary,refreshedAt:cached.refreshedAt}:null,hash);
+      if(!stale&&cached?.raw){result.set(item.id,cached.raw);budget.cached++;continue;}
+      work.push({id:item.id,key,hash,stale,priority:!cached?0:cached.hash!==hash?1:2});
+      if(cached?.raw) result.set(item.id,cached.raw); // valor anterior como reserva
+    }
+    work.sort((a,b)=>a.priority-b.priority);
+    const upserts:Record<string,unknown>[]=[];
+    for(const item of work){
+      if(budget.left<=0){budget.waiting++;continue;}
+      budget.left--;
+      try{
+        const status=await omieCall(api.endpoint,api.status,{[api.statusKey]:Number(item.id)},creds);
+        budget.consulted++;
+        const {ListaNfe,...rest}=status as any;
+        const slim={...rest,ListaNfe:(Array.isArray(ListaNfe)?ListaNfe:[]).map((nf:any)=>({cNumNFe:nf?.cNumNFe,cSerieNFe:nf?.cSerieNFe,cChaveNFe:nf?.cChaveNFe,dtEmissao:nf?.dtEmissao,dtFatura:nf?.dtFatura}))};
+        result.set(item.id,slim);
+        const parsed=parseStatus(slim);
+        upserts.push({organization_id:orgId,remessa_id:item.key,row_hash:item.hash,summary:{parsed,status:slim},refreshed_at:new Date().toISOString()});
+      }catch(error){
+        budget.waiting++;
+        console.warn("Omie status skipped",{organizationId:orgId,kind,id:item.id,message:safeOmieError(error)});
+      }
+    }
+    if(cacheReady&&upserts.length){
+      const {error}=await admin.from("omie_remessa_cache").upsert(upserts,{onConflict:"organization_id,remessa_id"});
+      if(error) console.warn("Omie remessa cache not saved",{organizationId:orgId,message:safeOmieError(error)});
+    }
+    return result;
+  }
+
+  // Remessas dos projetos em escopo + notas de entrada que apontam para elas.
+  async function collectRemessas(orgId:string,creds:{app_key:string;app_secret:string},scopeCodes:Set<string>){
+    const budget={left:40,consulted:0,cached:0,waiting:0};
+    const listed=await omieListExact(OMIE_REMESSA_API.remessa,remessaListParams,creds);
+    const scopedRows=listed.rows.filter(row=>scopeCodes.has(parseRemessa(row).projectCode)&&remessaId(row));
+    const remStatus=await statusesFor(orgId,"rem",OMIE_REMESSA_API.remessa,scopedRows.map(row=>({id:remessaId(row),row})),creds,budget);
+    const remessas=scopedRows.map(row=>parseRemessa(row,remStatus.get(remessaId(row))??null));
+    const entradasListed=await omieListExact(OMIE_REMESSA_API.entrada,entradaListParams,creds);
+    const touching=entradasListed.rows.filter(row=>entradaId(row)&&entradaTouches(row,remessas,scopeCodes));
+    const neStatus=await statusesFor(orgId,"ne",OMIE_REMESSA_API.entrada,touching.map(row=>({id:entradaId(row),row})),creds,budget);
+    return {
+      remessas,
+      entradas:touching.map(row=>parseEntrada(row,neStatus.get(entradaId(row))??null)),
+      source:{remessasRead:listed.rows.length,remessasInScope:scopedRows.length,entradasRead:entradasListed.rows.length,entradasLinked:touching.length,
+        consulted:budget.consulted,cached:budget.cached,awaitingStatus:budget.waiting,truncated:listed.truncated||entradasListed.truncated}
+    };
+  }
+
+  async function applyRemessaEntries(orgId:string,actor:string,runId:string,entries:Record<string,unknown>[]){
+    const totals={imported:0,updated:0,cancelled:0,unchanged:0};
+    for(const batch of chunk(entries,500)){
+      const {data,error}=await admin.rpc("clique_obras_apply_omie_remessas_v457",{target_organization_id:orgId,target_actor_id:actor,entries:batch,target_sync_run_id:runId});
+      if(error) throw new Error(error.message||"Falha ao aplicar remessas do Omie.");
+      totals.imported+=Number(data?.imported)||0;totals.updated+=Number(data?.updated)||0;
+      totals.cancelled+=Number(data?.cancelled)||0;totals.unchanged+=Number(data?.unchanged)||0;
+    }
+    return totals;
+  }
+
+  async function listCardCandidates(creds:{app_key:string;app_secret:string}){
+    const listed=await omieListExact(OMIE_REMESSA_API.conta,accountListParams,creds,10);
+    return listed.rows.map(row=>parseAccount(row)).filter(account=>account.code&&!account.inactive);
+  }
+
   async function syncOrganization(orgId:string,requestedCodes:string[]|null,mode:"manual"|"automatic",triggeredBy:string){
     const leaseToken=crypto.randomUUID();
     let runId="";
@@ -255,8 +387,14 @@ Deno.serve(async(request:Request)=>{
         const rows=await pagedOmie(OMIE_ENDPOINTS.payables,"ListarContasPagar","conta_pagar_cadastro",basePayableFilter,creds,100);
         payables.push(...rows.filter(row=>selectedSet.has(cleanText(row.codigo_projeto,60))));
       }
-      const suppliers=await supplierDirectory(orgId,payables,creds);
-      const built=buildPayableEntries(payables,projectMap,categoryMap,suppliers.names);
+      // v4.5.7 — nos projetos com custo por remessa, do Contas a Pagar só entra
+      // o que foi lançado na conta do cartão corporativo. Sem projeto ativado,
+      // payableSplit.kept é o MESMO array "payables" (nada muda).
+      const remessaConfig=await loadRemessaConfig(orgId);
+      const remessaCodes=new Set<string>(selected.filter(code=>remessaConfig.projects.has(code)));
+      const payableSplit=filterPayablesForRemessa(payables,remessaCodes,remessaConfig.cards);
+      const suppliers=await supplierDirectory(orgId,payableSplit.kept,creds);
+      const built=buildPayableEntries(payableSplit.kept,projectMap,categoryMap,suppliers.names);
       const supplierBackfillComplete=suppliers.complete&&selected.length===allowed.size;
       let imported=0,updated=0,cancelled=0,unchanged=0;
       for(const batch of batchPayableEntries(built.entries,500)){
@@ -384,14 +522,32 @@ Deno.serve(async(request:Request)=>{
         console.warn("Omie orphan cleanup failed",{organizationId:orgId,runId,message:orphans.error});
       }
 
+      // ---------------------------------------------------------------------
+      // v4.5.7 — Custo por NOTA DE REMESSA, somente nos projetos ativados.
+      // Bloco isolado: contas a pagar, contas a receber e órfãos já foram
+      // aplicados acima e nunca são perdidos por uma falha aqui.
+      // ---------------------------------------------------------------------
+      const remessas:Record<string,unknown>={projects:remessaCodes.size,payablesSkipped:payableSplit.skipped,payablesCard:payableSplit.keptCard,imported:0,updated:0,cancelled:0,unchanged:0,pending:0,unmatchedReturns:0,error:null};
+      if(remessaCodes.size){
+        try{
+          const collected=await collectRemessas(orgId,creds,remessaCodes);
+          const builtRemessas=buildRemessaEntries(collected.remessas,collected.entradas,projectMap,categoryMap,remessaCodes);
+          const applied=await applyRemessaEntries(orgId,runActor,runId,builtRemessas.entries);
+          Object.assign(remessas,applied,{counts:builtRemessas.counts,pending:builtRemessas.pending.length,unmatchedReturns:builtRemessas.unmatchedReturns.length,source:collected.source});
+        }catch(error){
+          remessas.error=safeOmieError(error);
+          console.warn("Omie remessa step failed",{organizationId:orgId,runId,message:remessas.error});
+        }
+      }
+
       const finishedAt=new Date().toISOString();
       await Promise.all([
-        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,receivables,orphans}}).eq("id",runId),
+        admin.from("omie_sync_runs").update({status:"success",finished_at:finishedAt,imported_count:imported,updated_count:updated,cancelled_count:cancelled,skipped_count:built.skipped,details:{unchanged,received:payables.length,supplierLookups:suppliers.lookups,supplierBackfillComplete,receivables,orphans,remessas}}).eq("id",runId),
         admin.from("omie_connections").update({last_sync_at:finishedAt,last_sync_status:"success",last_sync_error:null,
           supplier_backfill_completed_at:connection.supplier_backfill_completed_at||(supplierBackfillComplete?finishedAt:null),
           updated_at:finishedAt}).eq("organization_id",orgId)
       ]);
-      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length,receivables,orphans};
+      return {imported,updated,cancelled,skipped:built.skipped,unchanged,received:payables.length,receivables,orphans,remessas};
     }catch(error){
       const message=safeOmieError(error);
       const updates=[admin.from("omie_connections").update({last_sync_status:"error",last_sync_error:message,updated_at:new Date().toISOString()}).eq("organization_id",orgId)];
@@ -442,6 +598,145 @@ Deno.serve(async(request:Request)=>{
     if(action==="sync"){
       const codes=Array.isArray(payload.projectCodes)?payload.projectCodes.map(String).slice(0,1000):null;
       return json(request,await syncOrganization(organizationId,codes,"manual",actorId));
+    }
+    // v4.5.7 — custo por nota de remessa (somente proprietário, como o resto).
+    if(action==="remessa-config"){
+      const [config,{data:mappings,error:mappingError}]=await Promise.all([
+        loadRemessaConfig(organizationId),
+        admin.from("omie_project_mappings").select("omie_project_code,omie_project_name,clique_project_id,enabled").eq("organization_id",organizationId).eq("enabled",true).order("omie_project_name")
+      ]);
+      if(mappingError) throw mappingError;
+      let accounts:unknown[]=[],accountsError:string|null=null;
+      try{ accounts=await listCardCandidates(await credentials(organizationId)); }
+      catch(error){ accountsError=safeOmieError(error); }
+      const enabledAt=new Map((config.projectRows as any[]).map((row:any)=>[String(row.omie_project_code),row.enabled?row.enabled_at:null]));
+      return json(request,{
+        ready:config.ready,
+        projects:(mappings||[]).map((row:any)=>({omieProjectCode:String(row.omie_project_code),omieProjectName:row.omie_project_name,cliqueProjectId:row.clique_project_id,remessa:config.projects.has(String(row.omie_project_code)),enabledAt:enabledAt.get(String(row.omie_project_code))||null})),
+        cards:(config.cardRows as any[]).map((row:any)=>({code:String(row.omie_account_code),name:row.account_name||""})),
+        accounts,accountsError
+      });
+    }
+    if(action==="remessa-save"){
+      const config=await loadRemessaConfig(organizationId);
+      if(!config.ready) return json(request,{error:"Aplique primeiro o SQL da v4.5.7 (ATUALIZACAO-v4.5.7-OMIE-REMESSA.sql)."},409);
+      const rawProjects=Array.isArray(payload.remessaProjects)?payload.remessaProjects:[];
+      const rawCards=Array.isArray(payload.cardAccounts)?payload.cardAccounts:[];
+      if(rawProjects.length>1000||rawCards.length>100) return json(request,{error:"Quantidade acima do limite."},400);
+      const {data:mappings,error:mappingError}=await admin.from("omie_project_mappings").select("omie_project_code,clique_project_id").eq("organization_id",organizationId);
+      if(mappingError) throw mappingError;
+      const mapped=new Map((mappings||[]).map((row:any)=>[String(row.omie_project_code),String(row.clique_project_id)]));
+      const wanted=new Set<string>();
+      for(const item of rawProjects as any[]){
+        const code=cleanText(item?.omieProjectCode,30);
+        if(/^\d{1,30}$/.test(code)&&mapped.has(code)&&item?.enabled===true) wanted.add(code);
+      }
+      const cards=new Map<string,string>();
+      for(const item of rawCards as any[]){
+        const code=cleanText(item?.code,40);
+        if(/^\d{1,40}$/.test(code)) cards.set(code,cleanText(item?.name,120));
+      }
+      const now=new Date().toISOString();
+      const previous=new Map((config.projectRows as any[]).map((row:any)=>[String(row.omie_project_code),row]));
+      const turnedOff=[...config.projects].filter(code=>!wanted.has(code));
+      const upserts=[...new Set([...wanted,...turnedOff])].map(code=>({
+        organization_id:organizationId,omie_project_code:code,clique_project_id:mapped.get(code)||String((previous.get(code) as any)?.clique_project_id||""),
+        enabled:wanted.has(code),
+        enabled_at:wanted.has(code)?((previous.get(code) as any)?.enabled&&(previous.get(code) as any)?.enabled_at?(previous.get(code) as any).enabled_at:now):null,
+        updated_by:actorId,updated_at:now
+      })).filter(row=>row.clique_project_id);
+      if(upserts.length){
+        const {error}=await admin.from("omie_remessa_projects").upsert(upserts,{onConflict:"organization_id,omie_project_code"});
+        if(error) throw new Error("Não foi possível salvar os projetos com custo por remessa.");
+      }
+      const {error:deleteCardsError}=await admin.from("omie_card_accounts").delete().eq("organization_id",organizationId);
+      if(deleteCardsError) throw new Error("Não foi possível salvar as contas do cartão corporativo.");
+      if(cards.size){
+        const {error}=await admin.from("omie_card_accounts").insert([...cards].map(([code,name])=>({organization_id:organizationId,omie_account_code:code,account_name:name||null,updated_by:actorId,updated_at:now})));
+        if(error) throw new Error("Não foi possível salvar as contas do cartão corporativo.");
+      }
+      // Projeto que SAIU do modo remessa: as remessas lançadas nele são
+      // estornadas (a mesma rotina devolve o valor ao planejamento). As contas
+      // a pagar voltam a entrar pela sincronização manual daquele projeto.
+      let reverted=0;
+      if(turnedOff.length){
+        const {data:rows,error}=await admin.from("app_records").select("data").eq("organization_id",organizationId).eq("store","purchases")
+          .eq("data->>sourceType","omieRemessa").in("data->>omieProjectCode",turnedOff).limit(5000);
+        if(error) throw new Error("Não foi possível localizar as remessas dos projetos desativados.");
+        const entries=(rows||[]).map((row:any)=>({externalItemId:cleanText(row.data?.externalItemId,180),externalId:cleanText(row.data?.externalId,100),projectId:cleanText(row.data?.projectId,180),category:cleanText(row.data?.category,180),value:Number(row.data?.value)||0,active:false,externalSource:"omie",sourceType:"omieRemessa"})).filter((entry:any)=>entry.externalItemId);
+        if(entries.length){
+          const result=await applyRemessaEntries(organizationId,actorId,crypto.randomUUID(),entries);
+          reverted=result.cancelled;
+        }
+      }
+      return json(request,{saved:true,projects:wanted.size,cards:cards.size,reverted,turnedOff});
+    }
+    if(action==="remessa-preview"){
+      const code=cleanText(payload.projectCode,30);
+      if(!/^\d{1,30}$/.test(code)) return json(request,{error:"Projeto inválido."},400);
+      const creds=await credentials(organizationId);
+      const [{data:connection},{data:projectRows},{data:categoryRows}]=await Promise.all([
+        admin.from("omie_connections").select("initial_sync_date").eq("organization_id",organizationId).maybeSingle(),
+        admin.from("omie_project_mappings").select("omie_project_code,clique_project_id,enabled").eq("organization_id",organizationId).eq("enabled",true),
+        admin.from("omie_category_mappings").select("omie_category_code,clique_category_name,enabled").eq("organization_id",organizationId).eq("enabled",true)
+      ]);
+      const projectMap=new Map((projectRows||[]).map((row:any)=>[String(row.omie_project_code),{cliqueProjectId:String(row.clique_project_id),enabled:true}]));
+      if(!projectMap.has(code)) return json(request,{error:"Projeto sem vínculo ativo no mapeamento Omie."},400);
+      const categoryMap=new Map((categoryRows||[]).map((row:any)=>[String(row.omie_category_code),{cliqueCategoryName:String(row.clique_category_name),enabled:true}]));
+      const cards=new Set<string>((Array.isArray(payload.cardAccounts)?payload.cardAccounts:[]).map((item:any)=>cleanText(item?.code??item,40)).filter((value:string)=>/^\d{1,40}$/.test(value)));
+      let remessaResult:Record<string,unknown>={error:null};
+      try{
+        const collected=await collectRemessas(organizationId,creds,new Set([code]));
+        const built=buildRemessaEntries(collected.remessas,collected.entradas,projectMap,categoryMap,new Set([code]));
+        remessaResult={error:null,source:collected.source,counts:built.counts,pending:built.pending.slice(0,50),unmatchedReturns:built.unmatchedReturns.slice(0,30),
+          entries:built.entries.slice(0,300).map((entry:any)=>({id:entry.externalId,nfNumber:entry.nfNumber,date:entry.date,category:entry.category,grossValue:entry.grossValue,returnedValue:entry.returnedValue,value:entry.value,returns:entry.returns,status:entry.status,active:entry.active}))};
+      }catch(error){ remessaResult={error:safeOmieError(error)}; }
+      const payableResult:Record<string,unknown>={error:null};
+      try{
+        const today=new Date().toISOString().slice(0,10);
+        const rows=await pagedOmie(OMIE_ENDPOINTS.payables,"ListarContasPagar","conta_pagar_cadastro",{
+          apenas_importado_api:"N",filtrar_por_data_de:isoToDdMmYyyy(String(connection?.initial_sync_date||today)),filtrar_por_data_ate:isoToDdMmYyyy(today),
+          filtrar_apenas_inclusao:"N",filtrar_apenas_alteracao:"N",filtrar_por_projeto:Number(code)
+        },creds,20);
+        const byAccount=new Map<string,{code:string;count:number;total:number;card:boolean}>();
+        for(const row of rows){
+          const account=cleanText((row as any).id_conta_corrente??"",40)||"—";
+          const current=byAccount.get(account)||{code:account,count:0,total:0,card:cards.has(account)};
+          current.count++;current.total=Math.round((current.total+Math.abs(Number((row as any).valor_documento)||0))*100)/100;
+          byAccount.set(account,current);
+        }
+        payableResult.accounts=[...byAccount.values()].sort((a,b)=>b.total-a.total);
+      }catch(error){ payableResult.error=safeOmieError(error); }
+      return json(request,{projectCode:code,remessas:remessaResult,payables:payableResult});
+    }
+    if(action==="remessa-probe"){
+      const creds=await credentials(organizationId);
+      const probe=async(api:{endpoint:string;list:string;listKey:string},params:(page:number)=>Record<string,unknown>)=>{
+        try{
+          const first=params(1);
+          const data=await omieCall(api.endpoint,api.list,"registros_por_pagina" in first?{...first,registros_por_pagina:5}:{...first,nRegistrosPorPagina:5},creds);
+          const rows=listRows(data,api.listKey);
+          return {method:api.list,listKey:api.listKey,totalPages:totalPages(data),rows:rows.length,shape:shapeOf(rows[0]??null),rowsSample:rows.slice(0,3)};
+        }catch(error){ return isEmptyListError(error)?{method:api.list,rows:0}:{method:api.list,error:safeOmieError(error)}; }
+      };
+      const status=async(api:{endpoint:string;status:string;statusKey:string},id:string)=>{
+        if(!id) return null;
+        try{ const data=await omieCall(api.endpoint,api.status,{[api.statusKey]:Number(id)},creds); return {method:api.status,shape:shapeOf(data),parsed:parseStatus(data)}; }
+        catch(error){ return {method:api.status,error:safeOmieError(error)}; }
+      };
+      const remessa=await probe(OMIE_REMESSA_API.remessa,remessaListParams) as any;
+      const firstRemessa=(remessa.rowsSample||[])[0];
+      const remessaStatus=await status(OMIE_REMESSA_API.remessa,firstRemessa?remessaId(firstRemessa):"");
+      const entrada=await probe(OMIE_REMESSA_API.entrada,entradaListParams) as any;
+      const firstEntrada=(entrada.rowsSample||[])[0];
+      const entradaStatus=await status(OMIE_REMESSA_API.entrada,firstEntrada?entradaId(firstEntrada):"");
+      const contas=await probe(OMIE_REMESSA_API.conta,accountListParams) as any;
+      const view=(result:any,parser:(row:any)=>unknown)=>{const {rowsSample,...rest}=result||{};return {...rest,parsed:(rowsSample||[]).map(parser)};};
+      return json(request,{
+        remessa:view(remessa,(row:any)=>parseRemessa(row)),remessaStatus,
+        notaEntrada:view(entrada,(row:any)=>parseEntrada(row)),notaEntradaStatus:entradaStatus,
+        contasCorrentes:view(contas,(row:any)=>parseAccount(row)),version:"4.5.8"
+      });
     }
     if(action==="disconnect"){
       const {error}=await admin.rpc("clique_obras_disconnect_omie",{target_organization_id:organizationId,target_actor_id:actorId});
