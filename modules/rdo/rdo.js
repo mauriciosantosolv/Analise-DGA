@@ -1795,11 +1795,17 @@ Views.rdos={
       const haystack=U.norm(`${rdo.number||''} ${RDO.projectLabel(rdo.projectId)} ${rdo.description||''} ${rdo.location||''}`);
       return matchesStatus&&(!normalized||haystack.includes(normalized));
     });
-    const approved=allRows.filter(x=>x.status==='Aprovado').length;
-    const pending=allRows.filter(x=>x.status==='Enviado').length;
-    const drafts=allRows.filter(x=>x.status==='Rascunho').length;
-    const returned=allRows.filter(x=>x.status==='Devolvido').length;
-    const hours=allRows.reduce((sum,rdo)=>sum+(rdo.entries||[]).reduce((s,row)=>s+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0),0);
+    // v4.5.9 - a busca (ex.: nome/codigo do projeto) passa a valer tambem para
+    // os indicadores: "Aguardando aprovacao", "Aprovados" e as contagens das
+    // pilulas e "Horas registradas" usam os diarios que batem com a busca (sem
+    // o filtro de situacao, senao clicar numa pilula zeraria as outras). Sem
+    // busca, o resultado e identico ao anterior.
+    const searched=normalized?allRows.filter(rdo=>U.norm(`${rdo.number||''} ${RDO.projectLabel(rdo.projectId)} ${rdo.description||''} ${rdo.location||''}`).includes(normalized)):allRows;
+    const approved=searched.filter(x=>x.status==='Aprovado').length;
+    const pending=searched.filter(x=>x.status==='Enviado').length;
+    const drafts=searched.filter(x=>x.status==='Rascunho').length;
+    const returned=searched.filter(x=>x.status==='Devolvido').length;
+    const hours=searched.reduce((sum,rdo)=>sum+(rdo.entries||[]).reduce((s,row)=>s+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0),0);
     $c().innerHTML=`<div class="toolbar rdo-page-toolbar">
       <div><h2>Diários de obra</h2><small>Acompanhe o preenchimento, as evidências e o fluxo de aprovação.</small></div>
       <div class="spacer"></div>
@@ -1816,7 +1822,7 @@ Views.rdos={
       <div class="rdo-search"><i data-lucide="search"></i><input id="rdo-search" value="${U.esc(this.query)}" placeholder="Buscar RDO, projeto ou serviço" aria-label="Buscar diários">${this.query?'<button id="rdo-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div>
       <div class="rdo-filter-chips">
         ${[
-          ['Todos',allRows.length],
+          ['Todos',searched.length],
           ['Rascunho',drafts],
           ['Enviado',pending],
           ['Aprovado',approved],

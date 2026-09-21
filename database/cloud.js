@@ -865,6 +865,18 @@ const Cloud = (() => {
     });
   }
 
+  // v4.5.9 — categorias das remessas do Omie (Edge Function separada, só leitura).
+  async function omieRemessaCategories(){
+    await ensureFresh();
+    if(!organization() || !isOwner())
+      throw new Error('Somente o proprietário pode administrar a integração Omie.');
+    return request('/functions/v1/omie-remessa-categorias',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({organizationId:organization().id})
+    });
+  }
+
   async function ensureRdoCostPosting(rdoId,projectId,purchaseRecordId,amount){
     await ensureFresh();
     if(!organization() || !fullAccess()) throw new Error('Aprovação de RDO indisponível.');
@@ -1335,7 +1347,7 @@ const Cloud = (() => {
     nextRdoNumber,
     rdoShiftDefaults,
     rdoHhGaps,
-    omieRequest,
+    omieRequest, omieRemessaCategories,
     listRdoAttachments, uploadRdoAttachment, updateRdoAttachmentDescription, removeRdoAttachment, downloadRdoAttachment,
     profileAvatarPath, profileAvatarUrl, loadProfileAvatar, updateProfileAvatar, removeProfileAvatar,
     updateOrganizationName, DEFAULT_PERMISSIONS, ALL_STORES

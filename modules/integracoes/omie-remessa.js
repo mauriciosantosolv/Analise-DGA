@@ -1,5 +1,6 @@
 /**
  * v4.5.7 — Custo por NOTA DE REMESSA (Omie).
+ * v4.5.9 — aba "Categorias das remessas" no DE-PARA (ver install()).
  *
  * Módulo NOVO. Não altera nenhuma função existente: ele ENVOLVE
  * OmieIntegration.render (acrescenta o botão "Custo por remessa"),
@@ -46,6 +47,84 @@ const OmieRemessa = {
       };
       DashboardPanel.__remessaV457=true;
     }
+    // v4.5.9 — a tela "Projetos e categorias" só lista categorias de DESPESA do
+    // Omie; a remessa sai numa categoria de RECEITA (ex.: 1.01.02) e não havia
+    // onde vinculá-la. Envolve configure() para acrescentar a aba "Categorias
+    // das remessas" DENTRO do mesmo modal: as linhas usam as mesmas classes e
+    // entram no mesmo OmieIntegration.catalog.categories, então o botão
+    // "Salvar mapeamentos" original grava tudo junto, sem nenhuma mudança nele.
+    if(typeof OmieIntegration!=='undefined'&&typeof OmieIntegration.configure==='function'&&!OmieIntegration.__remessaCatV459){
+      const baseConfigure=OmieIntegration.configure;
+      OmieIntegration.configure=async function(...args){
+        const result=await baseConfigure.apply(this,args);
+        try{ await OmieRemessa.addRemessaCategories(); }catch(error){ console.warn('[OmieRemessa] categorias das remessas indisponíveis',error); }
+        return result;
+      };
+      OmieIntegration.__remessaCatV459=true;
+    }
+  },
+
+  // v4.5.9 — aba "Categorias das remessas" no modal de mapeamento.
+  async addRemessaCategories(){
+    const catalog=OmieIntegration.catalog;
+    const tabs=document.querySelector('.omie-tabs');
+    const expenses=document.getElementById('omie-map-categories');
+    if(!catalog||!Array.isArray(catalog.categories)||!tabs||!expenses||document.getElementById('omie-tab-remessa-cats')) return;
+    const tab=document.createElement('button');
+    tab.className='tab'; tab.id='omie-tab-remessa-cats'; tab.type='button'; tab.textContent='Categorias das remessas';
+    tabs.appendChild(tab);
+    const panel=document.createElement('div');
+    panel.id='omie-map-remessa-cats'; panel.hidden=true;
+    panel.innerHTML='<div class="empty">Carregando as categorias usadas nas remessas do Omie…</div>';
+    expenses.insertAdjacentElement('afterend',panel);
+    const show=mine=>{
+      panel.hidden=!mine; tab.classList.toggle('active',mine);
+      if(mine){
+        ['omie-map-projects','omie-map-categories'].forEach(id=>{const el=document.getElementById(id);if(el) el.hidden=true;});
+        ['omie-tab-projects','omie-tab-categories'].forEach(id=>{const el=document.getElementById(id);if(el) el.classList.remove('active');});
+      }
+    };
+    tab.onclick=()=>show(true);
+    ['omie-tab-projects','omie-tab-categories'].forEach(id=>{const el=document.getElementById(id);if(el) el.addEventListener('click',()=>show(false));});
+    let data;
+    try{
+      if(!OmieIntegration.assertOwner()) return;
+      if(typeof Cloud==='undefined'||typeof Cloud.omieRemessaCategories!=='function') throw new Error('Atualize a página (Ctrl+F5).');
+      data=await Cloud.omieRemessaCategories();
+    }
+    catch(error){
+      panel.innerHTML=`<div class="permission-banner"><i data-lucide="alert-triangle"></i><span>Não foi possível listar as categorias das remessas: ${U.esc(error.message||error)}. Se a mensagem citar "not found"/404, falta publicar a Edge Function omie-remessa-categorias da v4.5.9.</span></div>`;
+      U.icons(); return;
+    }
+    if(!document.body.contains(panel)) return;
+    const known=new Set(catalog.categories.map(item=>String(item.code)));
+    const savedList=(OmieIntegration.state&&OmieIntegration.state.categoryMappings)||[];
+    const saved=new Map(savedList.map(item=>[String(item.omieCategoryCode),item]));
+    const extra=(Array.isArray(data&&data.categories)?data.categories:[])
+      .filter(item=>item&&item.code&&!known.has(String(item.code)))
+      .sort((a,b)=>(Number(b.remessas)||0)-(Number(a.remessas)||0)||String(a.code).localeCompare(String(b.code),'pt-BR',{numeric:true}));
+    const start=catalog.categories.length;
+    const items=extra.map((item,offset)=>{
+      const code=String(item.code), mapping=saved.get(code);
+      return {code,name:item.name||`Categoria ${code}`,remessas:Number(item.remessas)||0,index:start+offset,
+        selected:mapping?.cliqueCategoryId||'',enabled:mapping?mapping.enabled!==false:false};
+    });
+    items.forEach(item=>catalog.categories.push(item));
+    const unmapped=items.filter(item=>item.remessas>0&&!(item.selected&&item.enabled)).length;
+    if(unmapped) tab.textContent=`Categorias das remessas (${unmapped} sem vínculo)`;
+    const used=items.filter(item=>item.remessas>0), others=items.filter(item=>!item.remessas);
+    panel.innerHTML=`<div class="permission-banner" style="margin-bottom:10px"><i data-lucide="info"></i><span>No Omie a <b>remessa de produtos</b> costuma usar uma categoria de <b>receita</b>, que não aparece na aba de despesas. Vincule aqui a categoria da remessa à categoria do CliqueObras — o vínculo vale para o <b>custo por remessa</b> — e clique em <b>Salvar mapeamentos</b>.${data&&data.remessasError?` Não foi possível contar as remessas agora (${U.esc(data.remessasError)}).`:''}</span></div>
+      <h3 style="font-size:.9rem;margin:4px 0 8px">Usadas nas remessas (${used.length})</h3>
+      ${used.length?OmieIntegration.categoryRows(used):'<div class="empty">Nenhuma remessa do Omie usa categoria fora da lista de despesas.</div>'}
+      ${others.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-size:.85rem">Outras categorias do Omie (${others.length})</summary><div style="margin-top:8px">${OmieIntegration.categoryRows(others)}</div></details>`:''}`;
+    items.forEach(item=>{
+      const check=panel.querySelector(`.omie-category-enabled[data-index="${item.index}"]`);
+      const select=panel.querySelector(`.omie-category-target[data-index="${item.index}"]`);
+      const small=check&&check.parentElement?check.parentElement.querySelector('small'):null;
+      if(small&&item.remessas) small.textContent=`Código Omie: ${item.code} · usada em ${item.remessas} remessa(s)`;
+      if(select&&check) select.addEventListener('change',()=>{ if(select.value) check.checked=true; });
+    });
+    U.icons();
   },
 
   decorate(){
@@ -179,7 +258,7 @@ const OmieRemessa = {
       ${entries.map(item=>`<tr><td>${U.esc(item.nfNumber||item.id)}</td><td>${U.esc(U.date(item.date))}</td><td>${U.esc(item.category)}</td><td class="num">${this.money(item.grossValue)}</td><td class="num" title="${U.esc((item.returns||[]).map(ret=>`NF ${ret.nfNumber||ret.id} · ${U.date(ret.date)} · ${this.money(ret.value)}`).join('\n'))}">${Number(item.returnedValue)?this.money(item.returnedValue):'—'}</td><td class="num">${item.active?`<b>${this.money(item.value)}</b>`:'—'}</td><td>${statusTag(item)}</td></tr>`).join('')||'<tr><td colspan="7"><div class="empty">Nenhuma remessa encontrada para este projeto.</div></td></tr>'}
       </tbody></table></div>
       ${Number(r.source&&r.source.awaitingStatus)>0?`<div class="permission-banner" style="margin-top:10px"><i data-lucide="info"></i><span>${Number(r.source.awaitingStatus)} nota(s) ainda sem a situação consultada no Omie (limite de 40 consultas por vez). Elas entram nas próximas sincronizações; abra a prévia de novo para ver o quadro completo.</span></div>`:''}
-      ${(r.pending||[]).length?`<div class="permission-banner" style="margin-top:10px"><i data-lucide="alert-triangle"></i><span><b>${r.pending.length} remessa(s) ficam pendentes</b> por categoria sem DE-PARA: ${r.pending.slice(0,8).map(item=>`NF ${U.esc(item.nfNumber||item.id)} (categoria ${U.esc(item.categoryCode||'vazia')})`).join(', ')}. Vincule a categoria em "Projetos e categorias".</span></div>`:''}
+      ${(r.pending||[]).length?`<div class="permission-banner" style="margin-top:10px"><i data-lucide="alert-triangle"></i><span><b>${r.pending.length} remessa(s) ficam pendentes</b> por categoria sem DE-PARA: ${r.pending.slice(0,8).map(item=>`NF ${U.esc(item.nfNumber||item.id)} (categoria ${U.esc(item.categoryCode||'vazia')})`).join(', ')}. Vincule a categoria em "Projetos e categorias", aba "Categorias das remessas".</span></div>`:''}
       ${(r.unmatchedReturns||[]).length?`<div class="permission-banner" style="margin-top:10px"><i data-lucide="alert-triangle"></i><span><b>${r.unmatchedReturns.length} nota(s) de entrada</b> com NF referenciada que não bate com nenhuma remessa (de qualquer projeto) — ficam pendentes, sem estorno: ${r.unmatchedReturns.slice(0,8).map(item=>`NF ${U.esc(item.nfNumber||item.id)} (${this.money(item.total)})`).join(', ')}.</span></div>`:''}`}
       <h3 style="font-size:.95rem;margin:18px 0 8px">Contas a pagar deste projeto no Omie</h3>
       ${p.error?`<div class="permission-banner"><i data-lucide="alert-triangle"></i><span>${U.esc(p.error)}</span></div>`:`
