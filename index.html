@@ -1,158 +1,803 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="light" class="boot-shield">
+<html lang="pt-BR">
 <head>
-<script>/* v4.5.6 — rede de segurança da trava de boot: se o sistema travar
-  antes de qualquer JS próprio rodar, a trava sai sozinha e a tela volta a
-  aparecer, em vez de o usuário ficar com a página em branco. 20 s é depois do
-  timeout de 12 s do IndexedDB, que tem tela de recuperação própria. */
-setTimeout(function(){document.documentElement.classList.remove('boot-shield','auth-gate');},20000);</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="application-version" content="4.5.9">
-<meta name="description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="cliqueobras">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-elem 'self'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://mwelgpjkqljtkzbqxmag.supabase.co wss://mwelgpjkqljtkzbqxmag.supabase.co; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self' blob:">
-<meta name="referrer" content="no-referrer">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<title>CliqueObras | Gestão Financeira Integrada</title>
-<link rel="canonical" href="https://cliqueobras.com/">
-<meta name="robots" content="index,follow,max-image-preview:large">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de gestão de obras e controle de custos | CliqueObras</title>
+<meta name="description" content="Sistema online de gestão de obras: RDO digital, orçado x realizado, medições, equipe e homem-hora, com integração ao Omie. Controle sua obra em um só lugar.">
+<link rel="canonical" href="https://cliqueobras.com/apresentacao/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#04040b">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="CliqueObras">
 <meta property="og:locale" content="pt_BR">
-<meta property="og:url" content="https://cliqueobras.com/">
-<meta property="og:title" content="CliqueObras | Gestão Financeira Integrada">
-<meta property="og:description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
+<meta property="og:site_name" content="CliqueObras">
+<meta property="og:title" content="CliqueObras — tenha o controle da sua obra em um só lugar">
+<meta property="og:description" content="Sistema online de gestão de obras: RDO digital, orçado x realizado, medições, equipe e homem-hora, com integração ao Omie. Controle sua obra em um só lugar.">
+<meta property="og:url" content="https://cliqueobras.com/apresentacao/">
 <meta property="og:image" content="https://cliqueobras.com/assets/og-image.png">
-<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="CliqueObras — gestão financeira integrada de obras">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="CliqueObras | Gestão Financeira Integrada">
-<meta name="twitter:description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
+<meta name="twitter:title" content="CliqueObras — tenha o controle da sua obra em um só lugar">
+<meta name="twitter:description" content="Sistema online de gestão de obras: RDO digital, orçado x realizado, medições, equipe e homem-hora, com integração ao Omie. Controle sua obra em um só lugar.">
 <meta name="twitter:image" content="https://cliqueobras.com/assets/og-image.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://cliqueobras.com/#organizacao","name":"CliqueObras","url":"https://cliqueobras.com/","logo":{"@type":"ImageObject","url":"https://cliqueobras.com/assets/logo-clique.png","contentUrl":"https://cliqueobras.com/assets/logo-clique.png","width":1200,"height":927,"caption":"CliqueObras"},"image":"https://cliqueobras.com/assets/og-image.png"},{"@type":"WebSite","@id":"https://cliqueobras.com/#site","url":"https://cliqueobras.com/","name":"CliqueObras","inLanguage":"pt-BR","publisher":{"@id":"https://cliqueobras.com/#organizacao"}},{"@type":"SoftwareApplication","@id":"https://cliqueobras.com/#aplicativo","name":"CliqueObras","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://cliqueobras.com/","inLanguage":"pt-BR","image":"https://cliqueobras.com/assets/og-image.png","description":"Gestão financeira e operacional de obras: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.","publisher":{"@id":"https://cliqueobras.com/#organizacao"}}]}</script>
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=4.5.9">
-<link rel="icon" type="image/png" sizes="96x96" href="assets/favicon-96.png?v=4.5.9">
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=4.5.9">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=4.5.9">
-<link rel="manifest" href="manifest.webmanifest?v=4.5.9">
-<meta name="theme-color" content="#18181B">
-<link rel="stylesheet" href="css/fonts.css?v=4.5.9">
-<script src="assets/vendor/xlsx.min.js?v=4.5.9"></script>
-<script src="assets/vendor/chart.min.js?v=4.5.9"></script>
-<script src="assets/vendor/lucide.min.js?v=4.5.9"></script>
-<script src="assets/vendor/supabase.js?v=2.111.0"></script>
-<link rel="stylesheet" href="css/variables.css?v=4.5.9">
-<link rel="stylesheet" href="css/layout.css?v=4.5.9">
-<link rel="stylesheet" href="css/dashboard.css?v=4.5.9">
-<link rel="stylesheet" href="css/tables.css?v=4.5.9">
-<link rel="stylesheet" href="css/components.css?v=4.5.9">
-<link rel="stylesheet" href="css/auth.css?v=4.5.9">
-<link rel="stylesheet" href="css/premium.css?v=4.5.9">
-<link rel="stylesheet" href="css/rdo.css?v=4.5.9">
-<link rel="stylesheet" href="css/panel-tv.css?v=4.5.9">
-<link rel="stylesheet" href="css/equipe.css?v=4.5.9">
-<link rel="stylesheet" href="css/mobile-forms.css?v=4.5.9">
+<link rel="preload" href="assets/img/dashboard-gestao-de-obras.webp" as="image">
+<link rel="stylesheet" href="assets/site.css?v=1">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://cliqueobras.com/#organization", "name": "CliqueObras", "url": "https://cliqueobras.com/", "logo": "https://cliqueobras.com/assets/logo-clique.png", "email": "suporte@cliqueobras.com"}, {"@type": "SoftwareApplication", "@id": "https://cliqueobras.com/apresentacao/#software", "name": "CliqueObras", "url": "https://cliqueobras.com/apresentacao/", "applicationCategory": "BusinessApplication", "applicationSubCategory": "Gestão de obras", "operatingSystem": "Web", "inLanguage": "pt-BR", "description": "Sistema online de gestão de obras: RDO digital, orçado x realizado, medições, equipe e homem-hora, com integração ao Omie. Controle sua obra em um só lugar.", "image": "https://cliqueobras.com/apresentacao/assets/img/dashboard-gestao-de-obras.webp", "featureList": ["RDO digital (diário de obra)", "Orçado x realizado por categoria", "Medições e faturamento", "Apontamento de homem-hora por colaborador", "Calendário de planejamento de custos", "Integração com o ERP Omie", "Dashboard executivo e painel de TV", "Relatórios e exportações"], "publisher": {"@id": "https://cliqueobras.com/#organization"}}, {"@type": "WebPage", "@id": "https://cliqueobras.com/apresentacao/", "url": "https://cliqueobras.com/apresentacao/", "name": "Sistema de gestão de obras e controle de custos | CliqueObras", "description": "Sistema online de gestão de obras: RDO digital, orçado x realizado, medições, equipe e homem-hora, com integração ao Omie. Controle sua obra em um só lugar.", "inLanguage": "pt-BR", "about": {"@id": "https://cliqueobras.com/apresentacao/#software"}, "isPartOf": {"@type": "WebSite", "url": "https://cliqueobras.com/", "name": "CliqueObras"}}, {"@type": "FAQPage", "@id": "https://cliqueobras.com/apresentacao/#faq", "mainEntity": [{"@type": "Question", "name": "Preciso instalar alguma coisa?", "acceptedAnswer": {"@type": "Answer", "text": "Não. O CliqueObras roda no navegador, em qualquer computador, tablet ou celular. O time de campo registra o RDO direto do dispositivo e a informação aparece no painel no mesmo instante."}}, {"@type": "Question", "name": "Como funciona a integração com meus sistemas atuais?", "acceptedAnswer": {"@type": "Answer", "text": "O CliqueObras importa orçamentos e cronogramas de planilhas (Excel/CSV) e sincroniza contas a pagar e centros de custo com o Omie, vinculando cada lançamento à obra e à categoria do orçamento."}}, {"@type": "Question", "name": "Os dados das telas são reais?", "acceptedAnswer": {"@type": "Answer", "text": "As telas desta página são do sistema em uso, mas com obras, clientes e pessoas anonimizados. A estrutura, os cálculos e os painéis são exatamente os que o sistema entrega."}}, {"@type": "Question", "name": "Qual é o suporte oferecido?", "acceptedAnswer": {"@type": "Answer", "text": "Suporte por e-mail em suporte@cliqueobras.com e por telefone em horário comercial, além de central de ajuda e treinamentos em vídeo para a equipe de obra e de escritório."}}, {"@type": "Question", "name": "Meus dados estão seguros?", "acceptedAnswer": {"@type": "Answer", "text": "Sim. Utilizamos criptografia em trânsito e em repouso, backups diários automáticos e servidores em conformidade com a LGPD. Você mantém a propriedade total dos seus dados e pode exportá-los a qualquer momento."}}]}]}</script>
+<script src="assets/site.js?v=1" defer></script>
 </head>
 <body>
-<div id="app">
-  <aside id="sidebar">
-    <button class="brand" type="button" onclick="App.go('configuracoes')" aria-label="Abrir configurações da empresa" title="Configurações da empresa">
-      <div class="brand-logo" id="company-logo-box"><img src="assets/logo-clique.png" alt="Clique Obras"></div>
-      <div><b id="sidebar-user-name">CliqueObras</b><small id="sidebar-org-name">Organização</small><span id="company-name" hidden aria-hidden="true"></span></div>
-      <i class="brand-chevron" data-lucide="chevron-right"></i>
-    </button>
-    <nav id="nav">
-      <div class="nav-sep">Visão Geral</div>
-      <button class="nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
-      <button class="nav-item" data-view="projetos"><i data-lucide="hard-hat"></i>Projetos</button>
-      <div class="nav-sep">Gestão</div>
-      <button class="nav-item" data-view="orcamentos"><i data-lucide="calculator"></i>Orçamentos</button>
-      <button class="nav-item" data-view="financeiro"><i data-lucide="wallet"></i>Financeiro</button>
-      <button class="nav-item" data-view="planejamento"><i data-lucide="calendar-days"></i>Planejamento</button>
-      <button class="nav-item" data-view="planejamentoequipe"><i data-lucide="users"></i>Planejamento de Colaboradores</button>
-      <button class="nav-item" data-view="clientes"><i data-lucide="users"></i>Clientes</button>
-      <button class="nav-item" data-view="categorias"><i data-lucide="tags"></i>Categorias</button>
-      <div class="nav-sep">Execução</div>
-      <button class="nav-item" data-view="rdos"><i data-lucide="clipboard-check"></i>Diários de Obra</button>
-      <button class="nav-item" data-view="colaboradores"><i data-lucide="users"></i>Colaboradores</button>
-      <button class="nav-item" data-view="medicoes"><i data-lucide="dollar-sign"></i>Medições</button>
-      <button class="nav-item" data-view="valoreshh"><i data-lucide="badge-dollar-sign"></i>Valores HH</button>
-      <div class="nav-sep">Análise</div>
-      <button class="nav-item" data-view="basecalculo"><i data-lucide="percent"></i>Base de Cálculo</button>
-      <button class="nav-item" data-view="relatorios"><i data-lucide="file-bar-chart"></i>Relatórios</button>
-      <div class="nav-sep">Sistema</div>
-      <button class="nav-item" data-view="configuracoes"><i data-lucide="settings"></i>Configurações</button>
-      <button class="nav-item" data-view="backup"><i data-lucide="database-backup"></i>Backup</button>
-      <div class="nav-sep">Conta</div>
-      <button class="nav-item nav-logout" id="nav-logout" type="button"><i data-lucide="log-out"></i>Sair</button>
-    </nav>
-    <div id="sidebar-footer"><span id="storage-status">v4.5.9 · carregando…</span></div>
-  </aside>
-  <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
-  <main>
-    <div id="finance-ticker" aria-label="Desempenho financeiro dos projetos"></div>
-    <header id="topbar">
-      <div class="topbar-left">
-        <button class="icon-btn" id="menu-toggle" title="Menu" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i></button>
-        <h1 id="page-title">Dashboard</h1>
+<main><div style="background: #121113; color: #e5e5e5; font-family:'Red Hat Text',Inter,sans-serif">
+
+  <div style="max-width:1152px;margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+      <a href="#" style="display:flex;align-items:center;gap:8px;color:inherit">
+        <span style="display: flex; height: 36px; width: 36px; box-sizing: border-box; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #23378f; border-style: none"><img src="assets/img/logo-cliqueobras.webp" alt="CliqueObras" width="1824" height="1407" style="display: block; width: 42px; height: 33px"></span>
+        <span style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #e5e5e5; font-family: Montserrat">Clique<span style="color:#7d95f7">Obras</span></span>
+      </a>
+      <nav style="display:flex;align-items:center;gap:24px;white-space:nowrap">
+        <a href="#funcionalidades" style="font-size: 14px; font-weight: 500; color: #b5b2bc; font-family: Montserrat">Funcionalidades</a>
+        <a href="#modulos" style="font-size: 14px; font-weight: 500; color: #b5b2bc; font-family: Montserrat">Módulos</a>
+        <a href="#como-funciona" style="font-size: 14px; font-weight: 500; color: #b5b2bc; font-family: Montserrat">Como funciona</a>
+        <a href="#beneficios" style="font-size: 14px; font-weight: 500; color: #b5b2bc; font-family: Montserrat">Benefícios</a>
+        <a href="#faq" style="font-size: 14px; font-weight: 500; color: #b5b2bc; font-family: Montserrat">FAQ</a>
+      </nav>
+      <a href="https://cliqueobras.com/" target="_blank" rel="noopener" style="display:inline-flex;height:44px;align-items:center;gap:8px;border-radius:6px;background:#1239e2;padding:0 20px;font-size:14px;font-weight:600;color:#eeeef0;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset" class="hv1">
+        Entrar
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M15 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"></path></svg>
+      </a>
+    </div><header data-screen-label="Header" style="position:sticky;top:0;z-index:50;border-bottom:1px solid #2b292d;background:rgba(4,4,11,0.86);backdrop-filter:blur(12px)">
+    
+  </header>
+
+  <section data-screen-label="Hero" style="position: relative; overflow: hidden; background: linear-gradient(to bottom,#0b0b14 0%,#04040b 55%,#04040b 100%); padding-top: 88px; font-family: Montserrat">
+    <div aria-hidden="true" style="pointer-events:none;position:absolute;right:-160px;top:-160px;height:480px;width:480px;border-radius:9999px;background:rgba(18,57,226,0.10);filter:blur(64px)"></div>
+    <div aria-hidden="true" style="pointer-events:none;position:absolute;left:-160px;top:256px;height:380px;width:380px;border-radius:9999px;background:rgba(186,167,255,0.10);filter:blur(64px)"></div>
+
+    
+
+    
+      <div style="position:relative;max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="max-width: 768px; margin: 0 auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 24px; position: relative">
+        
+        <h1 style="margin: 0; font-family: Montserrat; font-size: 60px; font-weight: 800; line-height: 1.08; letter-spacing: -0.03em; color: #e5e5e5; text-wrap: pretty">
+          Tenha o controle da sua obra em
+          <span style="position: relative; white-space: nowrap; color: #7d95f7; font-family: Montserrat">um só lugar</span>.
+        </h1>
+        <p style="margin: 0; max-width: 672px; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Planeje. Execute. Acompanhe e tome decisões eficazes de forma segura e confiável.</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:8px">
+          <a href="#modulos" style="display: inline-flex; height: 52px; align-items: center; justify-content: center; gap: 8px; border-radius: 6px; background: #1239e2; padding: 0 28px; font-size: 16px; font-weight: 600; color: #eeeef0; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset; font-family: Montserrat" class="hv2">
+            Conhecer o sistema
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </a>
+          <a href="https://cliqueobras.com/" target="_blank" rel="noopener" style="display: inline-flex; height: 52px; align-items: center; justify-content: center; gap: 8px; border-radius: 6px; border: 1px solid #2b292d; background: #121113; padding: 0 28px; font-size: 16px; font-weight: 600; color: #e5e5e5; font-family: Montserrat" class="hv3">
+            Entrar no sistema
+          </a>
+        </div>
+        <p style="margin: 0; font-size: 14px; color: #7c7a85; position: relative; font-family: Montserrat">Página de apresentação · Telas reais do sistema, com dados anonimizados</p>
+      <div style="position: absolute; left: -157px; top: 288px; border-radius: 6px; border: 1px solid #2b292d; background: #121113; padding: 16px; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset; animation: float-y 6s ease-in-out infinite">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+              </span>
+              <div>
+                <p style="margin:0;font-size:12px;color:#7c7a85">RDO de hoje</p>
+                <p style="margin:2px 0 0;font-size:14px;font-weight:600;color:#e5e5e5">Aprovado às 17h42</p>
+              </div>
+            </div>
+          </div></div>
+
+      <div style="position:relative;max-width:960px;margin:56px auto 0;padding-bottom:96px">
+        <div style="overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid #2b292d;background:#1a191b;padding:12px 16px">
+            <span style="height:10px;width:10px;border-radius:9999px;background:#2b292d"></span>
+            <span style="height:10px;width:10px;border-radius:9999px;background:#2b292d"></span>
+            <span style="height:10px;width:10px;border-radius:9999px;background:#2b292d"></span>
+            <span style="margin-left:12px;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:4px 12px;font-size:12px;color:#7c7a85">cliqueobras.com/dashboard</span>
+          </div>
+          <img src="assets/img/dashboard-gestao-de-obras.webp" alt="Dashboard do CliqueObras com orçado, realizado, projeção e saldo das obras" width="1912" height="1068" style="max-width: 100%; height: auto; display: block; object-fit: cover; width: 1912px; aspect-ratio: 1912 / 1068">
+        </div>
+
+        
+          
+          
+        
       </div>
-      <div id="global-search-wrap">
-        <i data-lucide="search"></i>
-        <input id="global-search" placeholder="Buscar em todo o CliqueObras…" autocomplete="off">
-        <button type="button" id="global-search-clear" aria-label="Limpar pesquisa" title="Limpar pesquisa"><i data-lucide="x"></i></button>
-        <div id="search-results"></div>
+    <div style="position: absolute; border-radius: 6px; border: 1px solid #2b292d; background: #121113; padding: 16px; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset; animation: float-y 7s ease-in-out 1.2s infinite; left: 930px; top: 946px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 10h18"></path><path d="M16 14.5h2"></path></svg>
+              </span>
+              <div>
+                <p style="margin:0;font-size:12px;color:#7c7a85">Orçado vs. realizado</p>
+                <p style="margin:2px 0 0;font-size:14px;font-weight:600;color:#e5e5e5">84% <span style="font-weight: 500; color: rgb(186, 167, 255);">dentro do budget</span></p>
+              </div>
+            </div>
+          </div></div><div style="border-top:1px solid #2b292d;border-bottom:1px solid #2b292d;background:#121113;padding:16px 0">
+        <div style="display:flex;overflow:hidden">
+          <div style="display:flex;flex-shrink:0;align-items:center;gap:40px;padding-right:40px;animation:marquee 32s linear infinite">
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>RDO Digital</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Controle Financeiro</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Planejamento de Obras</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Gestão de Equipes</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Cronograma Integrado</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Orçado vs. Realizado</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Relatórios em Tempo Real</span>
+            <span style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Rastreabilidade Total</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>RDO Digital</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Controle Financeiro</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Planejamento de Obras</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Gestão de Equipes</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Cronograma Integrado</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Orçado vs. Realizado</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Relatórios em Tempo Real</span>
+            <span aria-hidden="true" style="display:flex;align-items:center;gap:12px;white-space:nowrap;font-size:14px;font-weight:500;color:#7c7a85"><span style="height:6px;width:6px;border-radius:9999px;background:#7d95f7"></span>Rastreabilidade Total</span>
+          </div>
+        </div>
       </div>
-      <div class="topbar-actions">
-        <button class="icon-btn tv-mode-toggle" id="tv-mode-toggle" type="button" title="Abrir modo painel para TV" aria-label="Abrir modo painel para TV"><i data-lucide="monitor-up"></i><span>Painel</span></button>
-        <button class="icon-btn" id="future-toggle" title="Gastos previstos" aria-label="Abrir gastos previstos"><i data-lucide="calendar-clock"></i></button>
-        <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
+    
+  </section>
+
+  <section data-screen-label="Problema e solução" style="background:#121113;padding:112px 0">
+    <div style="max-width: 1152px; margin: 0 auto; padding: 0 24px; position: relative">
+      <div style="max-width:672px">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Problema e solução</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">Quanto tempo você perde elaborando planilhas e gráficos?</h2><p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; width: 1004px; height: 38px">Sua gestão não pode ser dependente de tratamento de dados e alimentação de planilhas. Foque no essencial.</p>
+        
       </div>
-    </header>
-    <div id="content-wrap"><div id="content"></div><aside id="rightbar"><div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div><div id="rightbar-content"></div></aside></div>
-  </main>
+
+      <div style="margin-top: 48px; display: flex; flex-direction: column; gap: 16px; position: relative">
+        
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; border-radius:6px; border: 1px solid #2b292d; background: #1a191b; padding: 32px; position: relative">
+          <div style="display:flex;gap:16px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#232225;color:#7c7a85">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke="#EA1010"></circle><path d="M15 9l-6 6M9 9l6 6" stroke="#EA1010"></path></svg>
+            </span>
+            <div style="width: 456px; height: 74px">
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Falta de visibilidade integrada</h3><p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Cada obra em uma planilha, cada informação em um lugar. Ninguém sabe o status real sem ligar para o canteiro.</p>
+              
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;border-left:1px solid #2b292d;padding-left:40px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #7d95f7">Calendário de planejamento</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Painel único. Filtrável. Consultável. Confiável</p>
+            </div>
+          </div>
+        <div style="box-sizing: border-box; display: flex; flex-direction: column; width: 71px; height: 56px; background-color: #12111300; border-radius:6px; position: absolute; left: 261px; top: -41px"><img src="assets/img/planilha-excel.webp" alt="" width="960" height="894" loading="lazy" decoding="async" style="max-width: 100%; height: 49px; display: block; object-fit: scale-down; width: 60px; aspect-ratio: 960 / 894"></div><div style="box-sizing: border-box; display: flex; flex-direction: column; width: 82px; height: 67px; border-radius: 8px; position: absolute; left: 780px; top: -41px"><img src="assets/img/icone-cliqueobras.webp" alt="" width="2160" height="2160" loading="lazy" decoding="async" style="max-width: 100%; height: 56px; display: block; object-fit: cover; width: 56px; aspect-ratio: 2160 / 2160"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:32px">
+          <div style="display:flex;gap:16px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#232225;color:#7c7a85">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke="#EA1010"></circle><path d="M15 9l-6 6M9 9l6 6" stroke="#EA1010"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Custos fora de controle</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">O acompanhamento depende exclusivamente da alimentação manual das informações todos os dias.</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;border-left:1px solid #2b292d;padding-left:40px">
+            
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+            </span><div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #7d95f7">Integração com omie</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Controle financeiro em tempo real: planeje apenas uma vez. O sistema sincroniza todas as informações e trabalha com seu planejado.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:32px">
+          <div style="display:flex;gap:16px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#232225;color:#7c7a85">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke: #EA1010"><circle cx="12" cy="12" r="9"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Comunicação fragmentada</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Diversas folhas de RDO, fotos em grupo de mensagem, equipe perdida</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;border-left:1px solid #2b292d;padding-left:40px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #7d95f7">Controle sua obra</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">RDO digital e registro centralizado: toda a equipe trabalha sobre a mesma informação.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:32px">
+          <div style="display:flex;gap:16px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#232225;color:#7c7a85">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke: #EA1010"><circle cx="12" cy="12" r="9"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Erro de fórmulas</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Um erro pode ocultar um dado importante e mascarar o resultado da sua obra</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;border-left:1px solid #2b292d;padding-left:40px">
+            <span style="margin-top:2px;display:flex;height:36px;width:36px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+            </span>
+            <div>
+              <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #7d95f7">Confiabilidade de informações</h3>
+              <p style="margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Os dados são totalmente confiáveis e auditáveis através da sincronização com o omie.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="funcionalidades" data-screen-label="Funcionalidades" style="background:#1a191b;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="max-width:672px;margin:0 auto;text-align:center">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Funcionalidades</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">Tudo o que a gestão da sua obra precisa</h2>
+        <p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Uma plataforma integrada. Planejamento. Medições. Painéis. Visualização em tempo real da equipe em campo e custos de ociosidade</p>
+      </div>
+
+      <div style="margin-top:56px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+        <div style="height:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:28px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;transition:all 0.3s" class="hv4">
+          <span style="display:flex;height:48px;width:48px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+          </span>
+          <h3 style="margin: 20px 0 0; font-family: Montserrat; font-size: 18px; font-weight: 600; color: #e5e5e5">Gestão integrada de obras</h3>
+          <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Planejamento, execução e custos no mesmo sistema. Veja o que foi planejado, o que está sendo executado e quanto já foi gasto, sem cruzar planilhas.</p>
+        </div>
+
+        <div style="height:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:28px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;transition:all 0.3s" class="hv5">
+          <span style="display:flex;height:48px;width:48px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"></rect><path d="M9 3h6v3H9z"></path><path d="M8 11h8M8 15h8"></path></svg>
+          </span>
+          <h3 style="margin: 20px 0 0; font-family: Montserrat; font-size: 18px; font-weight: 600; color: #e5e5e5">RDO digital</h3>
+          <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Relatório Diário de Obras preenchido direto do canteiro, com fotos, mão de obra e serviços realizados.</p>
+        </div>
+
+        <div style="height:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:28px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;transition:all 0.3s" class="hv6">
+          <span style="display:flex;height:48px;width:48px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 10h18"></path><path d="M16 14.5h2"></path></svg>
+          </span>
+          <h3 style="margin: 20px 0 0; font-family: Montserrat; font-size: 18px; font-weight: 600; color: #e5e5e5">Controle financeiro em tempo real</h3>
+          <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Orçado versus realizado por obra e categoria. Alertas de desvio antes que o prejuízo aconteça.</p>
+        </div>
+
+        <div style="height:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:28px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;transition:all 0.3s" class="hv7">
+          <span style="display:flex;height:48px;width:48px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"></path><path d="M16.5 4.2a4 4 0 010 7.6"></path><path d="M18 14.9c2.4.7 4 2.7 4 6.1"></path></svg>
+          </span>
+          <h3 style="margin: 20px 0 0; font-family: Montserrat; font-size: 18px; font-weight: 600; color: #e5e5e5">100% de controle da equipe</h3>
+          <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Defina o custo/h. Monitore o custo ocioso, por obra, faltas e folgas.</p>
+        </div>
+
+        <div style="height:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:28px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;transition:all 0.3s" class="hv8">
+          <span style="display:flex;height:48px;width:48px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"></path><path d="M21 7h-6M21 7v6"></path></svg>
+          </span>
+          <h3 style="margin: 20px 0 0; font-family: Montserrat; font-size: 18px; font-weight: 600; color: #e5e5e5">Acompanhamento visual do progresso</h3>
+          <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Painel de apresentação para TV e outros projetores</p>
+        </div>
+
+        <div style="display:flex;height:100%;box-sizing:border-box;flex-direction:column;justify-content:space-between;border-radius:6px;border:1px solid #23378f;background:#131f4d;padding:28px;color:#eeeef0;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div>
+            <h3 style="margin: 0; font-family: Montserrat; font-size: 18px; font-weight: 600">E muito mais: medições, documentos, alertas e relatórios</h3>
+            <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Percorra os módulos e veja como o CliqueObras acompanha o fluxo da obra, do planejamento à medição.</p>
+          </div>
+          <a href="#modulos" style="margin-top:24px;display:inline-flex;height:44px;align-items:center;justify-content:center;gap:8px;border-radius:6px;background:#121113;padding:0 20px;font-size:14px;font-weight:600;color:#7d95f7" class="hv9">
+            Ver módulos
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ticker" data-screen-label="Ticker financeiro" style="background:#1a191b;padding:96px 0 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:56px;align-items:end">
+        <div>
+          <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Destaque · Ticker financeiro</span>
+          <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">O saldo de todas as obras passando na sua tela, o dia inteiro</h2>
+          <p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Uma faixa contínua, no topo do sistema e no painel de TV, com o saldo de cada obra e a seta de tendência. Verde é folga no orçamento, vermelho é desvio. Ninguém precisa abrir relatório para saber onde a obra está sangrando.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+            <span style="font-size: 15px; line-height: 1.6; color: #b5b2bc; font-family: Montserrat">Saldo por código de obra, atualizado a cada sincronização</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+            <span style="font-size: 15px; line-height: 1.6; color: #b5b2bc; font-family: Montserrat">Seta de tendência comparando realizado com o planejado</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+            <span style="font-size: 15px; line-height: 1.6; color: #b5b2bc; font-family: Montserrat">Clique no código e caia direto no financeiro daquela obra</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    
+  </section>
+
+  
+
+  <section id="omie" data-screen-label="Integração Omie" style="background:#121113;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
+        <div>
+          <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Destaque · Integração Omie</span>
+          <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">Lance a nota uma vez no Omie. O resto acontece sozinho.</h2>
+          <p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat; font-weight: 400">As contas a pagar do Omie entram no CliqueObras já vinculadas ao projeto e à categoria certa definida pelo usuário e abatem automaticamente o que estava planejado. Seu financeiro não digita nada duas vezes, e o orçado × realizado nasce dos dados contábeis reais.</p>
+          <div style="margin-top:32px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;gap:14px">
+              <span style="margin-top:2px;display:flex;height:32px;width:32px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 006 5.3L4 7"></path><path d="M4 4v4h4"></path><path d="M4 13a8 8 0 0014 5.7l2-1.7"></path><path d="M20 20v-4h-4"></path></svg></span>
+              <div>
+                <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Sincronização automática a cada 15 minutos</h3>
+                <p style="margin: 4px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Inclusões, atualizações e cancelamentos chegam sozinhos com registro do último resultado.</p>
+              </div>
+            </div>
+            <div style="display:flex;gap:14px">
+              <span style="margin-top:2px;display:flex;height:32px;width:32px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h4M12 18h8"></path></svg></span>
+              <div style="font-family: Montserrat">
+                <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Mapeamento de projetos e categorias</h3>
+                <p style="margin:4px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Cada centro de custo do Omie aponta para uma obra e uma categoria do seu orçamento.</p>
+              </div>
+            </div>
+            <div style="display:flex;gap:14px">
+              <span style="margin-top:2px;display:flex;height:32px;width:32px;flex-shrink:0;align-items:center;justify-content:center;border-radius:6px;background:#131f4d;color:#baa7ff"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
+              <div>
+                <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Credenciais isoladas, área do proprietário</h3>
+                <p style="margin: 4px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">O App Secret nunca volta para o navegador e não entra em backups.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <img src="assets/img/integracao-omie.webp" alt="Tela de integração com o Omie: sincronização automática e mapeamentos ativos" width="1191" height="388" loading="lazy" decoding="async" style="display:block;width:100%;height:auto">
+        </div>
+      </div>
+    </div>
+  </section><section id="planejamento" data-screen-label="Calendário de planejamento" style="background:#1a191b;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="max-width:768px">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Destaque · Calendário de planejamento</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">Planeje o gasto no dia em que ele vai acontecer</h2>
+        <p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Cada previsão entra no calendário com data, valor, categoria e a memória de cálculo. Quando a despesa real chega do Omie, ela abate o item planejado — e você vê na hora se o mês está dentro ou fora.</p>
+      </div>
+
+      <div style="margin-top:32px;display:flex;flex-wrap:wrap;gap:10px">
+        <span style="border-radius: 2px; border: 1px solid #2b292d; background: #121113; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #b5b2bc; font-family: Montserrat">Diário</span>
+        <span style="border-radius: 2px; border: 1px solid #2b292d; background: #121113; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #b5b2bc; font-family: Montserrat">Semanal</span>
+        <span style="border-radius: 2px; border: 1px solid rgba(18,57,226,0.30); background: #0f1633; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #7d95f7; font-family: Montserrat">Mensal</span>
+        <span style="border-radius: 2px; border: 1px solid #2b292d; background: #121113; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #b5b2bc; font-family: Montserrat">Timeline</span>
+        <span style="border-radius: 2px; border: 1px solid #2b292d; background: #121113; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #b5b2bc; font-family: Montserrat">Lista</span>
+      </div>
+
+      <div style="margin-top:40px;display:grid;grid-template-columns:1.6fr 1fr;gap:32px;align-items:start">
+        <div style="overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <img src="assets/img/calendario-planejamento-obra.webp" alt="Calendário de planejamento mensal com os custos previstos de cada dia da obra" width="1233" height="857" loading="lazy" decoding="async" style="max-width: 100%; height: auto; display: block; object-fit: cover; width: 1233px; aspect-ratio: 1233 / 857">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:24px">
+            <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Cinco formas de olhar o mesmo plano</h3>
+            <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">O engenheiro usa a timeline, o comprador usa o diário, a diretoria olha o mensal. Mesma base de dados.</p>
+          </div>
+          <div style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:24px">
+            <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5">Cores por categoria</h3>
+            <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Alimentação, combustível, hospedagem, mão de obra, locação. O padrão de gasto do mês aparece de longe.</p>
+          </div>
+          <div style="border-radius:6px;border:1px solid rgba(186,167,255,0.25);background:#131f4d;padding:24px">
+            <h3 style="margin: 0; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #7d95f7">Abatimento automático</h3>
+            <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">O realizado vindo do Omie consome o planejado do dia. Sem planilha de conciliação.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="modulos" data-screen-label="Módulos" style="background:#121113;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="max-width:720px;margin:0 auto;text-align:center">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Módulos</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty">Conheça o sistema tela por tela</h2>
+        <p style="margin: 16px 0 0; font-size: 18px; line-height: 1.65; color: #b5b2bc; font-family: Montserrat">Todas as telas abaixo são do sistema em uso, com dados de demonstração.</p>
+      </div>
+
+      <div style="margin-top:56px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/rdo-diario-de-obra-lista.webp" alt="Lista de diários de obra com status de aprovação e horas apontadas" width="1252" height="815" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Diários de obra (RDO)</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Rascunho, aguardando aprovação, aprovado ou reprovado. Cada RDO carrega projeto, serviço executado, pessoas, horas e evidências. O total de horas registradas alimenta o custo e as medições. Inclui controle de folgas e PDF do diário.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/rdo-apontamento-horas.webp" alt="Detalhe de um RDO com horas normais, horas extras, custo realizado e venda apurada" width="1192" height="733" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Apontamento por colaborador</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Dentro do diário, cada pessoa tem situação, horas normais, HE 50%, HE 100% e noturno. O sistema calcula o custo realizado e a venda apurada do dia sem ninguém abrir calculadora.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/cadastro-colaboradores.webp" alt="Cadastro de colaboradores com matrícula, função e custo por hora" width="1250" height="818" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Colaboradores</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Matrícula, função e custo/hora de cada pessoa, com status ativo ou inativo. É esse cadastro que transforma horas de RDO em dinheiro e permite medir o custo de quem ficou sem apontamento no dia.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/valores-homem-hora.webp" alt="Valores de venda de homem-hora por projeto e colaborador" width="1257" height="821" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Valores HH</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">O custo vem do cadastro do colaborador; só o valor de venda muda por obra. Configure o HH de cada contrato e a margem de mão de obra aparece pronta em cada medição.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/medicoes-faturamento.webp" alt="Medições e faturamento: receita contratada, total medido, aprovado e saldo a medir" width="1255" height="820" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Medições e faturamento</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Receita contratada, total medido, aprovado, aguardando aprovação e saldo a medir — por contrato e por período. O HH é consolidado direto dos RDOs; obra e fornecimento seguem manuais.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/orcado-realizado-categorias.webp" alt="Dashboard das categorias com percentual comprometido, peso e tendência" width="1215" height="581" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Orçado × realizado por categoria</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Cada categoria mostra orçado, realizado, projetado, saldo, % comprometido, peso no orçamento e tendência. É aqui que o desvio aparece com nome e sobrenome — antes de virar prejuízo.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/relatorios-exportacoes.webp" alt="Central de relatórios: projetos, financeiro, orçamentos, desvios e histórico de alocações" width="1258" height="722" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Relatórios e exportações</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Projetos, financeiro, orçamentos, desvios negativos, dashboard em PDF e histórico de alocações por dia e colaborador. Tudo exportável para a reunião de segunda.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #2b292d;background:#121113;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div style="overflow:hidden;border-bottom:1px solid #2b292d;background:#1a191b;height:248px">
+            <img src="assets/img/dashboard-executivo.webp" alt="Dashboard com orçado, realizado, projeção, evolução mensal e top fornecedores" width="1257" height="812" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top left">
+          </div>
+          <div style="padding:24px">
+            <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Dashboard executivo</h3>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Orçado × realizado × projeção × saldo por obra, evolução mensal, distribuição por categoria e ranking de fornecedores. A visão que a diretoria pede, sem ninguém montar planilha.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:40px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center">
+          <div>
+            <span style="font-family: Montserrat; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Painel de TV</span>
+            <h3 style="margin: 12px 0 0; font-family: Montserrat; font-size: 26px; font-weight: 700; line-height: 1.2; color: #e5e5e5; text-wrap: pretty">A obra do dia na parede do escritório</h3>
+            <p style="margin: 12px 0 0; font-size: 15px; line-height: 1.7; color: #b5b2bc; font-family: Montserrat">Modo apresentação em tela cheia, com rotação automática a cada 25 segundos. Um painel mostra a equipe alocada, quem está ocioso e quanto custa essa ociosidade no dia; o outro mostra o avanço das medições e a receita em andamento. Atualiza em tempo real e indica a hora da última sincronização com o Omie.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="overflow:hidden;border-radius:6px;border:1px solid #2b292d">
+              <img src="assets/img/painel-tv-equipe.webp" alt="Painel de TV com equipe alocada, equipe ociosa e custo da ociosidade" width="1893" height="997" loading="lazy" decoding="async" style="display:block;width:100%;height:auto">
+            </div>
+            <div style="overflow:hidden;border-radius:6px;border:1px solid #2b292d">
+              <img src="assets/img/painel-tv-medicoes.webp" alt="Painel de TV com monitoramento de medições e andamento da receita" width="1898" height="1000" loading="lazy" decoding="async" style="display:block;width:100%;height:auto">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="como-funciona" data-screen-label="Como funciona" style="background:#121113;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="max-width:672px;margin:0 auto;text-align:center">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">Como funciona</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5">Do cadastro à decisão em 4 passos</h2>
+      </div>
+
+      <div style="position:relative;margin-top:64px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px">
+        <div aria-hidden="true" style="position:absolute;left:0;right:0;top:28px;border-top:2px dashed #2b292d"></div>
+        <div style="position:relative">
+          <div style="position: relative; z-index: 10; display: flex; height: 56px; width: 56px; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #23378f; box-sizing: border-box; color: #7d95f7; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1"></rect><rect x="13" y="9" width="8" height="11" rx="1"></rect><path d="M6 8h2M6 12h2M6 16h2M16 13h2M16 17h2"></path></svg>
+            <span style="position:absolute;right:-8px;top:-8px;display:flex;height:24px;width:24px;align-items:center;justify-content:center;border-radius:9999px;background:#baa7ff;font-size:12px;font-weight:700;color:#04040b">1</span>
+          </div>
+          <h3 style="margin:20px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Cadastre suas obras</h3>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Importe orçamento separado com o custo de cada categoria. Vincule a um cliente.</p>
+        </div>
+        <div style="position:relative">
+          <div style="position: relative; z-index: 10; display: flex; height: 56px; width: 56px; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #23378f; box-sizing: border-box; color: #7d95f7; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4M8 15h8"></path></svg>
+            <span style="position:absolute;right:-8px;top:-8px;display:flex;height:24px;width:24px;align-items:center;justify-content:center;border-radius:9999px;background:#baa7ff;font-size:12px;font-weight:700;color:#04040b">2</span>
+          </div>
+          <h3 style="margin:20px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Planejamento</h3>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Projete os gastos previstos com descrição do cálculo feito.</p>
+        </div>
+        <div style="position:relative">
+          <div style="position: relative; z-index: 10; display: flex; height: 56px; width: 56px; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #23378f; box-sizing: border-box; color: #7d95f7; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"></rect><path d="M9 3h6v3H9z"></path><path d="M8 11h8M8 15h8"></path></svg>
+            <span style="position:absolute;right:-8px;top:-8px;display:flex;height:24px;width:24px;align-items:center;justify-content:center;border-radius:9999px;background:#baa7ff;font-size:12px;font-weight:700;color:#04040b">3</span>
+          </div>
+          <h3 style="margin:20px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Registre a execução</h3>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">O canteiro preenche o RDO pelo celular; o financeiro lança custos. Tudo sincronizado na hora.</p>
+        </div>
+        <div style="position:relative">
+          <div style="position: relative; z-index: 10; display: flex; height: 56px; width: 56px; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #23378f; box-sizing: border-box; color: #7d95f7; box-shadow: rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>
+            <span style="position:absolute;right:-8px;top:-8px;display:flex;height:24px;width:24px;align-items:center;justify-content:center;border-radius:9999px;background:#baa7ff;font-size:12px;font-weight:700;color:#04040b">4</span>
+          </div>
+          <h3 style="margin:20px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:600;color:#e5e5e5">Decida com dados</h3>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#b5b2bc">Acompanhe painéis de avanço físico e financeiro e antecipe desvios antes que virem prejuízo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="beneficios" data-screen-label="Benefícios" style="background:#1a191b;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:56px">
+        <div>
+          <span style="font-family:'Red Hat Mono',monospace;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:#7d95f7">Benefícios</span>
+          <h2 style="margin: 12px 0 0; font-size: 36px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: #e5e5e5; text-wrap: pretty; font-family: Montserrat">Resultados que aparecem no caixa e no cronograma</h2>
+          <ul style="margin:32px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:16px">
+            <li style="display:flex;align-items:flex-start;gap:12px">
+              <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+              <span style="font-size:16px;line-height:1.65;color:#b5b2bc">Redução de desperdícios e retrabalho com desvios detectados cedo</span>
+            </li>
+            <li style="display:flex;align-items:flex-start;gap:12px">
+              <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+              <span style="font-size:16px;line-height:1.65;color:#b5b2bc">Aumento da produtividade das equipes de campo e escritório</span>
+            </li>
+            <li style="display:flex;align-items:flex-start;gap:12px">
+              <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+              <span style="font-size:16px;line-height:1.65;color:#b5b2bc">Comunicação única entre canteiro, escritório e diretoria</span>
+            </li>
+            <li style="display:flex;align-items:flex-start;gap:12px">
+              <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+              <span style="font-size:16px;line-height:1.65;color:#b5b2bc">Decisões baseadas em dados reais, não em percepção</span>
+            </li>
+            <li style="display:flex;align-items:flex-start;gap:12px">
+              <span style="margin-top:2px;display:flex;height:24px;width:24px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:rgba(186,167,255,0.22);color:#7d95f7"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></span>
+              <span style="font-size:16px;line-height:1.65;color:#b5b2bc">Conformidade e rastreabilidade completas para auditorias</span>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div style="border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:24px">
+              <p style="margin: 0; font-family: Montserrat; font-size: 36px; font-weight: 700; color: #7d95f7">-18%</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#7c7a85">em desperdícios e retrabalho</p>
+            </div>
+            <div style="border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:24px">
+              <p style="margin: 0; font-family: Montserrat; font-size: 36px; font-weight: 700; color: #baa7ff">+32%</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#7c7a85">de produtividade das equipes</p>
+            </div>
+            <div style="border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:24px">
+              <p style="margin: 0; font-family: Montserrat; font-size: 36px; font-weight: 700; color: #7d95f7">8h</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#7c7a85">economizadas por semana em relatórios</p>
+            </div>
+            <div style="border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:24px">
+              <p style="margin: 0; font-family: Montserrat; font-size: 36px; font-weight: 700; color: #baa7ff">100%</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#7c7a85">de rastreabilidade das atividades</p>
+            </div>
+          </div>
+          <p style="margin:16px 0 0;font-size:12px;color:#7c7a85">Estimativas com base em resultados médios reportados por clientes após 6 meses de uso.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  
+
+  
+    
+  
+
+  <section id="faq" data-screen-label="FAQ" style="background:#1a191b;padding:112px 0">
+    <div style="max-width:768px;margin:0 auto;padding:0 24px">
+      <div style="text-align:center">
+        <span style="font-family: Montserrat; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #7d95f7">FAQ</span>
+        <h2 style="margin: 12px 0 0; font-family: Montserrat; font-size: 36px; font-weight: 700; letter-spacing: -0.02em; color: #e5e5e5">Perguntas frequentes</h2>
+      </div>
+
+      <div style="margin-top:40px;display:flex;flex-direction:column;gap:12px">
+        <details class="faq" style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 24px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset"><summary class="faq-q hv10" style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: none; background: none; padding: 20px 0; text-align: left; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5; cursor: pointer">
+            Preciso instalar alguma coisa?
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M6 9l6 6 6-6"></path></svg>
+          </summary>
+            <p style="margin:0;padding-bottom:20px;font-size:14px;line-height:1.7;color:#b5b2bc">Não. O CliqueObras roda no navegador, em qualquer computador, tablet ou celular. O time de campo registra o RDO direto do dispositivo e a informação aparece no painel no mesmo instante.</p>
+          </details>
+
+        <details class="faq" style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 24px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset"><summary class="faq-q hv11" style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: none; background: none; padding: 20px 0; text-align: left; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5; cursor: pointer">
+            Como funciona a integração com meus sistemas atuais?
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M6 9l6 6 6-6"></path></svg>
+          </summary>
+            <p style="margin:0;padding-bottom:20px;font-size:14px;line-height:1.7;color:#b5b2bc">O CliqueObras importa orçamentos e cronogramas de planilhas (Excel/CSV) e sincroniza contas a pagar e centros de custo com o Omie, vinculando cada lançamento à obra e à categoria do orçamento.</p>
+          </details>
+
+        <details class="faq" style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 24px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset"><summary class="faq-q hv12" style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: none; background: none; padding: 20px 0; text-align: left; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5; cursor: pointer">
+            Os dados das telas são reais?
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M6 9l6 6 6-6"></path></svg>
+          </summary>
+            <p style="margin:0;padding-bottom:20px;font-size:14px;line-height:1.7;color:#b5b2bc">As telas desta página são do sistema em uso, mas com obras, clientes e pessoas anonimizados. A estrutura, os cálculos e os painéis são exatamente os que o sistema entrega.</p>
+          </details>
+
+        <details class="faq" style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 24px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset"><summary class="faq-q hv13" style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: none; background: none; padding: 20px 0; text-align: left; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5; cursor: pointer">
+            Qual é o suporte oferecido?
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M6 9l6 6 6-6"></path></svg>
+          </summary>
+            <p style="margin:0;padding-bottom:20px;font-size:14px;line-height:1.7;color:#b5b2bc">Suporte por e-mail em suporte@cliqueobras.com e por telefone em horário comercial, além de central de ajuda e treinamentos em vídeo para a equipe de obra e de escritório.</p>
+          </details>
+
+        <details class="faq" style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 24px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset"><summary class="faq-q hv14" style="display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: none; background: none; padding: 20px 0; text-align: left; font-family: Montserrat; font-size: 16px; font-weight: 600; color: #e5e5e5; cursor: pointer">
+            Meus dados estão seguros?
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><path d="M6 9l6 6 6-6"></path></svg>
+          </summary>
+            <p style="margin:0;padding-bottom:20px;font-size:14px;line-height:1.7;color:#b5b2bc">Sim. Utilizamos criptografia em trânsito e em repouso, backups diários automáticos e servidores em conformidade com a LGPD. Você mantém a propriedade total dos seus dados e pode exportá-los a qualquer momento.</p>
+          </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="contato" data-screen-label="Contato" style="background:#121113;padding:112px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px">
+        <div>
+          <span style="font-family:'Red Hat Mono',monospace;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:#7d95f7">Contato</span>
+          <h2 style="margin:12px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:36px;font-weight:700;line-height:1.15;letter-spacing:-0.02em;color:#e5e5e5;text-wrap:pretty">Fale com a gente</h2>
+          <p style="margin:16px 0 0;font-size:18px;line-height:1.65;color:#b5b2bc">Já é cliente? Use o acesso no topo da página. Se você conheceu o sistema aqui e tem interesse em adquirir, deixe uma mensagem — ela chega direto em suporte@cliqueobras.com.</p>
+
+          <div style="margin-top:40px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;height:44px;width:44px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h4l2 5-2.5 1.5a12 12 0 006 6L16 13l5 2v4a2 2 0 01-2 2A17 17 0 013 5a2 2 0 012-2z"></path></svg>
+              </span>
+              <div>
+                <p style="margin:0;font-size:12px;color:#7c7a85">Telefone</p>
+                <p style="margin:2px 0 0;font-size:14px;font-weight:600;color:#e5e5e5">(64)9 81225525</p>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;height:44px;width:44px;align-items:center;justify-content:center;border-radius:6px;background:#0f1633;color:#7d95f7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>
+              </span>
+              <div>
+                <p style="margin:0;font-size:12px;color:#7c7a85">E-mail</p>
+                <p style="margin:2px 0 0;font-size:14px;font-weight:600;color:#e5e5e5">suporte@cliqueobras.com</p>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px">
+              
+              <div>
+                
+                
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:40px;display:flex;align-items:center;gap:12px;border-radius:6px;border:1px solid #2b292d;background:#1a191b;padding:20px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#baa7ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"></path><path d="M9 12l2 2 4-4"></path></svg>
+            <p style="margin:0;font-size:14px;line-height:1.65;color:#b5b2bc">Seus dados são tratados conforme a LGPD e usados apenas para responder ao seu contato.</p>
+          </div>
+        </div>
+
+        <div style="border-radius:6px;border:1px solid #2b292d;background:#121113;padding:36px;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset">
+          <div id="contato-ok" hidden style="display:flex;min-height:420px;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+              <span style="display:flex;height:64px;width:64px;align-items:center;justify-content:center;border-radius:9999px;background:#131f4d;color:#baa7ff">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+              </span>
+              <h3 style="margin:24px 0 0;font-family:'Red Hat Display',Inter,sans-serif;font-size:24px;font-weight:700;color:#e5e5e5">Mensagem pronta para envio</h3>
+              <p style="margin:12px 0 0;max-width:384px;font-size:14px;line-height:1.7;color:#b5b2bc">Obrigado pelo interesse<span id="contato-nome"></span>. Abrimos seu programa de e-mail com a mensagem preenchida para suporte@cliqueobras.com — basta enviar. Se nada abrir, escreva direto para esse endereço.</p>
+              <button type="button" id="contato-reset" style="margin-top:32px;border:none;background:none;font-size:14px;font-weight:600;color:#7d95f7;cursor:pointer">Escrever outra mensagem</button>
+            </div>
+<form id="contato-form" style="display:flex;flex-direction:column;gap:20px">
+              <div>
+                <h3 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:20px;font-weight:700;color:#e5e5e5">Tenho interesse no sistema</h3>
+                <p style="margin:4px 0 0;font-size:14px;color:#7c7a85">A mensagem vai para suporte@cliqueobras.com.</p>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div>
+                  <label for="name" style="margin-bottom:8px;display:block;font-size:14px;font-weight:500;color:#e5e5e5">Nome completo *</label>
+                  <input id="name" name="name" type="text" required="required" placeholder="Seu nome" style="height:48px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 16px;font-family:'Red Hat Text',Inter,sans-serif;font-size:14px;color:#e5e5e5">
+                </div>
+                <div>
+                  <label for="company" style="margin-bottom:8px;display:block;font-size:14px;font-weight:500;color:#e5e5e5">Empresa *</label>
+                  <input id="company" name="company" type="text" required="required" placeholder="Nome da empresa" style="height:48px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 16px;font-family:'Red Hat Text',Inter,sans-serif;font-size:14px;color:#e5e5e5">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div>
+                  <label for="email" style="margin-bottom:8px;display:block;font-size:14px;font-weight:500;color:#e5e5e5">E-mail corporativo *</label>
+                  <input id="email" name="email" type="email" required="required" placeholder="voce@empresa.com.br" style="height:48px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 16px;font-family:'Red Hat Text',Inter,sans-serif;font-size:14px;color:#e5e5e5">
+                </div>
+                <div>
+                  <label for="phone" style="margin-bottom:8px;display:block;font-size:14px;font-weight:500;color:#e5e5e5">Telefone <span style="font-weight:400;color:#7c7a85">(opcional)</span></label>
+                  <input id="phone" name="phone" type="tel" placeholder="(11) 99999-0000" style="height:48px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:0 16px;font-family:'Red Hat Text',Inter,sans-serif;font-size:14px;color:#e5e5e5">
+                </div>
+              </div>
+              <div>
+                <label for="message" style="margin-bottom:8px;display:block;font-size:14px;font-weight:500;color:#e5e5e5">Mensagem</label>
+                <textarea id="message" name="message" rows="4" placeholder="Conte quantas obras você acompanha e o que procura no sistema..." style="width:100%;box-sizing:border-box;border-radius:6px;border:1px solid #2b292d;background:#121113;padding:12px 16px;font-family:'Red Hat Text',Inter,sans-serif;font-size:14px;color:#e5e5e5;resize:vertical"></textarea>
+              </div>
+              <button type="submit" style="display:inline-flex;height:52px;width:100%;box-sizing:border-box;align-items:center;justify-content:center;gap:8px;border:none;border-radius:6px;background:#1239e2;font-family:'Red Hat Text',Inter,sans-serif;font-size:16px;font-weight:600;color:#eeeef0;box-shadow:rgba(255,255,255,0.06) 0px 1px 0px 0px inset;cursor:pointer" class="hv15">
+                Enviar mensagem
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"></path><path d="M4 7l8 6 8-6"></path></svg>
+              </button>
+            </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer data-screen-label="Footer" style="border-top:1px solid #2b292d;background:#1a191b;padding:56px 0">
+    <div style="max-width:1152px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:40px">
+        <div>
+          <a href="#" style="display:flex;align-items:center;gap:8px;color:inherit">
+            <span style="display: flex; height: 36px; width: 36px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #23378f; overflow: visible; border-style: none"><img src="assets/img/logo-cliqueobras.webp" alt="CliqueObras" width="1824" height="1407" style="display: block; width: 50px; height: 39px"></span>
+            <span style="font-family:'Red Hat Display',Inter,sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#e5e5e5">Clique<span style="color:#7d95f7">Obras</span></span>
+          </a>
+          <p style="margin:16px 0 0;max-width:384px;font-size:14px;line-height:1.7;color:#7c7a85">A plataforma brasileira de gestão e controle de obras: planejamento, execução, equipes, RDO e financeiro em um só sistema.</p>
+        </div>
+        <div>
+          <h4 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:14px;font-weight:600;color:#e5e5e5">Navegação</h4>
+          <ul style="margin:16px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px">
+            <li><a href="#funcionalidades" style="font-size:14px;color:#b5b2bc">Funcionalidades</a></li>
+            <li><a href="#modulos" style="font-size:14px;color:#b5b2bc">Módulos</a></li>
+            <li><a href="#planejamento" style="font-size:14px;color:#b5b2bc">Calendário de planejamento</a></li>
+            <li><a href="#omie" style="font-size:14px;color:#b5b2bc">Integração Omie</a></li>
+            <li><a href="#como-funciona" style="font-size:14px;color:#b5b2bc">Como funciona</a></li>
+            <li><a href="#beneficios" style="font-size:14px;color:#b5b2bc">Benefícios</a></li>
+            <li><a href="#faq" style="font-size:14px;color:#b5b2bc">FAQ</a></li>
+            <li><a href="#contato" style="font-size:14px;color:#b5b2bc">Contato</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="margin:0;font-family:'Red Hat Display',Inter,sans-serif;font-size:14px;font-weight:600;color:#e5e5e5">Contato</h4>
+          <ul style="margin:16px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;font-size:14px;color:#b5b2bc">
+            
+            <li style="display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7d95f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>suporte@cliqueobras.com</li>
+            
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-top:48px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #2b292d;padding-top:32px">
+        <p style="margin:0;font-size:12px;color:#7c7a85">© 2026 CliqueObras. Todos os direitos reservados.</p>
+        <div style="display:flex;align-items:center;gap:24px">
+          <a href="#" style="font-size:12px;color:#7c7a85">Política de Privacidade</a>
+          <a href="#" style="font-size:12px;color:#7c7a85">Termos de Uso</a>
+        </div>
+      </div>
+    </div>
+  </footer>
 </div>
-<div id="modal-overlay"><div class="modal" id="modal"></div></div>
-<div id="toasts"></div>
-<div class="loading-overlay" id="loading"><div class="loading-brand" style="width:104px;height:104px;border-radius:26px;background:#fff;display:grid;place-items:center;overflow:hidden"><img src="assets/logo-clique.png?v=4.5.9" alt="" width="67" height="52" style="display:block;width:64%;height:auto;max-width:67px"></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
-<input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
-<input type="file" id="json-input" accept=".json" style="display:none">
-<input type="file" id="img-input" accept="image/png,image/jpeg,image/webp" style="display:none">
-<script src="config/cloud-config.js?v=4.5.9"></script>
-<script src="database/cloud.js?v=4.5.9"></script>
-<script src="database/indexeddb.js?v=4.5.9"></script>
-<script src="utils/format.js?v=4.5.9"></script>
-<script src="utils/helpers.js?v=4.5.9"></script>
-<script src="modules/custos/custos.js?v=4.5.9"></script>
-<script src="js/importer.js?v=4.5.9"></script>
-<script src="js/router.js?v=4.5.9"></script>
-<script src="modules/projetos/projetos.js?v=4.5.9"></script>
-<script src="modules/orcamentos/orcamentos.js?v=4.5.9"></script>
-<script src="modules/planejamento/planejamento.js?v=4.5.9"></script>
-<script src="modules/planejamento/equipe.js?v=4.5.9"></script>
-<script src="modules/rdo/rdo.js?v=4.5.9"></script>
-<script src="modules/medicoes/medicoes.js?v=4.5.9"></script>
-<script src="modules/medicoes/fluxocaixa.js?v=4.5.9"></script>
-<script src="modules/clientes/clientes.js?v=4.5.9"></script>
-<script src="modules/configuracoes/categorias.js?v=4.5.9"></script>
-<script src="modules/custos/basecalculo.js?v=4.5.9"></script>
-<script src="modules/dashboard/charts.js?v=4.5.9"></script>
-<script src="modules/dashboard/panel-tv.js?v=4.5.9"></script>
-<script src="modules/compras/compras.js?v=4.5.9"></script>
-<script src="modules/dashboard/dashboard.js?v=4.5.9"></script>
-<script src="utils/export.js?v=4.5.9"></script>
-<script src="modules/relatorios/relatorios.js?v=4.5.9"></script>
-<script src="modules/integracoes/omie.js?v=4.5.9"></script>
-<script src="modules/integracoes/omie-remessa.js?v=4.5.9"></script>
-<script src="modules/configuracoes/configuracoes.js?v=4.5.9"></script>
-<script src="js/app.js?v=4.5.9"></script>
-<script src="js/auth-ui.js?v=4.5.9"></script>
+</main>
 </body>
 </html>
