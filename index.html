@@ -1,11 +1,158 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light" class="boot-shield">
 <head>
-<meta charset="utf-8">
-<title>CliqueObras — Apresentação</title>
-<link rel="canonical" href="https://cliqueobras.com/apresentacao/">
-<meta name="robots" content="noindex, follow">
-<meta http-equiv="refresh" content="0; url=/apresentacao/">
+<script>/* v4.5.6 — rede de segurança da trava de boot: se o sistema travar
+  antes de qualquer JS próprio rodar, a trava sai sozinha e a tela volta a
+  aparecer, em vez de o usuário ficar com a página em branco. 20 s é depois do
+  timeout de 12 s do IndexedDB, que tem tela de recuperação própria. */
+setTimeout(function(){document.documentElement.classList.remove('boot-shield','auth-gate');},20000);</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="application-version" content="4.5.9">
+<meta name="description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="cliqueobras">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-elem 'self'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://mwelgpjkqljtkzbqxmag.supabase.co wss://mwelgpjkqljtkzbqxmag.supabase.co; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self' blob:">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>CliqueObras | Gestão Financeira Integrada</title>
+<link rel="canonical" href="https://cliqueobras.com/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CliqueObras">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:url" content="https://cliqueobras.com/">
+<meta property="og:title" content="CliqueObras | Gestão Financeira Integrada">
+<meta property="og:description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
+<meta property="og:image" content="https://cliqueobras.com/assets/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="CliqueObras — gestão financeira integrada de obras">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="CliqueObras | Gestão Financeira Integrada">
+<meta name="twitter:description" content="Gestão financeira e operacional de obras em um só lugar: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.">
+<meta name="twitter:image" content="https://cliqueobras.com/assets/og-image.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://cliqueobras.com/#organizacao","name":"CliqueObras","url":"https://cliqueobras.com/","logo":{"@type":"ImageObject","url":"https://cliqueobras.com/assets/logo-clique.png","contentUrl":"https://cliqueobras.com/assets/logo-clique.png","width":1200,"height":927,"caption":"CliqueObras"},"image":"https://cliqueobras.com/assets/og-image.png"},{"@type":"WebSite","@id":"https://cliqueobras.com/#site","url":"https://cliqueobras.com/","name":"CliqueObras","inLanguage":"pt-BR","publisher":{"@id":"https://cliqueobras.com/#organizacao"}},{"@type":"SoftwareApplication","@id":"https://cliqueobras.com/#aplicativo","name":"CliqueObras","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://cliqueobras.com/","inLanguage":"pt-BR","image":"https://cliqueobras.com/assets/og-image.png","description":"Gestão financeira e operacional de obras: orçamentos, planejamento, diário de obra (RDO), medições, apuração de HH e integração com o Omie.","publisher":{"@id":"https://cliqueobras.com/#organizacao"}}]}</script>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=4.5.9">
+<link rel="icon" type="image/png" sizes="96x96" href="assets/favicon-96.png?v=4.5.9">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=4.5.9">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=4.5.9">
+<link rel="manifest" href="manifest.webmanifest?v=4.5.9">
+<meta name="theme-color" content="#18181B">
+<link rel="stylesheet" href="css/fonts.css?v=4.5.9">
+<script src="assets/vendor/xlsx.min.js?v=4.5.9"></script>
+<script src="assets/vendor/chart.min.js?v=4.5.9"></script>
+<script src="assets/vendor/lucide.min.js?v=4.5.9"></script>
+<script src="assets/vendor/supabase.js?v=2.111.0"></script>
+<link rel="stylesheet" href="css/variables.css?v=4.5.9">
+<link rel="stylesheet" href="css/layout.css?v=4.5.9">
+<link rel="stylesheet" href="css/dashboard.css?v=4.5.9">
+<link rel="stylesheet" href="css/tables.css?v=4.5.9">
+<link rel="stylesheet" href="css/components.css?v=4.5.9">
+<link rel="stylesheet" href="css/auth.css?v=4.5.9">
+<link rel="stylesheet" href="css/premium.css?v=4.5.9">
+<link rel="stylesheet" href="css/rdo.css?v=4.5.9">
+<link rel="stylesheet" href="css/panel-tv.css?v=4.5.9">
+<link rel="stylesheet" href="css/equipe.css?v=4.5.9">
+<link rel="stylesheet" href="css/mobile-forms.css?v=4.5.9">
 </head>
-<body><p>Redirecionando para <a href="/apresentacao/">cliqueobras.com/apresentacao</a>…</p></body>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <button class="brand" type="button" onclick="App.go('configuracoes')" aria-label="Abrir configurações da empresa" title="Configurações da empresa">
+      <div class="brand-logo" id="company-logo-box"><img src="assets/logo-clique.png" alt="Clique Obras"></div>
+      <div><b id="sidebar-user-name">CliqueObras</b><small id="sidebar-org-name">Organização</small><span id="company-name" hidden aria-hidden="true"></span></div>
+      <i class="brand-chevron" data-lucide="chevron-right"></i>
+    </button>
+    <nav id="nav">
+      <div class="nav-sep">Visão Geral</div>
+      <button class="nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+      <button class="nav-item" data-view="projetos"><i data-lucide="hard-hat"></i>Projetos</button>
+      <div class="nav-sep">Gestão</div>
+      <button class="nav-item" data-view="orcamentos"><i data-lucide="calculator"></i>Orçamentos</button>
+      <button class="nav-item" data-view="financeiro"><i data-lucide="wallet"></i>Financeiro</button>
+      <button class="nav-item" data-view="planejamento"><i data-lucide="calendar-days"></i>Planejamento</button>
+      <button class="nav-item" data-view="planejamentoequipe"><i data-lucide="users"></i>Planejamento de Colaboradores</button>
+      <button class="nav-item" data-view="clientes"><i data-lucide="users"></i>Clientes</button>
+      <button class="nav-item" data-view="categorias"><i data-lucide="tags"></i>Categorias</button>
+      <div class="nav-sep">Execução</div>
+      <button class="nav-item" data-view="rdos"><i data-lucide="clipboard-check"></i>Diários de Obra</button>
+      <button class="nav-item" data-view="colaboradores"><i data-lucide="users"></i>Colaboradores</button>
+      <button class="nav-item" data-view="medicoes"><i data-lucide="dollar-sign"></i>Medições</button>
+      <button class="nav-item" data-view="valoreshh"><i data-lucide="badge-dollar-sign"></i>Valores HH</button>
+      <div class="nav-sep">Análise</div>
+      <button class="nav-item" data-view="basecalculo"><i data-lucide="percent"></i>Base de Cálculo</button>
+      <button class="nav-item" data-view="relatorios"><i data-lucide="file-bar-chart"></i>Relatórios</button>
+      <div class="nav-sep">Sistema</div>
+      <button class="nav-item" data-view="configuracoes"><i data-lucide="settings"></i>Configurações</button>
+      <button class="nav-item" data-view="backup"><i data-lucide="database-backup"></i>Backup</button>
+      <div class="nav-sep">Conta</div>
+      <button class="nav-item nav-logout" id="nav-logout" type="button"><i data-lucide="log-out"></i>Sair</button>
+    </nav>
+    <div id="sidebar-footer"><span id="storage-status">v4.5.9 · carregando…</span></div>
+  </aside>
+  <button type="button" id="mobile-menu-backdrop" aria-label="Fechar menu"></button>
+  <main>
+    <div id="finance-ticker" aria-label="Desempenho financeiro dos projetos"></div>
+    <header id="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menu-toggle" title="Menu" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><i data-lucide="menu"></i></button>
+        <h1 id="page-title">Dashboard</h1>
+      </div>
+      <div id="global-search-wrap">
+        <i data-lucide="search"></i>
+        <input id="global-search" placeholder="Buscar em todo o CliqueObras…" autocomplete="off">
+        <button type="button" id="global-search-clear" aria-label="Limpar pesquisa" title="Limpar pesquisa"><i data-lucide="x"></i></button>
+        <div id="search-results"></div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn tv-mode-toggle" id="tv-mode-toggle" type="button" title="Abrir modo painel para TV" aria-label="Abrir modo painel para TV"><i data-lucide="monitor-up"></i><span>Painel</span></button>
+        <button class="icon-btn" id="future-toggle" title="Gastos previstos" aria-label="Abrir gastos previstos"><i data-lucide="calendar-clock"></i></button>
+        <button class="icon-btn" id="theme-toggle" title="Alternar tema (Ctrl+D)"><i data-lucide="moon"></i></button>
+      </div>
+    </header>
+    <div id="content-wrap"><div id="content"></div><aside id="rightbar"><div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="clock" style="width:15px;height:15px"></i>&nbsp;Gastos Futuros</div><div id="rightbar-content"></div></aside></div>
+  </main>
+</div>
+<div id="modal-overlay"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+<div class="loading-overlay" id="loading"><div class="loading-brand" style="width:104px;height:104px;border-radius:26px;background:#fff;display:grid;place-items:center;overflow:hidden"><img src="assets/logo-clique.png?v=4.5.9" alt="" width="67" height="52" style="display:block;width:64%;height:auto;max-width:67px"></div><div id="loading-msg" style="font-weight:600;color:var(--text2)">Processando…</div></div>
+<input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none">
+<input type="file" id="json-input" accept=".json" style="display:none">
+<input type="file" id="img-input" accept="image/png,image/jpeg,image/webp" style="display:none">
+<script src="config/cloud-config.js?v=4.5.9"></script>
+<script src="database/cloud.js?v=4.5.9"></script>
+<script src="database/indexeddb.js?v=4.5.9"></script>
+<script src="utils/format.js?v=4.5.9"></script>
+<script src="utils/helpers.js?v=4.5.9"></script>
+<script src="modules/custos/custos.js?v=4.5.9"></script>
+<script src="js/importer.js?v=4.5.9"></script>
+<script src="js/router.js?v=4.5.9"></script>
+<script src="modules/projetos/projetos.js?v=4.5.9"></script>
+<script src="modules/orcamentos/orcamentos.js?v=4.5.9"></script>
+<script src="modules/planejamento/planejamento.js?v=4.5.9"></script>
+<script src="modules/planejamento/equipe.js?v=4.5.9"></script>
+<script src="modules/rdo/rdo.js?v=4.5.9"></script>
+<script src="modules/medicoes/medicoes.js?v=4.5.9"></script>
+<script src="modules/medicoes/fluxocaixa.js?v=4.5.9"></script>
+<script src="modules/clientes/clientes.js?v=4.5.9"></script>
+<script src="modules/configuracoes/categorias.js?v=4.5.9"></script>
+<script src="modules/custos/basecalculo.js?v=4.5.9"></script>
+<script src="modules/dashboard/charts.js?v=4.5.9"></script>
+<script src="modules/dashboard/panel-tv.js?v=4.5.9"></script>
+<script src="modules/compras/compras.js?v=4.5.9"></script>
+<script src="modules/dashboard/dashboard.js?v=4.5.9"></script>
+<script src="utils/export.js?v=4.5.9"></script>
+<script src="modules/relatorios/relatorios.js?v=4.5.9"></script>
+<script src="modules/integracoes/omie.js?v=4.5.9"></script>
+<script src="modules/integracoes/omie-remessa.js?v=4.5.9"></script>
+<script src="modules/configuracoes/configuracoes.js?v=4.5.9"></script>
+<script src="js/app.js?v=4.5.9"></script>
+<script src="js/auth-ui.js?v=4.5.9"></script>
+</body>
 </html>
