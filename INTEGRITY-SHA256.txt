@@ -1,0 +1,7 @@
+# Dependências embarcadas — CliqueObras v2.6
+# Formato: SHA-256  arquivo
+
+cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  xlsx.min.js
+6fa1085d008687b4cab63d7e08e30be081f08966fb6880ce9970158bde9d383f  chart.min.js
+b9c0e0f892c6958b192b8fdecb652310d934533464b4300be9d52c7f57a014a5  lucide.min.js
+7396012594aa6d23bb373ebc25d1080bf3672fa847c3713f756520b40fd13453  supabase.js
