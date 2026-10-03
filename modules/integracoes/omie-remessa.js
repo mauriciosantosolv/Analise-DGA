@@ -1,6 +1,7 @@
 /**
  * v4.5.7 — Custo por NOTA DE REMESSA (Omie).
  * v4.5.9 — aba "Categorias das remessas" no DE-PARA (ver install()).
+ * v4.5.10 — salvar o DE-PARA não apaga mais os vínculos que a tela não mostrou.
  *
  * Módulo NOVO. Não altera nenhuma função existente: ele ENVOLVE
  * OmieIntegration.render (acrescenta o botão "Custo por remessa"),
@@ -62,6 +63,48 @@ const OmieRemessa = {
       };
       OmieIntegration.__remessaCatV459=true;
     }
+    // v4.5.10 — o "Salvar mapeamentos" REGRAVA a lista inteira de categorias
+    // (clique_obras_save_omie_config apaga e reinsere). Quando a aba das
+    // remessas ainda não tinha carregado (ou falhou), os vínculos das
+    // categorias de receita não estavam na tela e eram APAGADOS: foi o que
+    // aconteceu em 02/10/2026 15:56 (152 -> 143 categorias) e as remessas
+    // pararam de entrar. Aqui só se ACRESCENTA ao pedido o vínculo já salvo
+    // de uma categoria que NÃO aparece na tela — o que aparece continua
+    // decidido pelo usuário, exatamente como antes. omie.js não muda.
+    if(typeof OmieIntegration!=='undefined'&&typeof OmieIntegration.request==='function'&&!OmieIntegration.__keepUnlistedV4510){
+      const baseRequest=OmieIntegration.request;
+      OmieIntegration.request=function(action,payload,...rest){
+        if(action==='save-config'&&payload&&Array.isArray(payload.categoryMappings)){
+          try{ payload={...payload,categoryMappings:OmieRemessa.keepUnlistedCategories(payload.categoryMappings)}; }
+          catch(error){ console.warn('[OmieRemessa] vínculos fora da tela não preservados',error); }
+        }
+        return baseRequest.call(this,action,payload,...rest);
+      };
+      OmieIntegration.__keepUnlistedV4510=true;
+    }
+  },
+
+  // v4.5.10 — vínculos salvos de categorias que a tela não mostrou.
+  keepUnlistedCategories(list){
+    const sent=Array.isArray(list)?list:[];
+    const catalog=(typeof OmieIntegration!=='undefined'&&OmieIntegration.catalog)||{};
+    const listed=new Set((Array.isArray(catalog.categories)?catalog.categories:[]).map(item=>String(item&&item.code)));
+    const sentCodes=new Set(sent.map(item=>String(item&&item.omieCategoryCode)));
+    const saved=(typeof OmieIntegration!=='undefined'&&OmieIntegration.state&&Array.isArray(OmieIntegration.state.categoryMappings))
+      ?OmieIntegration.state.categoryMappings:[];
+    const categories=(typeof State!=='undefined'&&Array.isArray(State.categories))?State.categories:[];
+    const extra=saved.filter(item=>{
+      const code=String(item&&item.omieCategoryCode||'');
+      if(!code||listed.has(code)||sentCodes.has(code)) return false;
+      return categories.some(category=>String(category.id)===String(item.cliqueCategoryId));
+    }).map(item=>({
+      omieCategoryCode:String(item.omieCategoryCode),
+      omieCategoryName:String(item.omieCategoryName||''),
+      cliqueCategoryId:String(item.cliqueCategoryId),
+      cliqueCategoryName:String(item.cliqueCategoryName||''),
+      enabled:item.enabled!==false
+    }));
+    return extra.length?[...sent,...extra]:sent;
   },
 
   // v4.5.9 — aba "Categorias das remessas" no modal de mapeamento.

@@ -142,3 +142,10 @@ kbd{background:var(--surface2);border:1px solid var(--border);border-bottom-widt
   .two-col{gap:10px}
   .chart-box{height:220px}.chart-box.sm{height:190px}
 }
+
+/* v4.2.10 — carregamento da nuvem: a logo azul num cartão branco pulsa
+   enquanto a base é lida/sincronizada, no lugar do antigo giro cinza. */
+.loading-brand{width:104px;height:104px;border-radius:26px;background:#fff;border:1px solid var(--border);box-shadow:0 12px 30px rgba(18,59,226,.16);display:grid;place-items:center;animation:co-brand-pulse 1.6s ease-in-out infinite}
+.loading-brand img{display:block;width:64%;height:auto}
+@keyframes co-brand-pulse{0%,100%{transform:scale(.94)}50%{transform:scale(1.06)}}
+@media(prefers-reduced-motion:reduce){.loading-brand{animation:none}}

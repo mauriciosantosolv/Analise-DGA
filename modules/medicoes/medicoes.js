@@ -131,7 +131,7 @@ Views.medicoes = {
           <thead><tr><th>Data</th><th>Referência</th><th>Origem</th><th>Status</th><th>Recebimento</th><th class="num">Valor Medido</th><th class="num">Recebido</th><th></th></tr></thead>
           <tbody>${items.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(m=>`<tr>
             <td>${U.date(m.date)}</td><td>${U.esc(m.ref||'—')}</td>
-            <td><span class="tag tag-gray">${m.source==='rdo-hh'?`${(m.rdoIds||[]).length} RDO(s)`:'Manual'}</span></td>
+            <td><span class="tag tag-gray">${m.source==='rdo-hh'?`${(m.rdoIds||[]).length} RDO(s)${this.adjustmentList(m).length?' + ajustes':''}`:'Manual'}</span></td>
             <td><span class="tag ${{Faturada:'tag-green',Aprovada:'tag-blue','Aguardando aprovação':'tag-amber'}[m.status]||'tag-gray'}">${U.esc(m.status||'—')}</span></td>
             <td>${CashFlow.situationTag(m)}</td>
             <td class="num"><b>${U.money2(m.value)}</b></td>
@@ -235,10 +235,11 @@ Views.medicoes = {
         <div><label>Referência</label><input id="hh-ref" placeholder="Ex.: Medição 07/2026"></div>
       </div>
       <div id="hh-rdo-list"></div>
+      ${this.adjustmentEditorMarkup([],false)}
       <div class="kpi-grid" style="margin-top:12px">
         <div class="kpi"><div class="k-label">RDOs selecionados</div><div class="k-value" id="hh-count">0</div></div>
         <div class="kpi"><div class="k-label">Horas</div><div class="k-value" id="hh-hours">0h</div></div>
-        <div class="kpi accent-blue"><div class="k-label">Valor da medição</div><div class="k-value" id="hh-value">${U.money(0)}</div></div>
+        <div class="kpi accent-blue"><div class="k-label">Valor da medição</div><div class="k-value" id="hh-value">${U.money(0)}</div><div class="k-sub" id="hh-value-sub"></div></div>
       </div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-save"><i data-lucide="check"></i>Criar medição</button>',
       onOpen:()=>{
@@ -265,13 +266,21 @@ Views.medicoes = {
             const value=financial.reduce((sum,row)=>sum+(Number(row.saleTotal)||0),0);
             document.getElementById('hh-count').textContent=ids.length;
             document.getElementById('hh-hours').textContent=`${hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h`;
-            document.getElementById('hh-value').textContent=U.money(value);
+            // v4.5.10 — total com descontos/adicionais (sem ajustes = igual a antes).
+            const adjusted=this.adjustmentTotals(this.readAdjustments().list,value);
+            document.getElementById('hh-value').textContent=U.money(adjusted.total);
+            const sub=document.getElementById('hh-value-sub');
+            if(sub) sub.textContent=adjusted.items.length?`Mão de obra ${U.money(adjusted.labor)} · ajustes ${adjusted.net<0?'−':'+'} ${U.money(Math.abs(adjusted.net))}`:'';
+            const summary=document.getElementById('md-adjust-summary');
+            if(summary) summary.innerHTML=this.adjustmentSummaryMarkup(adjusted);
           };
+          this._hhRefresh=updateTotals;
           document.querySelectorAll('.hh-rdo-check').forEach(input=>input.onchange=updateTotals);
           updateTotals(); U.icons();
         };
         document.getElementById('hh-from').onchange=renderAvailable;
         document.getElementById('hh-to').onchange=renderAvailable;
+        this.bindAdjustmentEditor(()=>{ if(typeof this._hhRefresh==='function') this._hhRefresh(); });
         document.getElementById('hh-save').onclick=async()=>{
           const rdoIds=[...document.querySelectorAll('.hh-rdo-check:checked')].map(input=>String(input.value));
           if(!rdoIds.length) return UI.toast('Selecione ao menos um RDO aprovado.','warn');
@@ -281,6 +290,12 @@ Views.medicoes = {
           const completion=Biz.measurementCompletion(project);
           if(value>completion.remaining+0.01)
             return UI.toast(`O valor de ${U.money(value)} ultrapassa o saldo contratual de ${U.money(completion.remaining)}.`, 'warn', 8000);
+          // v4.5.10 — descontos e valores adicionais.
+          const adjustmentRead=this.readAdjustments();
+          if(adjustmentRead.error) return UI.toast(adjustmentRead.error,'warn',6500);
+          const adjusted=this.adjustmentTotals(adjustmentRead.list,value);
+          if(adjusted.items.length&&adjusted.total<=0)
+            return UI.toast('Os descontos não podem zerar ou deixar negativo o total da medição.','warn',7000);
           const measurement={
             id:U.id(),
             projectId:String(projectId),
@@ -297,6 +312,11 @@ Views.medicoes = {
             createdAt:new Date().toISOString(),
             createdBy:RDO.authorName()
           };
+          if(adjusted.items.length){
+            measurement.value=adjusted.total;
+            measurement.laborValue=adjusted.labor;
+            measurement.adjustments=adjusted.items;
+          }
           try{
             UI.loading(true,'Criando medição HH…');
             if(typeof Cloud!=='undefined'&&Cloud.active())
@@ -331,6 +351,123 @@ Views.medicoes = {
     const current=Number(rate&&rate.saleRegular);
     return Number.isFinite(current)&&current>0?current:0;
   },
+  // ---------------------------------------------------------------------------
+  // v4.5.10 — DESCONTOS e VALORES ADICIONAIS na medição HH (linhas livres).
+  // Ex.: material levado junto com a mão de obra, desconto comercial.
+  // value da medição = soma dos RDOs + adicionais − descontos, e é esse total
+  // que vale para Total medido, Saldo a medir e fluxo de caixa (decisão do
+  // Mauricio, 03/10/2026). O servidor confere a conta (ver
+  // supabase/ATUALIZACAO-v4.5.10-MEDICAO-AJUSTES.sql). SEM ajustes nada muda:
+  // value continua sendo exatamente a soma dos RDOs, como antes.
+  // ---------------------------------------------------------------------------
+  adjustmentList(measurement){
+    const list=Array.isArray(measurement&&measurement.adjustments)?measurement.adjustments:[];
+    return list.filter(item=>item&&(item.type==='add'||item.type==='discount')&&Number(item.value)>0)
+      .map(item=>({id:String(item.id||''),type:item.type,description:String(item.description||''),value:Math.round(Number(item.value)*100)/100}));
+  },
+  adjustmentTotals(items,labor){
+    const round=value=>Math.round((Number(value)||0)*100)/100;
+    const list=Array.isArray(items)?items:[];
+    const additions=round(list.filter(item=>item.type==='add').reduce((sum,item)=>sum+(Number(item.value)||0),0));
+    const discounts=round(list.filter(item=>item.type==='discount').reduce((sum,item)=>sum+(Number(item.value)||0),0));
+    const net=round(additions-discounts);
+    return {items:list,labor:round(labor),additions,discounts,net,total:round((Number(labor)||0)+net)};
+  },
+  // Mão de obra (soma dos RDOs) de uma medição já gravada.
+  measurementLabor(measurement){
+    const stored=this.adjustmentTotals(this.adjustmentList(measurement),0);
+    return Math.round(((Number(measurement&&measurement.value)||0)-stored.net)*100)/100;
+  },
+  measurementAdjustments(measurement){
+    return this.adjustmentTotals(this.adjustmentList(measurement),this.measurementLabor(measurement));
+  },
+  adjustmentRowMarkup(item={},locked=false){
+    const type=item.type==='discount'?'discount':'add';
+    const off=locked?'disabled':'';
+    return `<div class="md-adjust-row" data-id="${U.esc(item.id||U.id())}">
+      <select class="md-adjust-type" aria-label="Tipo do ajuste" ${off}><option value="add" ${type==='add'?'selected':''}>+ Adicional</option><option value="discount" ${type==='discount'?'selected':''}>− Desconto</option></select>
+      <input class="md-adjust-desc" maxlength="200" placeholder="Descrição (ex.: materiais elétricos)" aria-label="Descrição do ajuste" value="${U.esc(item.description||'')}" ${off}>
+      <input class="md-adjust-value" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor do ajuste" value="${item.value?U.esc(item.value):''}" ${off}>
+      ${locked?'':'<button type="button" class="btn btn-ghost btn-sm md-adjust-remove" title="Remover ajuste" aria-label="Remover ajuste"><i data-lucide="trash-2"></i></button>'}
+    </div>`;
+  },
+  adjustmentEditorMarkup(items=[],locked=false){
+    const list=Array.isArray(items)?items:[];
+    return `<section class="md-adjust" id="md-adjust">
+      <div class="md-adjust-head"><b>Descontos e valores adicionais</b><small>${locked?'Medição faturada: os ajustes não podem mais ser alterados.':'Ex.: materiais levados junto com a mão de obra, desconto comercial.'}</small></div>
+      <div class="md-adjust-rows" id="md-adjust-rows">${list.map(item=>this.adjustmentRowMarkup(item,locked)).join('')}</div>
+      ${locked?'':'<button type="button" class="btn btn-ghost btn-sm" id="md-adjust-add"><i data-lucide="plus"></i>Adicionar ajuste</button>'}
+      <div class="md-adjust-summary" id="md-adjust-summary"></div>
+    </section>`;
+  },
+  // Lê as linhas da tela. Linha totalmente vazia é ignorada; linha pela metade
+  // devolve erro (nada é gravado com descrição ou valor faltando).
+  readAdjustments(){
+    const rows=[...document.querySelectorAll('#md-adjust-rows .md-adjust-row')];
+    const list=[];
+    for(const row of rows){
+      const type=row.querySelector('.md-adjust-type')?.value==='discount'?'discount':'add';
+      const description=String(row.querySelector('.md-adjust-desc')?.value||'').trim().slice(0,200);
+      const raw=String(row.querySelector('.md-adjust-value')?.value||'').trim();
+      const value=Math.round(U.num(raw)*100)/100;
+      if(!description&&!raw) continue;
+      if(!description) return {list:[],error:'Informe a descrição de cada desconto ou valor adicional.'};
+      if(!(value>0)) return {list:[],error:`Informe um valor maior que zero em “${description}”.`};
+      list.push({id:String(row.dataset.id||U.id()),type,description,value});
+    }
+    return {list,error:''};
+  },
+  adjustmentSummaryMarkup(totals){
+    if(!totals||!totals.items.length) return '';
+    return `<span>Mão de obra <b>${U.money2(totals.labor)}</b></span>${totals.additions?`<span>Adicionais <b>+ ${U.money2(totals.additions)}</b></span>`:''}${totals.discounts?`<span>Descontos <b>− ${U.money2(totals.discounts)}</b></span>`:''}<span class="md-adjust-total">Total da medição <b>${U.money2(totals.total)}</b></span>`;
+  },
+  bindAdjustmentEditor(onChange){
+    const box=document.getElementById('md-adjust');
+    if(!box) return;
+    const notify=()=>{ try{ onChange&&onChange(); }catch(err){ console.warn(err); } };
+    const add=document.getElementById('md-adjust-add');
+    if(add) add.onclick=()=>{
+      const rows=document.getElementById('md-adjust-rows');
+      rows.insertAdjacentHTML('beforeend',this.adjustmentRowMarkup({},false));
+      U.icons();
+      const last=rows.lastElementChild&&rows.lastElementChild.querySelector('.md-adjust-desc');
+      if(last) last.focus();
+      notify();
+    };
+    box.addEventListener('input',notify);
+    box.addEventListener('change',notify);
+    box.addEventListener('click',event=>{
+      const remove=event.target.closest&&event.target.closest('.md-adjust-remove');
+      if(!remove) return;
+      const row=remove.closest('.md-adjust-row');
+      if(row) row.remove();
+      notify();
+    });
+  },
+  adjustmentPrintMarkup(measurement){
+    const totals=this.measurementAdjustments(measurement);
+    if(!totals.items.length) return '';
+    return `<section class="measurement-print-adjustments"><table><thead><tr><th>Descontos e valores adicionais</th><th>Tipo</th><th>Valor</th></tr></thead><tbody>
+      ${totals.items.map(item=>`<tr><td>${U.esc(item.description)}</td><td>${item.type==='discount'?'Desconto':'Adicional'}</td><td>${item.type==='discount'?'− ':'+ '}${U.money(item.value)}</td></tr>`).join('')}
+    </tbody><tfoot>
+      <tr><td colspan="2">Subtotal mão de obra (HH)</td><td>${U.money(totals.labor)}</td></tr>
+      ${totals.additions?`<tr><td colspan="2">Adicionais</td><td>+ ${U.money(totals.additions)}</td></tr>`:''}
+      ${totals.discounts?`<tr><td colspan="2">Descontos</td><td>− ${U.money(totals.discounts)}</td></tr>`:''}
+      <tr class="measurement-print-adjustments-total"><td colspan="2">TOTAL DA MEDIÇÃO</td><td>${U.money(totals.total)}</td></tr>
+    </tfoot></table></section>`;
+  },
+  // Aba "Resumo" do XLSX — só existe quando a medição tem ajustes; a aba
+  // "Medicao" (dado puro, uma linha por colaborador/dia) não muda.
+  adjustmentSheetRows(measurement){
+    const totals=this.measurementAdjustments(measurement);
+    if(!totals.items.length) return [];
+    return [
+      {'Item':'Mão de obra (HH)','Tipo':'Mão de obra','Valor':totals.labor},
+      ...totals.items.map(item=>({'Item':item.description,'Tipo':item.type==='discount'?'Desconto':'Adicional','Valor':item.type==='discount'?-item.value:item.value})),
+      {'Item':'Total da medição','Tipo':'Total','Valor':totals.total}
+    ];
+  },
+
   measurementRows(measurement){
     return (measurement.rdoIds||[]).flatMap(rdoId=>{
       const rdo=State.rdos.find(item=>String(item.id)===String(rdoId));
@@ -397,6 +534,13 @@ Views.medicoes = {
     sheet['!cols']=[{wch:11},{wch:12},{wch:12},{wch:28},{wch:22},{wch:10},{wch:9},{wch:10},{wch:9},{wch:9},{wch:9},{wch:10},{wch:9},{wch:14}];
     const book=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book,sheet,'Medicao');
+    // v4.5.10 — com descontos/adicionais, uma segunda aba "Resumo".
+    const summaryRows=this.adjustmentSheetRows(measurement);
+    if(summaryRows.length){
+      const summarySheet=XLSX.utils.json_to_sheet(summaryRows);
+      summarySheet['!cols']=[{wch:40},{wch:12},{wch:14}];
+      XLSX.utils.book_append_sheet(book,summarySheet,'Resumo');
+    }
     const label=String(measurement.ref||measurement.id||'medicao').replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'');
     XLSX.writeFile(book,`medicao-${label||'hh'}-${U.isoDate(new Date())}.xlsx`);
     UI.toast('Planilha da medição exportada.','success',5000);
@@ -409,6 +553,9 @@ Views.medicoes = {
     const customer=RDO.projectClient(measurement.projectId);
     const rows=this.measurementRows(measurement);
     if(!rows.length) return UI.toast('Os RDOs desta medição não estão disponíveis para montar o relatório.','warn',6500);
+    // v4.5.10 — com ajustes, o rodapé da tabela vira o subtotal da mão de obra
+    // e o total da medição aparece no quadro de ajustes logo abaixo.
+    const adjusted=this.measurementAdjustments(measurement);
     const old=document.getElementById('measurement-print-report');
     if(old) old.remove();
     const report=document.createElement('section');
@@ -425,7 +572,8 @@ Views.medicoes = {
       <div class="measurement-print-facts"><div><small>Período</small><b>${U.date(measurement.periodFrom)} a ${U.date(measurement.periodTo)}</b></div><div><small>RDOs consolidados</small><b>${(measurement.rdoIds||[]).length}</b></div><div><small>Total de horas</small><b>${hours(measurement.hours||rows.reduce((sum,row)=>sum+row.hours,0))}</b></div><div><small>Valor total da medição</small><b>${U.money(measurement.value)}</b></div></div>
       <table class="measurement-print-table"><thead><tr><th>Data</th><th>RDO</th><th>Matrícula</th><th>Colaborador</th><th>Função</th><th>Valor/h</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Normal</th><th>HE 50%</th><th>HE 100%</th><th>Total</th><th>Valor medido</th></tr></thead><tbody>
         ${rows.map(row=>`<tr><td>${U.date(row.date)}</td><td>${U.esc(row.rdoNumber)}</td><td>${U.esc(row.registration||'—')}</td><td>${U.esc(row.employeeName)}</td><td>${U.esc(row.role||'—')}</td><td>${U.money(row.hourRate)}</td><td>${U.esc(row.start||'—')}</td><td>${U.durationMinutes(row.breakMinutes)}</td><td>${U.esc(row.end||'—')}</td><td>${hours(row.regular)}</td><td>${hours(row.overtime50)}</td><td>${hours(row.overtime100)}</td><td><b>${hours(row.hours)}</b></td><td><b>${U.money(row.value)}</b></td></tr>`).join('')}
-      </tbody><tfoot><tr><td colspan="12">TOTAL DA MEDIÇÃO</td><td>${hours(rows.reduce((sum,row)=>sum+row.hours,0))}</td><td>${U.money(measurement.value)}</td></tr></tfoot></table>
+      </tbody><tfoot><tr><td colspan="12">${adjusted.items.length?'SUBTOTAL MÃO DE OBRA':'TOTAL DA MEDIÇÃO'}</td><td>${hours(rows.reduce((sum,row)=>sum+row.hours,0))}</td><td>${U.money(adjusted.items.length?adjusted.labor:measurement.value)}</td></tr></tfoot></table>
+      ${this.adjustmentPrintMarkup(measurement)}
       ${measurement.notes?`<section class="measurement-print-notes"><b>Observações</b><p>${U.esc(measurement.notes)}</p></section>`:''}
       <footer>Documento gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
     document.body.appendChild(report);
@@ -450,18 +598,46 @@ Views.medicoes = {
         <div><label>Status</label><select id="hh-status">${['Aguardando aprovação','Aprovada','Faturada'].map(status=>`<option ${status===measurement.status?'selected':''}>${status}</option>`).join('')}</select></div>
         <div><label>Referência</label><input id="hh-status-ref" value="${U.esc(measurement.ref||'')}"></div>
         <div class="full"><label>Observações</label><textarea id="hh-status-notes" rows="2">${U.esc(measurement.notes||'')}</textarea></div>
-      </div>`,
+      </div>
+      ${this.adjustmentEditorMarkup(this.adjustmentList(measurement),measurement.status==='Faturada')}`,
       footer:`${canDelete?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.medicoes.remove(${U.jsArg(measurement.id)})"><i data-lucide="trash-2"></i>Excluir medição</button>`:''}
         <button class="btn btn-ghost" onclick="Views.medicoes.print(${U.jsArg(measurement.id)})"><i data-lucide="file-down"></i>Gerar PDF</button><button class="btn btn-ghost" onclick="Views.medicoes.exportXlsx(${U.jsArg(measurement.id)})"><i data-lucide="file-spreadsheet"></i>Exportar XLSX</button><button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="hh-status-save"><i data-lucide="check"></i>Salvar</button>`
     });
+    // v4.5.10 — resumo ao vivo dos ajustes.
+    const laborValue=this.measurementLabor(measurement);
+    const locked=measurement.status==='Faturada';
+    const refreshSummary=()=>{
+      const box=document.getElementById('md-adjust-summary');
+      if(box) box.innerHTML=this.adjustmentSummaryMarkup(this.adjustmentTotals(locked?this.adjustmentList(measurement):this.readAdjustments().list,laborValue));
+    };
+    this.bindAdjustmentEditor(refreshSummary);
+    refreshSummary();
     document.getElementById('hh-status-save').onclick=async()=>{
-      await DB.put('measurements',{
+      const updated={
         ...measurement,
         status:document.getElementById('hh-status').value,
         ref:document.getElementById('hh-status-ref').value.trim(),
         notes:document.getElementById('hh-status-notes').value.trim(),
         updatedAt:new Date().toISOString()
-      });
+      };
+      // v4.5.10 — sem ajustes antes e depois, o registro sai exatamente como antes.
+      if(!locked){
+        const adjustmentRead=this.readAdjustments();
+        if(adjustmentRead.error) return UI.toast(adjustmentRead.error,'warn',6500);
+        const adjusted=this.adjustmentTotals(adjustmentRead.list,laborValue);
+        if(adjusted.items.length&&adjusted.total<=0)
+          return UI.toast('Os descontos não podem zerar ou deixar negativo o total da medição.','warn',7000);
+        if(adjusted.items.length||Array.isArray(measurement.adjustments)){
+          updated.adjustments=adjusted.items;
+          updated.laborValue=adjusted.labor;
+          updated.value=adjusted.total;
+        }
+      }
+      try{
+        await DB.put('measurements',updated);
+      }catch(err){
+        return UI.toast('Não foi possível salvar a medição: '+U.esc(err.message||err),'error',8000);
+      }
       await State.reload(); UI.close(); UI.toast('Medição atualizada','success'); App.render();
     };
   },

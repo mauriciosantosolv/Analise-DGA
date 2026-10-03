@@ -75,14 +75,24 @@ const Dash = {
     [['flt-client','client'],['flt-category','category'],['flt-status','status'],['flt-type','type']]
       .forEach(([id,k]) => { const el = document.getElementById(id); if(el) el.onchange = () => { State.filters[k] = el.value; App.render(); }; });
   },
+  // v4.5.10 — o filtro de projetos lista só as obras "Em andamento" (pedido do
+  // Mauricio: com todas as obras cadastradas a lista ficava grande demais).
+  // Um projeto que JÁ ESTÁ selecionado continua na lista mesmo encerrado —
+  // senão ele sumiria e sairia do filtro em silêncio ao clicar em Aplicar.
+  // Só muda a LISTA desta janela: o dashboard sem seleção continua mostrando
+  // todos os projetos, como antes.
+  projectFilterProjects(selected){
+    const chosen=selected&&typeof selected.has==='function'?selected:new Set();
+    return State.projects.filter(project=>project.status==='Em andamento'||chosen.has(String(project.id)));
+  },
   projectFilterForm(){
     const selected=new Set(State.selectedProjectIds());
     UI.modal({title:'Filtrar projetos',wide:true,body:`
-      <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros.</p>
+      <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros. A lista mostra as obras <b>Em andamento</b>.</p>
       <div class="rdo-search project-filter-search"><i data-lucide="search"></i><input id="filter-project-search" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por número, nome ou cliente" aria-label="Buscar projeto"><button type="button" id="filter-project-search-clear" aria-label="Limpar busca" title="Limpar busca"><i data-lucide="x"></i></button></div>
       <div class="project-filter-actions"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button" title="Marca os projetos visíveis na lista">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button" title="Desmarca os projetos visíveis na lista">Limpar seleção</button><span class="project-filter-count" id="filter-project-count"></span></div>
-      <div class="check-list project-filter-list" id="filter-project-list">${State.projects.map(project=>`
-        <label class="check-item" data-search="${U.esc(U.norm(`${project.proposal||''} ${project.name||''} ${project.client||''}`))}"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}</small></span></label>`).join('')||'<small>Nenhum projeto cadastrado.</small>'}</div>
+      <div class="check-list project-filter-list" id="filter-project-list">${this.projectFilterProjects(selected).map(project=>`
+        <label class="check-item" data-search="${U.esc(U.norm(`${project.proposal||''} ${project.name||''} ${project.client||''}`))}"><input type="checkbox" value="${U.esc(project.id)}" ${selected.has(String(project.id))?'checked':''}><span><b>${U.esc(project.proposal||project.name||'Projeto')}</b><small>${U.esc(project.name||project.client||'')}${project.status!=='Em andamento'?` · ${U.esc(project.status||'Sem status')}`:''}</small></span></label>`).join('')||'<small>Nenhuma obra Em andamento.</small>'}</div>
       <div class="project-filter-empty" id="filter-project-empty" hidden>Nenhum projeto encontrado.</div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="filter-project-apply"><i data-lucide="check"></i>Aplicar filtro</button>',
       onOpen:()=>{
