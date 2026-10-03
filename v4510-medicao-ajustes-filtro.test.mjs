@@ -106,3 +106,12 @@ test("DE-PARA: salvar preserva vínculo salvo que a tela não mostrou; o que est
   await OmieIntegration.request("status", { x: 1 });
   assert.equal(JSON.stringify(sent[1].payload), '{"x":1}', "outras ações passam intactas");
 });
+
+test("v4.5.11 — PDF: o total não é mais rodapé repetido (ia sozinho para outra página) e fica legível sem fundo", () => {
+  const css = read("../css/rdo.css");
+  const print = css.slice(css.indexOf("@media print{"));
+  assert.match(print, /\.measurement-print-table tfoot,\.measurement-print-adjustments tfoot\{display:table-row-group\}/);
+  assert.match(print, /\.measurement-print-table tr,\.measurement-print-adjustments tr\{break-inside:avoid\}/);
+  assert.match(print, /\.measurement-print-table tfoot td,\.measurement-print-adjustments-total td\{background:#f4f4f5;color:#18181b;border-top:2px solid #18181b/);
+  assert.ok(!/measurement-print-adjustments-total td\{background:#27272a;color:#fff/.test(css), "nada de texto branco no total");
+});
