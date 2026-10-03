@@ -1,0 +1,23 @@
+CliqueObras v4.5.10 — como publicar e conferir
+==============================================
+
+O SERVIDOR JÁ ESTÁ ATUALIZADO (03/10/2026). Não rode nenhum SQL.
+
+1) Substitua no GitHub os arquivos do ZIP "-alterados" (ou suba o "-completo").
+2) Abra o sistema com Ctrl+F5. O rodapé da barra lateral deve mostrar "v4.5.10".
+
+Conferências
+A) Financeiro da Oficina e da NR-10: as contas a pagar fora do cartão sumiram;
+   ficam só as do cartão/Flash e as remessas.
+B) Configurações > Integração Omie > Projetos e categorias > Salvar mapeamentos:
+   depois de salvar, a próxima sincronização continua importando as remessas
+   (o resumo da sincronização não deve mostrar remessas pendentes por categoria).
+C) Medições > abrir uma medição HH: aparece "Descontos e valores adicionais".
+   Lance um adicional, salve, e confira: valor na lista, Saldo a medir,
+   PDF (quadro de ajustes + total) e XLSX (aba "Resumo").
+   Se quiser desfazer, remova a linha e salve: o valor volta à soma dos RDOs.
+D) Dashboard > filtro de projetos: só obras "Em andamento".
+
+Atenção: na minha simulação de impressão, o rodapé da tabela da medição foi para
+a página seguinte mesmo havendo espaço — isso também acontece com a v4.5.9, então
+não é desta versão. Se acontecer no seu Chrome, me avise.
