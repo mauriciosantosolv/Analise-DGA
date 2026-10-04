@@ -322,6 +322,8 @@
   .measurement-print-table tfoot,.measurement-print-adjustments tfoot{display:table-row-group}.measurement-print-table tr,.measurement-print-adjustments tr{break-inside:avoid}
   /* v4.5.10 — quadro de descontos/valores adicionais da medição HH */
   .measurement-print-adjustments{width:52%;min-width:360px;margin:9px 0 0 auto;break-inside:avoid}.measurement-print-adjustments table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.82);font-size:7px;table-layout:fixed}.measurement-print-adjustments th,.measurement-print-adjustments td{box-sizing:border-box;padding:4px 6px;border:1px solid #e4e4e7;vertical-align:middle}.measurement-print-adjustments th{background:#f4f4f5;color:#52525b;font-size:6px;text-transform:uppercase;letter-spacing:.025em;text-align:left}.measurement-print-adjustments th:nth-child(2),.measurement-print-adjustments td:nth-child(2){width:70px}.measurement-print-adjustments th:last-child,.measurement-print-adjustments td:last-child{width:92px;text-align:right;white-space:nowrap}.measurement-print-adjustments tfoot td{font-weight:700;text-align:right}.measurement-print-adjustments tfoot td:first-child{text-align:right}.measurement-print-adjustments-total td{background:#f4f4f5;color:#18181b;border-top:2px solid #18181b;font-weight:800}
+  /* v4.5.12 — Qtd, Un. e Valor unit. no quadro de ajustes */
+  .measurement-print-adjustments{width:64%}.measurement-print-adjustments th.mpa-qty,.measurement-print-adjustments td.mpa-qty{width:48px;text-align:right;white-space:nowrap}.measurement-print-adjustments th.mpa-unit,.measurement-print-adjustments td.mpa-unit{width:38px;text-align:center}.measurement-print-adjustments th.mpa-price,.measurement-print-adjustments td.mpa-price{width:78px;text-align:right;white-space:nowrap}
 
   body.printing-provisions{background:#fff!important}
   body.printing-provisions #app,
@@ -388,6 +390,16 @@
 .md-adjust-rows{display:flex;flex-direction:column;gap:7px}
 .md-adjust-rows:not(:empty){margin-bottom:9px}
 .md-adjust-row{display:grid;grid-template-columns:150px minmax(0,1fr) 130px auto;gap:7px;align-items:center}
+/* v4.5.12 — quantidade × valor unitário: descrição em cima, números embaixo */
+.md-adjust-row{grid-template-columns:minmax(0,1fr) minmax(0,.75fr) minmax(0,1.1fr) minmax(0,1.15fr) auto;grid-template-areas:"type desc desc desc rm" "qty unit price line line";align-items:end;padding-bottom:8px;border-bottom:1px dashed var(--border)}
+.md-adjust-row .md-adjust-type{grid-area:type}
+.md-adjust-row .md-adjust-desc{grid-area:desc}
+.md-adjust-row .md-adjust-remove{grid-area:rm}
+.md-adjust-f-qty{grid-area:qty}.md-adjust-f-unit{grid-area:unit}.md-adjust-f-price{grid-area:price}.md-adjust-f-line{grid-area:line}
+.md-adjust-field{display:flex;flex-direction:column;gap:2px;min-width:0;margin:0}
+.md-adjust-field>span{font-size:.7rem;color:var(--text3);font-weight:600;line-height:1.2}
+.md-adjust-line{display:block;padding:8px 2px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;color:var(--text)}
+.md-adjust-f-line>span{text-align:right}
 .md-adjust-row>*{min-width:0}
 .md-adjust-row input,.md-adjust-row select{width:100%}
 .md-adjust-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:9px;color:var(--text2);font-size:.78rem}
@@ -397,5 +409,9 @@
 @media(max-width:560px){
   .md-adjust-row{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) auto;padding-bottom:7px;border-bottom:1px dashed var(--border)}
   .md-adjust-row .md-adjust-desc{grid-column:1/-1;grid-row:1}
+  /* v4.5.12 */
+  .md-adjust-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px;grid-template-areas:"desc desc rm" "type unit unit" "qty price price" "line line line"}
+  .md-adjust-row .md-adjust-remove{width:40px;min-width:0;padding-left:0;padding-right:0;justify-self:end}
+  .md-adjust-row .md-adjust-desc{grid-column:auto;grid-row:auto;grid-area:desc}
   .md-adjust-total{margin-left:0}
 }
