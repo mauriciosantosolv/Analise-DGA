@@ -363,7 +363,26 @@ Views.medicoes = {
   adjustmentList(measurement){
     const list=Array.isArray(measurement&&measurement.adjustments)?measurement.adjustments:[];
     return list.filter(item=>item&&(item.type==='add'||item.type==='discount')&&Number(item.value)>0)
-      .map(item=>({id:String(item.id||''),type:item.type,description:String(item.description||''),value:Math.round(Number(item.value)*100)/100}));
+      .map(item=>{
+        const out={id:String(item.id||''),type:item.type,description:String(item.description||''),value:Math.round(Number(item.value)*100)/100};
+        // v4.5.12 — quantidade, unidade e valor unitário (linhas da v4.5.10 não têm).
+        if(Number(item.quantity)>0&&Number(item.unitPrice)>0){
+          out.quantity=Math.round(Number(item.quantity)*1000)/1000;
+          out.unit=String(item.unit||'').slice(0,10);
+          out.unitPrice=Math.round(Number(item.unitPrice)*10000)/10000;
+        }
+        return out;
+      });
+  },
+  // v4.5.12 — valor da linha = quantidade × valor unitário, em centavos.
+  adjustmentLineValue(quantity,unitPrice){
+    return Math.round((Number(quantity)||0)*(Number(unitPrice)||0)*100)/100;
+  },
+  adjustmentQty(value){
+    return (Number(value)||0).toLocaleString('pt-BR',{maximumFractionDigits:3});
+  },
+  adjustmentUnitMoney(value){
+    return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:4}).format(Number(value)||0);
   },
   adjustmentTotals(items,labor){
     const round=value=>Math.round((Number(value)||0)*100)/100;
@@ -384,11 +403,20 @@ Views.medicoes = {
   adjustmentRowMarkup(item={},locked=false){
     const type=item.type==='discount'?'discount':'add';
     const off=locked?'disabled':'';
-    return `<div class="md-adjust-row" data-id="${U.esc(item.id||U.id())}">
+    // v4.5.12 — quantidade × valor unitário. Linha antiga (só valor) abre como 1 × valor.
+    const hasDetail=Number(item.quantity)>0&&Number(item.unitPrice)>0;
+    const quantity=hasDetail?item.quantity:(Number(item.value)>0?1:'');
+    const unitPrice=hasDetail?item.unitPrice:(Number(item.value)>0?item.value:'');
+    const line=Number(item.value)>0?Number(item.value):this.adjustmentLineValue(quantity,unitPrice);
+    const legacy=!hasDetail&&Number(item.value)>0;
+    return `<div class="md-adjust-row" data-id="${U.esc(item.id||U.id())}"${legacy?` data-legacy-value="${U.esc(line)}"`:''}>
       <select class="md-adjust-type" aria-label="Tipo do ajuste" ${off}><option value="add" ${type==='add'?'selected':''}>+ Adicional</option><option value="discount" ${type==='discount'?'selected':''}>− Desconto</option></select>
-      <input class="md-adjust-desc" maxlength="200" placeholder="Descrição (ex.: materiais elétricos)" aria-label="Descrição do ajuste" value="${U.esc(item.description||'')}" ${off}>
-      <input class="md-adjust-value" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor do ajuste" value="${item.value?U.esc(item.value):''}" ${off}>
+      <input class="md-adjust-desc" maxlength="200" placeholder="Descrição (ex.: cabo PP 3x2,5 mm²)" aria-label="Descrição do ajuste" value="${U.esc(item.description||'')}" ${off}>
       ${locked?'':'<button type="button" class="btn btn-ghost btn-sm md-adjust-remove" title="Remover ajuste" aria-label="Remover ajuste"><i data-lucide="trash-2"></i></button>'}
+      <label class="md-adjust-field md-adjust-f-qty"><span>Qtd</span><input class="md-adjust-qty" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${quantity!==''?U.esc(quantity):''}" ${off}></label>
+      <label class="md-adjust-field md-adjust-f-unit"><span>Unidade</span><input class="md-adjust-unit" maxlength="10" list="md-adjust-units" placeholder="un" autocomplete="off" value="${U.esc(hasDetail?(item.unit||''):'')}" ${off}></label>
+      <label class="md-adjust-field md-adjust-f-price"><span>Valor unitário</span><input class="md-adjust-price" type="number" min="0" step="any" inputmode="decimal" placeholder="0,00" value="${unitPrice!==''?U.esc(unitPrice):''}" ${off}></label>
+      <div class="md-adjust-field md-adjust-f-line"><span>Valor da linha</span><output class="md-adjust-line">${type==='discount'?'− ':''}${U.money(line)}</output></div>
     </div>`;
   },
   adjustmentEditorMarkup(items=[],locked=false){
@@ -396,6 +424,7 @@ Views.medicoes = {
     return `<section class="md-adjust" id="md-adjust">
       <div class="md-adjust-head"><b>Descontos e valores adicionais</b><small>${locked?'Medição faturada: os ajustes não podem mais ser alterados.':'Ex.: materiais levados junto com a mão de obra, desconto comercial.'}</small></div>
       <div class="md-adjust-rows" id="md-adjust-rows">${list.map(item=>this.adjustmentRowMarkup(item,locked)).join('')}</div>
+      <datalist id="md-adjust-units">${['un','pç','m','m²','m³','kg','cx','rl','l','h','vb'].map(unit=>`<option value="${unit}"></option>`).join('')}</datalist>
       ${locked?'':'<button type="button" class="btn btn-ghost btn-sm" id="md-adjust-add"><i data-lucide="plus"></i>Adicionar ajuste</button>'}
       <div class="md-adjust-summary" id="md-adjust-summary"></div>
     </section>`;
@@ -408,14 +437,38 @@ Views.medicoes = {
     for(const row of rows){
       const type=row.querySelector('.md-adjust-type')?.value==='discount'?'discount':'add';
       const description=String(row.querySelector('.md-adjust-desc')?.value||'').trim().slice(0,200);
-      const raw=String(row.querySelector('.md-adjust-value')?.value||'').trim();
-      const value=Math.round(U.num(raw)*100)/100;
-      if(!description&&!raw) continue;
+      // v4.5.12 — quantidade × valor unitário (o valor da linha é calculado).
+      const rawQty=String(row.querySelector('.md-adjust-qty')?.value||'').trim();
+      const rawPrice=String(row.querySelector('.md-adjust-price')?.value||'').trim();
+      const unit=String(row.querySelector('.md-adjust-unit')?.value||'').trim().slice(0,10);
+      const quantity=Math.round(U.num(rawQty)*1000)/1000;
+      const unitPrice=Math.round(U.num(rawPrice)*10000)/10000;
+      if(!description&&!rawQty&&!rawPrice) continue;
       if(!description) return {list:[],error:'Informe a descrição de cada desconto ou valor adicional.'};
-      if(!(value>0)) return {list:[],error:`Informe um valor maior que zero em “${description}”.`};
-      list.push({id:String(row.dataset.id||U.id()),type,description,value});
+      if(!(quantity>0)) return {list:[],error:`Informe a quantidade em “${description}”.`};
+      if(!(unitPrice>0)) return {list:[],error:`Informe o valor unitário em “${description}”.`};
+      const value=this.adjustmentLineValue(quantity,unitPrice);
+      if(!(value>0)) return {list:[],error:`O valor de “${description}” ficou zerado: confira quantidade e valor unitário.`};
+      // Linha da v4.5.10 que ninguém mexeu (1 × o mesmo valor, sem unidade):
+      // continua gravada como era — não inventa quantidade.
+      const legacyValue=Number(row.dataset.legacyValue);
+      if(legacyValue>0&&quantity===1&&!unit&&Math.abs(unitPrice-legacyValue)<0.00005){
+        list.push({id:String(row.dataset.id||U.id()),type,description,value:legacyValue});
+        continue;
+      }
+      list.push({id:String(row.dataset.id||U.id()),type,description,quantity,unit,unitPrice,value});
     }
     return {list,error:''};
+  },
+  // v4.5.12 — atualiza o "Valor da linha" enquanto digita.
+  refreshAdjustmentLine(row){
+    if(!row||!row.classList||!row.classList.contains('md-adjust-row')) return;
+    const output=row.querySelector('.md-adjust-line');
+    if(!output) return;
+    const quantity=U.num(String(row.querySelector('.md-adjust-qty')?.value||''));
+    const unitPrice=U.num(String(row.querySelector('.md-adjust-price')?.value||''));
+    const discount=row.querySelector('.md-adjust-type')?.value==='discount';
+    output.textContent=`${discount?'− ':''}${U.money(this.adjustmentLineValue(quantity,unitPrice))}`;
   },
   adjustmentSummaryMarkup(totals){
     if(!totals||!totals.items.length) return '';
@@ -434,7 +487,7 @@ Views.medicoes = {
       if(last) last.focus();
       notify();
     };
-    box.addEventListener('input',notify);
+    box.addEventListener('input',event=>{ this.refreshAdjustmentLine(event.target.closest&&event.target.closest('.md-adjust-row')); notify(); });
     box.addEventListener('change',notify);
     box.addEventListener('click',event=>{
       const remove=event.target.closest&&event.target.closest('.md-adjust-remove');
@@ -447,13 +500,15 @@ Views.medicoes = {
   adjustmentPrintMarkup(measurement){
     const totals=this.measurementAdjustments(measurement);
     if(!totals.items.length) return '';
-    return `<section class="measurement-print-adjustments"><table><thead><tr><th>Descontos e valores adicionais</th><th>Tipo</th><th>Valor</th></tr></thead><tbody>
-      ${totals.items.map(item=>`<tr><td>${U.esc(item.description)}</td><td>${item.type==='discount'?'Desconto':'Adicional'}</td><td>${item.type==='discount'?'− ':'+ '}${U.money(item.value)}</td></tr>`).join('')}
+    // v4.5.12 — Qtd, Un. e Valor unit. (linha antiga da v4.5.10 sai com "—").
+    const detail=item=>Number(item.quantity)>0&&Number(item.unitPrice)>0;
+    return `<section class="measurement-print-adjustments"><table><thead><tr><th>Descontos e valores adicionais</th><th>Tipo</th><th class="mpa-qty">Qtd</th><th class="mpa-unit">Un.</th><th class="mpa-price">Valor unit.</th><th>Valor</th></tr></thead><tbody>
+      ${totals.items.map(item=>`<tr><td>${U.esc(item.description)}</td><td>${item.type==='discount'?'Desconto':'Adicional'}</td><td class="mpa-qty">${detail(item)?this.adjustmentQty(item.quantity):'—'}</td><td class="mpa-unit">${detail(item)?U.esc(item.unit||''):'—'}</td><td class="mpa-price">${detail(item)?this.adjustmentUnitMoney(item.unitPrice):'—'}</td><td>${item.type==='discount'?'− ':'+ '}${U.money(item.value)}</td></tr>`).join('')}
     </tbody><tfoot>
-      <tr><td colspan="2">Subtotal mão de obra (HH)</td><td>${U.money(totals.labor)}</td></tr>
-      ${totals.additions?`<tr><td colspan="2">Adicionais</td><td>+ ${U.money(totals.additions)}</td></tr>`:''}
-      ${totals.discounts?`<tr><td colspan="2">Descontos</td><td>− ${U.money(totals.discounts)}</td></tr>`:''}
-      <tr class="measurement-print-adjustments-total"><td colspan="2">TOTAL DA MEDIÇÃO</td><td>${U.money(totals.total)}</td></tr>
+      <tr><td colspan="5">Subtotal mão de obra (HH)</td><td>${U.money(totals.labor)}</td></tr>
+      ${totals.additions?`<tr><td colspan="5">Adicionais</td><td>+ ${U.money(totals.additions)}</td></tr>`:''}
+      ${totals.discounts?`<tr><td colspan="5">Descontos</td><td>− ${U.money(totals.discounts)}</td></tr>`:''}
+      <tr class="measurement-print-adjustments-total"><td colspan="5">TOTAL DA MEDIÇÃO</td><td>${U.money(totals.total)}</td></tr>
     </tfoot></table></section>`;
   },
   // Aba "Resumo" do XLSX — só existe quando a medição tem ajustes; a aba
@@ -461,10 +516,15 @@ Views.medicoes = {
   adjustmentSheetRows(measurement){
     const totals=this.measurementAdjustments(measurement);
     if(!totals.items.length) return [];
+    // v4.5.12 — Quantidade, Unidade e Valor unitário (vazios na mão de obra,
+    // no total e nas linhas antigas sem detalhe).
+    const detail=item=>Number(item.quantity)>0&&Number(item.unitPrice)>0;
     return [
-      {'Item':'Mão de obra (HH)','Tipo':'Mão de obra','Valor':totals.labor},
-      ...totals.items.map(item=>({'Item':item.description,'Tipo':item.type==='discount'?'Desconto':'Adicional','Valor':item.type==='discount'?-item.value:item.value})),
-      {'Item':'Total da medição','Tipo':'Total','Valor':totals.total}
+      {'Item':'Mão de obra (HH)','Tipo':'Mão de obra','Quantidade':'','Unidade':'','Valor unitário':'','Valor':totals.labor},
+      ...totals.items.map(item=>({'Item':item.description,'Tipo':item.type==='discount'?'Desconto':'Adicional',
+        'Quantidade':detail(item)?item.quantity:'','Unidade':detail(item)?(item.unit||''):'','Valor unitário':detail(item)?item.unitPrice:'',
+        'Valor':item.type==='discount'?-item.value:item.value})),
+      {'Item':'Total da medição','Tipo':'Total','Quantidade':'','Unidade':'','Valor unitário':'','Valor':totals.total}
     ];
   },
 
@@ -538,7 +598,7 @@ Views.medicoes = {
     const summaryRows=this.adjustmentSheetRows(measurement);
     if(summaryRows.length){
       const summarySheet=XLSX.utils.json_to_sheet(summaryRows);
-      summarySheet['!cols']=[{wch:40},{wch:12},{wch:14}];
+      summarySheet['!cols']=[{wch:40},{wch:12},{wch:11},{wch:9},{wch:14},{wch:14}];
       XLSX.utils.book_append_sheet(book,summarySheet,'Resumo');
     }
     const label=String(measurement.ref||measurement.id||'medicao').replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'');

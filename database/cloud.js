@@ -1317,6 +1317,36 @@ const Cloud = (() => {
       method:'DELETE',headers:authHeaders(false)
     });
   }
+  // v4.5.12 — transferência de propriedade e exclusão da própria conta.
+  // Funções NOVAS; nenhuma rotina existente muda. Ver
+  // supabase/ATUALIZACAO-v4.5.12-CONTA-PROPRIEDADE.sql e
+  // supabase/functions/delete-own-account.
+  async function transferOwnership(userId){
+    await ensureFresh();
+    if(!organization() || !isOwner())
+      throw new Error('Somente o proprietário pode transferir a propriedade.');
+    return request('/rest/v1/rpc/clique_obras_transfer_ownership_v4512',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({target_organization_id:organization().id,target_user_id:String(userId||'')})
+    });
+  }
+  async function accountDeletionCheck(){
+    await ensureFresh();
+    return request('/rest/v1/rpc/clique_obras_account_deletion_check_v4512',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:'{}'
+    });
+  }
+  async function deleteOwnAccount(password,confirm){
+    await ensureFresh();
+    return request('/functions/v1/delete-own-account',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({password:String(password||''),confirm:String(confirm||'')})
+    });
+  }
   async function updateOrganizationName(name){
     await ensureFresh();
     const clean=String(name||'').trim();
@@ -1341,6 +1371,7 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
+    transferOwnership, accountDeletionCheck, deleteOwnAccount,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
