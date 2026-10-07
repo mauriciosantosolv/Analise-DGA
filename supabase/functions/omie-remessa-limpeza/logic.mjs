@@ -30,7 +30,7 @@ export function isoToDdMmYyyy(value){
 
 function normalized(value){
   return cleanText(value instanceof Error?value.message:value,500)
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    .normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 }
 
 export function isConcurrentMethodError(value){
