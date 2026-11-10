@@ -303,6 +303,98 @@ export function filterPayablesForRemessa(payables,remessaCodes,cardAccounts){
   return {kept,skipped,keptCard};
 }
 
+// v4.5.15 — Remessa que MUDOU DE PROJETO (ou foi excluída) no Omie.
+// Causa (NF 420: projeto 778 → "778-ferramental"): a sincronização só lê as
+// remessas cujo projeto ATUAL está em escopo. A que saiu do projeto deixava de
+// ser lida e o lançamento antigo ficava para sempre no projeto de origem.
+// Regra: todo lançamento omieRemessa gravado num projeto em escopo e que NÃO
+// foi produzido nesta execução é retirado (estorno, devolve o planejamento) se:
+//   * a remessa hoje está em OUTRO projeto que não está nesta execução
+//     (se estiver, ela é relançada no projeto novo pela rotina normal); ou
+//   * a remessa não existe mais na listagem do Omie (só com listagem completa).
+// Remessa ainda no mesmo projeto (aguardando situação, sem DE-PARA…) não é tocada.
+export function remessaRetirements(existing,listedProjects,producedIds,scopeCodes,truncated){
+  const listed=listedProjects instanceof Map?listedProjects:new Map();
+  const produced=producedIds instanceof Set?producedIds:new Set();
+  const scope=scopeCodes instanceof Set?scopeCodes:new Set();
+  const entries=[],moved=[];
+  for(const row of Array.isArray(existing)?existing:[]){
+    const data=row&&typeof row==='object'&&row.data?row.data:row;
+    if(!data||data.sourceType!=='omieRemessa'||data.externalSource!=='omie') continue;
+    const externalItemId=cleanText(data.externalItemId,180);
+    if(!externalItemId.startsWith('remessa:')||produced.has(externalItemId)) continue;
+    const oldProject=cleanText(data.omieProjectCode,60);
+    if(!scope.has(oldProject)) continue;
+    const id=externalItemId.slice(8);
+    let reason='';
+    if(listed.has(id)){
+      const current=listed.get(id)||'';
+      if(current===oldProject||scope.has(current)) continue;
+      reason='moved';
+    }else{
+      if(truncated) continue;
+      reason='deleted';
+    }
+    entries.push({
+      externalItemId,
+      externalId:cleanText(data.externalId,100),
+      projectId:cleanText(data.projectId,180),
+      category:cleanText(data.category,180),
+      value:Math.abs(Number(data.value)||0),
+      active:false,
+      externalSource:'omie',
+      sourceType:'omieRemessa'
+    });
+    moved.push({id,nfNumber:cleanText(data.nfNumber,20),fromProject:oldProject,toProject:reason==='moved'?(listed.get(id)||''):'',reason,value:Math.abs(Number(data.value)||0)});
+  }
+  return {entries,moved};
+}
+
+// v4.5.15 — Ao ATIVAR o custo por remessa num projeto, o rateio de "Compras de
+// Material" das contas a pagar fora do cartão sai na hora (antes esperava a
+// limpeza agendada).
+// Mesma regra da omie-remessa-limpeza (logic.mjs): fica só o título cuja
+// id_conta_corrente é de cartão; conta vazia = fora do cartão.
+export function nonCardPayableIds(payables,remessaCodes,cardAccounts){
+  const codes=remessaCodes instanceof Set?remessaCodes:new Set();
+  const cards=cardAccounts instanceof Set?cardAccounts:new Set();
+  const ids=new Set();
+  for(const row of Array.isArray(payables)?payables:[]){
+    const project=cleanText(row?.codigo_projeto,60);
+    if(!codes.has(project)) continue;
+    const account=cleanText(row?.id_conta_corrente,40);
+    if(account&&cards.has(account)) continue;
+    const id=cleanText(row?.codigo_lancamento_omie??row?.codigo_lancamento_integracao,100);
+    if(id) ids.add(id);
+  }
+  return ids;
+}
+
+// Regra v4.5.14 (Mauricio, 07/10/2026 — já em produção na omie-remessa-limpeza):
+// a remessa substitui SÓ "Compras de Material". As outras categorias fora do
+// cartão continuam vindo do Contas a Pagar. Mesma expressão de
+// isMaterialCategoryV4514 (omie-remessa-limpeza/payables-v4514.mjs).
+export function isMaterialCategory(name){
+  return /^compras? de materia(l|is)$/.test(cleanText(name,180).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase());
+}
+
+export function retirePayableEntries(purchases,retireIds,remessaCodes){
+  const ids=retireIds instanceof Set?retireIds:new Set();
+  const codes=remessaCodes instanceof Set?remessaCodes:new Set();
+  const entries=[];
+  for(const row of Array.isArray(purchases)?purchases:[]){
+    const data=row&&typeof row==='object'&&row.data?row.data:row;
+    if(!data||data.sourceType!=='omiePayable'||data.externalSource!=='omie') continue;
+    const externalId=cleanText(data.externalId,100);
+    if(!ids.has(externalId)||!codes.has(cleanText(data.omieProjectCode,60))) continue;
+    if(!isMaterialCategory(data.category)) continue; // só o rateio de material sai
+    const externalItemId=cleanText(data.externalItemId,180);
+    if(!externalItemId) continue;
+    entries.push({externalItemId,externalId,projectId:cleanText(data.projectId,180),category:cleanText(data.category,180),value:Math.abs(Number(data.value)||0),active:false,externalSource:'omie'});
+  }
+  return entries;
+}
+
 // Situação em cache precisa ser consultada de novo? Nunca consultada, o
 // registro mudou no Omie, ainda não faturada (aguardando) ou consultada há
 // mais de 24 h (pega cancelamento de NF sem alteração no cadastro).

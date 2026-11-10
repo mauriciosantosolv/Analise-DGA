@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { enforceRateLimit, json, preflight, readJson, rejectUntrustedOrigin } from "../_shared/security.ts";
 import { batchPayableEntries, buildPayableEntries, buildReceivableEntries, chunk, cleanText, isoToDdMmYyyy, isOmieConcurrentMethodError, isOmieMissingEntryError, omieRetryDelay, OMIE_ENDPOINTS, safeOmieError } from "./logic.mjs";
-import { accountListParams, buildRemessaEntries, entradaId, entradaListParams, entradaTouches, filterPayablesForRemessa, isEmptyListError, isMissingTableError, listRows, OMIE_REMESSA_API, parseAccount, parseEntrada, parseRemessa, parseStatus, remessaId, remessaListParams, shapeOf, statusIsStale, totalPages } from "./remessa.mjs";
+import { accountListParams, buildRemessaEntries, nonCardPayableIds, remessaRetirements, retirePayableEntries, entradaId, entradaListParams, entradaTouches, filterPayablesForRemessa, isEmptyListError, isMissingTableError, listRows, OMIE_REMESSA_API, parseAccount, parseEntrada, parseRemessa, parseStatus, remessaId, remessaListParams, shapeOf, statusIsStale, totalPages } from "./remessa.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -303,8 +303,12 @@ Deno.serve(async(request:Request)=>{
     const entradasListed=await omieListExact(OMIE_REMESSA_API.entrada,entradaListParams,creds);
     const touching=entradasListed.rows.filter(row=>entradaId(row)&&entradaTouches(row,remessas,scopeCodes));
     const neStatus=await statusesFor(orgId,"ne",OMIE_REMESSA_API.entrada,touching.map(row=>({id:entradaId(row),row})),creds,budget);
+    // v4.5.15 — projeto ATUAL de toda remessa listada (para achar as que
+    // mudaram de projeto ou sumiram do Omie).
+    const listedProjects=new Map<string,string>();
+    for(const row of listed.rows){ const id=remessaId(row); if(id) listedProjects.set(id,parseRemessa(row).projectCode); }
     return {
-      remessas,
+      remessas,listedProjects,listedTruncated:listed.truncated,
       entradas:touching.map(row=>parseEntrada(row,neStatus.get(entradaId(row))??null)),
       source:{remessasRead:listed.rows.length,remessasInScope:scopedRows.length,entradasRead:entradasListed.rows.length,entradasLinked:touching.length,
         consulted:budget.consulted,cached:budget.cached,awaitingStatus:budget.waiting,truncated:listed.truncated||entradasListed.truncated}
@@ -320,6 +324,55 @@ Deno.serve(async(request:Request)=>{
       totals.cancelled+=Number(data?.cancelled)||0;totals.unchanged+=Number(data?.unchanged)||0;
     }
     return totals;
+  }
+
+  // v4.5.15 — lançamentos de remessa gravados nos projetos em escopo que
+  // precisam sair (remessa mudou de projeto ou foi excluída no Omie).
+  async function remessaRetirementsFor(orgId:string,scopeCodes:Set<string>,collected:{listedProjects:Map<string,string>;listedTruncated:boolean},entries:Record<string,unknown>[]){
+    const codes=[...scopeCodes];
+    if(!codes.length) return {entries:[],moved:[]};
+    const {data,error}=await admin.from("app_records").select("data").eq("organization_id",orgId).eq("store","purchases")
+      .eq("data->>sourceType","omieRemessa").in("data->>omieProjectCode",codes).limit(5000);
+    if(error) throw new Error("Não foi possível ler as remessas já lançadas.");
+    const produced=new Set<string>(entries.map(entry=>String(entry.externalItemId||"")));
+    return remessaRetirements(data||[],collected.listedProjects,produced,scopeCodes,collected.listedTruncated);
+  }
+
+  // v4.5.15 — retira na hora o rateio de "Compras de Material" das contas a
+  // pagar fora do cartão dos projetos que acabaram de entrar em custo por
+  // remessa (mesma regra v4.5.14 da limpeza agendada; outras categorias ficam).
+  async function retireNonCardPayables(orgId:string,actor:string,codes:string[],cards:Set<string>,creds:{app_key:string;app_secret:string}){
+    const result={titles:0,cancelled:0};
+    if(!codes.length) return result;
+    const {data:connection}=await admin.from("omie_connections").select("initial_sync_date").eq("organization_id",orgId).maybeSingle();
+    const today=new Date().toISOString().slice(0,10);
+    const payables:Record<string,unknown>[]=[];
+    for(const code of codes){
+      payables.push(...await pagedOmie(OMIE_ENDPOINTS.payables,"ListarContasPagar","conta_pagar_cadastro",{
+        apenas_importado_api:"N",filtrar_por_data_de:isoToDdMmYyyy(String(connection?.initial_sync_date||today)),filtrar_por_data_ate:isoToDdMmYyyy(today),
+        filtrar_apenas_inclusao:"N",filtrar_apenas_alteracao:"N",filtrar_por_projeto:Number(code)
+      },creds,60));
+    }
+    const scope=new Set(codes);
+    const ids=nonCardPayableIds(payables,scope,cards);
+    result.titles=ids.size;
+    const idList=[...ids],purchases:Record<string,unknown>[]=[];
+    for(let offset=0;offset<idList.length;offset+=150){
+      const {data,error}=await admin.from("app_records").select("data").eq("organization_id",orgId).eq("store","purchases")
+        .eq("data->>sourceType","omiePayable").in("data->>externalId",idList.slice(offset,offset+150));
+      if(error) throw new Error("Não foi possível ler as contas a pagar gravadas.");
+      purchases.push(...(data||[]));
+    }
+    const entries=retirePayableEntries(purchases,ids,scope);
+    const runId=crypto.randomUUID();
+    for(const batch of chunk(entries,400)){
+      const {data,error}=await admin.rpc("clique_obras_apply_omie_entries",{target_organization_id:orgId,target_actor_id:actor,entries:batch,target_sync_run_id:runId});
+      if(error) throw new Error(error.message||"Falha ao retirar contas a pagar.");
+      result.cancelled+=Number((data as any)?.cancelled)||0;
+    }
+    const {error}=await admin.from("omie_remessa_projects").update({payables_cleared_at:new Date().toISOString()}).eq("organization_id",orgId).in("omie_project_code",codes);
+    if(error) console.warn("payables_cleared_at not saved",{organizationId:orgId,message:safeOmieError(error)});
+    return result;
   }
 
   async function listCardCandidates(creds:{app_key:string;app_secret:string}){
@@ -532,8 +585,9 @@ Deno.serve(async(request:Request)=>{
         try{
           const collected=await collectRemessas(orgId,creds,remessaCodes);
           const builtRemessas=buildRemessaEntries(collected.remessas,collected.entradas,projectMap,categoryMap,remessaCodes);
-          const applied=await applyRemessaEntries(orgId,runActor,runId,builtRemessas.entries);
-          Object.assign(remessas,applied,{counts:builtRemessas.counts,pending:builtRemessas.pending.length,unmatchedReturns:builtRemessas.unmatchedReturns.length,source:collected.source});
+          const retired=await remessaRetirementsFor(orgId,remessaCodes,collected,builtRemessas.entries);
+          const applied=await applyRemessaEntries(orgId,runActor,runId,[...builtRemessas.entries,...retired.entries]);
+          Object.assign(remessas,applied,{moved:retired.moved.length,movedItems:retired.moved.slice(0,50),counts:builtRemessas.counts,pending:builtRemessas.pending.length,unmatchedReturns:builtRemessas.unmatchedReturns.length,source:collected.source});
         }catch(error){
           remessas.error=safeOmieError(error);
           console.warn("Omie remessa step failed",{organizationId:orgId,runId,message:remessas.error});
@@ -669,7 +723,16 @@ Deno.serve(async(request:Request)=>{
           reverted=result.cancelled;
         }
       }
-      return json(request,{saved:true,projects:wanted.size,cards:cards.size,reverted,turnedOff});
+      // v4.5.15 — projeto que ENTROU no modo remessa: "Compras de Material" fora
+      // do cartão sai agora (antes esperava a limpeza agendada). As remessas
+      // entram na sincronização que a tela dispara logo em seguida.
+      const turnedOn=[...wanted].filter(code=>!config.projects.has(code));
+      let payablesRetired=0,payablesError:string|null=null;
+      if(turnedOn.length){
+        try{ payablesRetired=(await retireNonCardPayables(organizationId,actorId,turnedOn,new Set(cards.keys()),await credentials(organizationId))).cancelled; }
+        catch(error){ payablesError=safeOmieError(error); console.warn("Omie remessa activation cleanup failed",{organizationId,message:payablesError}); }
+      }
+      return json(request,{saved:true,projects:wanted.size,cards:cards.size,reverted,turnedOff,turnedOn,payablesRetired,payablesError});
     }
     if(action==="remessa-preview"){
       const code=cleanText(payload.projectCode,30);
@@ -688,7 +751,8 @@ Deno.serve(async(request:Request)=>{
       try{
         const collected=await collectRemessas(organizationId,creds,new Set([code]));
         const built=buildRemessaEntries(collected.remessas,collected.entradas,projectMap,categoryMap,new Set([code]));
-        remessaResult={error:null,source:collected.source,counts:built.counts,pending:built.pending.slice(0,50),unmatchedReturns:built.unmatchedReturns.slice(0,30),
+        const retired=await remessaRetirementsFor(organizationId,new Set([code]),collected,built.entries);
+        remessaResult={error:null,source:collected.source,moved:retired.moved.slice(0,50),counts:built.counts,pending:built.pending.slice(0,50),unmatchedReturns:built.unmatchedReturns.slice(0,30),
           entries:built.entries.slice(0,300).map((entry:any)=>({id:entry.externalId,nfNumber:entry.nfNumber,date:entry.date,category:entry.category,grossValue:entry.grossValue,returnedValue:entry.returnedValue,value:entry.value,returns:entry.returns,status:entry.status,active:entry.active}))};
       }catch(error){ remessaResult={error:safeOmieError(error)}; }
       const payableResult:Record<string,unknown>={error:null};

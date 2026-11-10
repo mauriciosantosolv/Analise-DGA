@@ -250,17 +250,34 @@ const OmieRemessa = {
     const turningOff=projects.filter((item,index)=>item.remessa&&!remessaProjects[index].enabled);
     const names=list=>list.map(item=>`<b>${U.esc(item.omieProjectName||item.omieProjectCode)}</b>`).join(', ');
     const lines=[];
-    if(turningOn.length) lines.push(`Passam a usar <b>custo por remessa</b>: ${names(turningOn)}. Nesses projetos, as próximas sincronizações trazem as remessas faturadas e, do Contas a Pagar, só o cartão corporativo. Contas a pagar já importadas nesses projetos <b>permanecem</b> como estão.`);
+    if(turningOn.length) lines.push(`Passam a usar <b>custo por remessa</b>: ${names(turningOn)}. Nesses projetos a categoria <b>Compras de Material</b> passa a vir das <b>remessas faturadas</b>: o material lançado pelo Contas a Pagar fora do cartão corporativo sai <b>agora</b> (devolvendo o planejamento) e as remessas entram na sincronização feita logo em seguida. As demais categorias e o material pago no cartão continuam vindo do Contas a Pagar.`);
     if(turningOn.length&&!cardAccounts.length) lines.push('<b>Atenção:</b> nenhuma conta de cartão corporativo está marcada — nesses projetos <b>nenhuma</b> conta a pagar vai entrar, só as remessas.');
     if(turningOff.length) lines.push(`Voltam para o <b>Contas a Pagar</b>: ${names(turningOff)}. As remessas lançadas neles serão <b>estornadas agora</b> (o planejamento é devolvido). Depois rode <b>Sincronizar agora</b> nesses projetos para trazer de volta as contas a pagar.`);
     const run=async()=>{
       try{
         UI.loading(true,'Salvando custo por remessa…');
         const result=await OmieIntegration.request('remessa-save',{remessaProjects,cardAccounts});
-        if(Number(result.reverted)>0){ await DB.syncFromCloud(); await State.reload(); }
+        // v4.5.15 — projeto que acabou de entrar em remessa: sincroniza na hora
+        // para as remessas substituírem as contas a pagar retiradas.
+        const turnedOn=Array.isArray(result.turnedOn)?result.turnedOn.map(String):[];
+        let synced=null,syncError='';
+        if(turnedOn.length){
+          UI.loading(true,'Lançando as remessas dos projetos ativados…');
+          try{ synced=await OmieIntegration.request('sync',{projectCodes:turnedOn}); }
+          catch(error){ syncError=String(error?.message||error); }
+        }
+        const changed=Number(result.reverted)>0||Number(result.payablesRetired)>0||!!synced;
+        if(changed){ await DB.syncFromCloud(); await State.reload(); }
         UI.loading(false); UI.closeAll();
-        UI.toast(`Custo por remessa salvo: ${Number(result.projects)||0} projeto(s), ${Number(result.cards)||0} conta(s) de cartão${Number(result.reverted)?`, ${Number(result.reverted)} remessa(s) estornada(s)`:''}.`,'success',8000);
-        if(Number(result.reverted)>0) App.render();
+        const rem=synced&&synced.remessas||{};
+        const parts=[`${Number(result.projects)||0} projeto(s)`,`${Number(result.cards)||0} conta(s) de cartão`];
+        if(Number(result.reverted)) parts.push(`${Number(result.reverted)} remessa(s) estornada(s)`);
+        if(Number(result.payablesRetired)) parts.push(`${Number(result.payablesRetired)} lançamento(s) de material fora do cartão retirado(s)`);
+        if(synced) parts.push(`${Number(rem.imported)||0} remessa(s) lançada(s)${Number(rem.counts&&rem.counts.awaitingStatus)?' (outras aguardando consulta no Omie)':''}`);
+        UI.toast(`Custo por remessa salvo: ${parts.join(', ')}.`,'success',9000);
+        if(result.payablesError) UI.toast('O material fora do cartão não pôde ser retirado agora (a limpeza agendada tenta de novo): '+U.esc(result.payablesError),'warn',10000);
+        if(syncError) UI.toast('Remessas não lançadas agora (entram na próxima sincronização): '+U.esc(syncError),'warn',10000);
+        if(changed) App.render();
         await OmieIntegration.load();
       }catch(error){ UI.loading(false); UI.toast('Não foi possível salvar: '+U.esc(error.message||error),'error',8000); }
     };
@@ -297,6 +314,7 @@ const OmieRemessa = {
         <div><small>Retornos estornados</small><b>${this.money(sum(counted,'returnedValue'))}</b></div>
         <div><small>Custo líquido</small><b>${this.money(sum(counted,'value'))}</b></div>
       </div>
+      ${Array.isArray(r.moved)&&r.moved.length?`<div class="permission-banner"><i data-lucide="arrow-right-left"></i><span>${r.moved.length} remessa(s) lançada(s) neste projeto <b>saem</b> na próxima sincronização porque no Omie ${r.moved.length>1?'estão':'está'} em outro projeto ou ${r.moved.length>1?'foram excluídas':'foi excluída'}: ${r.moved.slice(0,10).map(item=>`NF ${U.esc(item.nfNumber||item.id)} (${item.reason==='moved'?'agora no projeto Omie '+U.esc(item.toProject||'sem projeto'):'excluída no Omie'}, ${this.money(item.value)})`).join('; ')}.</span></div>`:''}
       <div class="table-wrap"><table><thead><tr><th>NF</th><th>Data</th><th>Categoria</th><th class="num">Valor NF</th><th class="num">Retornos</th><th class="num">Custo</th><th>Situação</th></tr></thead><tbody>
       ${entries.map(item=>`<tr><td>${U.esc(item.nfNumber||item.id)}</td><td>${U.esc(U.date(item.date))}</td><td>${U.esc(item.category)}</td><td class="num">${this.money(item.grossValue)}</td><td class="num" title="${U.esc((item.returns||[]).map(ret=>`NF ${ret.nfNumber||ret.id} · ${U.date(ret.date)} · ${this.money(ret.value)}`).join('\n'))}">${Number(item.returnedValue)?this.money(item.returnedValue):'—'}</td><td class="num">${item.active?`<b>${this.money(item.value)}</b>`:'—'}</td><td>${statusTag(item)}</td></tr>`).join('')||'<tr><td colspan="7"><div class="empty">Nenhuma remessa encontrada para este projeto.</div></td></tr>'}
       </tbody></table></div>
