@@ -356,8 +356,8 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.5.15 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.5.15 · dados locais';
+      el.textContent=`v4.5.16 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.5.16 · dados locais';
   },
   showCloudLogin(){
     this.bootShield('auth-gate');
@@ -414,77 +414,24 @@ const App = {
       await this.syncCloudNow(false,options);
     }
   },
-  /* v4.5.6 - atualizacao da nuvem sem piscar e sem apagar o que esta sendo digitado.
-     Antes: cada mudanca vinda de outro usuario/aparelho (ou da carga do Omie)
-     redesenhava a tela inteira na hora, (1) reiniciando a animacao de entrada
-     dos cartoes e dos graficos - a "piscada" - e (2) recriando os campos das
-     telas com formulario na pagina (Configuracoes, Base de calculo, filtros...),
-     o que apagava o que ainda nao tinha sido salvo.
-     Agora a sincronizacao de fundo continua igual (syncCloudNow nao mudou), mas
-     o redesenho passa por aqui: se ha campo alterado/focado ou janela aberta,
-     ele espera e aparece um aviso "Atualizar"; senao, redesenha sem animacao. */
-  editedFields:new Set(),
-  pendingCloudRender:false,
-  pendingCloudTimer:null,
-  isEditableField(el){
-    if(!el || el.nodeType!==1) return false;
-    if(el.isContentEditable) return true;
-    const tag=String(el.tagName||'').toUpperCase();
-    if(tag==='TEXTAREA' || tag==='SELECT') return true;
-    if(tag!=='INPUT') return false;
-    const type=String(el.type||'text').toLowerCase();
-    return !['button','submit','reset','checkbox','radio','hidden','image','file'].includes(type);
-  },
-  watchContentEdits(){
-    const content=document.getElementById('content');
-    if(!content || content.dataset.editWatch) return;
-    content.dataset.editWatch='1';
-    const mark=e=>{
-      const el=e.target;
-      if(e.isTrusted===false || !el || el.nodeType!==1) return;
-      const tag=String(el.tagName||'').toUpperCase();
-      if(this.isEditableField(el) || tag==='INPUT') this.editedFields.add(el);
-    };
-    content.addEventListener('input',mark,true);
-    content.addEventListener('change',mark,true);
-  },
-  // ha algo na tela que um redesenho apagaria?
-  userIsEditing(){
-    const content=document.getElementById('content');
-    if(!content) return false;
-    for(const el of Array.from(this.editedFields)){
-      // campo que ja saiu da tela (salvou, trocou de tela, filtro redesenhou) nao conta mais
-      if(!el.isConnected || !content.contains(el)) this.editedFields.delete(el);
-    }
-    if(this.editedFields.size) return true;
-    const active=document.activeElement;
-    return !!(active && active!==content && content.contains(active) && this.isEditableField(active));
-  },
-  async backgroundCloudSync(shouldRender){
-    const before=this.lastCloudRefresh;
+  /* v4.5.16 - a tela NAO se atualiza mais sozinha com dados da nuvem.
+     Historico: ate a v4.5.5 cada mudanca vinda de outro usuario/aparelho (ou da
+     carga do Omie) redesenhava a tela na hora - a tela "piscava e reiniciava".
+     A v4.5.6 trocou isso por um aviso "Ha dados novos da nuvem / Atualizar",
+     que passou a aparecer o tempo todo. Pedido de 13/11/2026: nem uma coisa nem
+     outra.
+     Agora a sincronizacao de fundo continua (a copia local e o State ficam em
+     dia, entao uma janela de edicao aberta depois ja usa o dado novo e as
+     gravacoes nao trabalham sobre base velha), mas a tela aberta NAO e
+     redesenhada. O que chegou da nuvem aparece quando a pessoa recarrega a
+     pagina (F5), abre outra tela do menu ou faz algo que ja redesenha a tela
+     (salvar, filtrar). Nenhum aviso aparece.
+     O modo Painel/TV continua se atualizando sozinho: ele tem o proprio ciclo
+     de 2 min (modules/dashboard/panel-tv.js), que nao passa por aqui. */
+  async backgroundCloudSync(){
     await this.syncCloudNow(false,{render:false});
-    if(shouldRender && this.lastCloudRefresh!==before) this.applyCloudRender();
-  },
-  applyCloudRender(){
-    const busy=(typeof UI!=='undefined' && UI.isModalOpen()) || this.userIsEditing();
-    if(!busy){ this.render({quiet:true}); return; }
-    this.pendingCloudRender=true;
-    this.showCloudUpdateNotice(true);
-    clearInterval(this.pendingCloudTimer);
-    // aplica sozinho assim que a pessoa terminar (salvou, fechou a janela, saiu do campo sem alterar)
-    this.pendingCloudTimer=setInterval(()=>{
-      if(!this.pendingCloudRender){ clearInterval(this.pendingCloudTimer); return; }
-      if(typeof document!=='undefined' && document.hidden) return;
-      if((typeof UI!=='undefined' && UI.isModalOpen()) || this.userIsEditing()) return;
-      this.render({quiet:true});
-    },1500);
   },
   settleCloudRender(quiet){
-    this.pendingCloudRender=false;
-    clearInterval(this.pendingCloudTimer);
-    this.pendingCloudTimer=null;
-    this.editedFields.clear();
-    this.showCloudUpdateNotice(false);
     const content=typeof document!=='undefined' && document.getElementById('content');
     // a classe fica ate o proximo redesenho normal: tira-la antes reiniciaria a animacao
     if(content) content.classList.toggle('co-quiet-render',!!quiet);
@@ -496,58 +443,15 @@ const App = {
       }
     }
   },
-  showCloudUpdateNotice(show){
-    if(typeof document==='undefined') return;
-    let el=document.getElementById('cloud-update-notice');
-    if(!show){ if(el) el.hidden=true; return; }
-    if(!el){
-      el=document.createElement('div');
-      el.id='cloud-update-notice';
-      el.setAttribute('role','status');
-      el.innerHTML='<span><i data-lucide="refresh-cw"></i>Há dados novos da nuvem</span><button type="button" class="btn btn-sm btn-primary" title="Redesenha a tela. O que não foi salvo nesta tela será perdido.">Atualizar</button>';
-      el.querySelector('button').onclick=()=>this.render({quiet:true});
-      document.body.appendChild(el);
-      if(typeof U!=='undefined' && U.icons) U.icons();
-    }
-    el.hidden=false;
-  },
   // v4.2.5 - qual tabela mudou no evento recebido do Realtime
   changedStoreOf(payload){
     const row=payload && ((payload.new && payload.new.store!=null) ? payload.new : payload.old);
     return (row && row.store) ? String(row.store) : '';
   },
-  // v4.2.5 - tabelas que cada tela mostra alem das declaradas em viewStores.
-  // Fica separado de proposito: viewStores tambem decide quem pode abrir o
-  // menu (canOpenView), e mexer nele mudaria permissao. Este mapa so decide
-  // se vale a pena redesenhar.
-  viewExtraStores:{
-    dashboard:['rdos','crew','forecasts','measurement_receipts','planning_history'],
-    medicoes:['forecasts','measurement_receipts','projects','clients'],
-    rdos:['crew','labor_rates','rdo_financial','projects'],
-    financeiro:['planning','planning_history','projects','categories'],
-    planejamento:['projects','categories','purchases'],
-    planejamentoequipe:['crew','projects','settings'],
-    projetos:['budgets','purchases','measurements','clients'],
-    orcamentos:['projects','categories'],
-    relatorios:['forecasts','measurement_receipts','planning_history','labor_rates','rdo_financial'],
-    valoreshh:['crew','rdos'],
-    colaboradores:['rdos','labor_rates']
-  },
-  // v4.2.5 - a tela aberta mostra alguma das tabelas que mudaram?
-  touchesCurrentView(stores){
-    if(!stores || !stores.size) return true;
-    const relevant=new Set(this.viewStores[State.view]||[]);
-    (this.viewExtraStores[State.view]||[]).forEach(store=>relevant.add(store));
-    // o ticker e o painel lateral direito aparecem em todas as telas
-    ['projects','planning','settings'].forEach(store=>relevant.add(store));
-    for(const store of stores) if(relevant.has(store)) return true;
-    return false;
-  },
-  // v4.2.5 - as mudancas da nuvem passam a ser agrupadas: em vez de uma leitura
-  // completa + redesenho por linha alterada, espera 1,2s de silencio (no maximo
-  // 10s de espera total) e redesenha uma vez so - e somente se a tela aberta
-  // mostra o que mudou. Com a aba em segundo plano nada e redesenhado; a
-  // atualizacao acontece quando ela volta a ficar visivel.
+  // v4.2.5 - as mudancas da nuvem sao agrupadas: espera 1,2s de silencio (no
+  // maximo 10s de espera total) e faz UMA leitura. Com a aba em segundo plano
+  // nada e lido; a leitura acontece quando ela volta a ficar visivel.
+  // v4.5.16 - a leitura so atualiza os dados; a tela aberta nao e redesenhada.
   scheduleRealtimeSync(change={}){
     if(change.kind==='membership'){
       this.validateCloudAccess();
@@ -567,11 +471,10 @@ const App = {
         this.realtimeSyncTimer=setTimeout(attempt,1000);
         return;
       }
-      const stores=this.realtimeChangedStores;
       this.realtimeChangedStores=new Set();
       this.realtimeBurstStart=0;
       this.realtimeDirty=false;
-      await this.backgroundCloudSync(this.touchesCurrentView(stores));
+      await this.backgroundCloudSync();
       if(change.kind==='organization') this.applyBranding();
     };
     const waited=now-this.realtimeBurstStart;
@@ -815,7 +718,6 @@ const App = {
       if(e.key==='Escape') this.closeMobileMenu();
     });
     document.getElementById('content').addEventListener('click',e=>this.guardReadOnlyAction(e),true);
-    this.watchContentEdits();
     this.initSearch();
     this.applyTheme(State.settings.theme || 'light');
     this.applyBranding();
@@ -841,7 +743,7 @@ const App = {
     }, 500);
     this._booted = true;
     window.addEventListener('online',()=>{
-      if(Cloud.active()) this.syncCloudNow(false)
+      if(Cloud.active()) this.syncCloudNow(false,{render:false})
         .then(()=>Cloud.startRealtime(change=>this.scheduleRealtimeSync(change)))
         .then(()=>this.applyStorageStatus())
         .catch(()=>{});
@@ -852,10 +754,9 @@ const App = {
       // enquanto ela estava em segundo plano, ou se a copia local ficou velha.
       const stale=Date.now()-this.lastCloudRefresh>120000;
       if(!this.realtimeDirty && !stale) return;
-      const stores=this.realtimeChangedStores;
       this.realtimeChangedStores=new Set();
       this.realtimeDirty=false;
-      this.backgroundCloudSync(stale || this.touchesCurrentView(stores));
+      this.backgroundCloudSync();
     });
    }catch(err){ this.fatal(err); }
   }

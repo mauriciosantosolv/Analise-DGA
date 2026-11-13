@@ -710,6 +710,37 @@ const Cloud = (() => {
     return [...new Set(rows.map(row=>String(row&&row.employee_id||'')).filter(Boolean))];
   }
 
+  // v4.5.16 - ocupacoes do dia COM horario: o mesmo colaborador pode estar em
+  // dois RDOs no mesmo dia se os horarios nao se sobrepuserem. Devolve so
+  // situacao e horario (nunca o projeto). Se o SQL v4.5.16 ainda nao foi
+  // aplicado, cai na RPC antiga e trata cada ocupacao como dia inteiro, que e
+  // exatamente a regra anterior.
+  async function occupiedRdoSlots(date,excludeRdoId=''){
+    await ensureFresh();
+    if(!organization() || !canViewStore('rdos')) return [];
+    const body=JSON.stringify({
+      p_organization_id:organization().id,
+      p_date:String(date||'').slice(0,10),
+      p_exclude_rdo_id:String(excludeRdoId||'')||null
+    });
+    let rows;
+    try{
+      rows=await request('/rest/v1/rpc/clique_obras_rdo_occupied_slots_v4516',{
+        method:'POST',headers:authHeaders(true),body
+      }) || [];
+    }catch(err){
+      const ids=await occupiedRdoEmployees(date,excludeRdoId);
+      return ids.map(id=>({employeeId:id,situation:'Outro RDO',start:'',end:'',regular:0}));
+    }
+    return rows.map(row=>({
+      employeeId:String(row&&row.employee_id||''),
+      situation:String(row&&row.situation||'Outro RDO'),
+      start:String(row&&row.start_time||''),
+      end:String(row&&row.end_time||''),
+      regular:Number(row&&row.regular_hours)||0
+    })).filter(row=>row.employeeId);
+  }
+
   // v4.2.7 - proximo numero livre de RDO do ano, contado na organizacao inteira.
   // A contagem local (State.rdos) so ve o que a RLS entrega e ja gerou 18 numeros
   // repetidos. A funcao no banco e SECURITY DEFINER e valida a permissao de
@@ -1317,36 +1348,6 @@ const Cloud = (() => {
       method:'DELETE',headers:authHeaders(false)
     });
   }
-  // v4.5.12 — transferência de propriedade e exclusão da própria conta.
-  // Funções NOVAS; nenhuma rotina existente muda. Ver
-  // supabase/ATUALIZACAO-v4.5.12-CONTA-PROPRIEDADE.sql e
-  // supabase/functions/delete-own-account.
-  async function transferOwnership(userId){
-    await ensureFresh();
-    if(!organization() || !isOwner())
-      throw new Error('Somente o proprietário pode transferir a propriedade.');
-    return request('/rest/v1/rpc/clique_obras_transfer_ownership_v4512',{
-      method:'POST',
-      headers:authHeaders(true),
-      body:JSON.stringify({target_organization_id:organization().id,target_user_id:String(userId||'')})
-    });
-  }
-  async function accountDeletionCheck(){
-    await ensureFresh();
-    return request('/rest/v1/rpc/clique_obras_account_deletion_check_v4512',{
-      method:'POST',
-      headers:authHeaders(true),
-      body:'{}'
-    });
-  }
-  async function deleteOwnAccount(password,confirm){
-    await ensureFresh();
-    return request('/functions/v1/delete-own-account',{
-      method:'POST',
-      headers:authHeaders(true),
-      body:JSON.stringify({password:String(password||''),confirm:String(confirm||'')})
-    });
-  }
   async function updateOrganizationName(name){
     await ensureFresh();
     const clean=String(name||'').trim();
@@ -1371,10 +1372,10 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
-    transferOwnership, accountDeletionCheck, deleteOwnAccount,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
+    occupiedRdoSlots,
     nextRdoNumber,
     rdoShiftDefaults,
     rdoHhGaps,

@@ -277,21 +277,104 @@ const RDO = {
     });
     return occupied;
   },
+  /* v4.5.16 - o mesmo colaborador pode estar em DOIS (ou mais) RDOs no mesmo
+     dia, em obras diferentes, desde que os HORARIOS nao se sobreponham
+     (ex.: obra A 07:00-12:00 e obra B 13:00-17:00). Encostar nao e sobrepor:
+     07:00-12:00 e 12:00-17:00 passam.
+     Continua ocupando o DIA INTEIRO (bloqueia qualquer outro RDO):
+       - folga do dia;
+       - falta registrada em outro RDO;
+       - lancamento sem Entrada/Saida validas.
+     Saida menor que a entrada = virada da noite (22:00-06:00 vai ate as 06:00
+     do dia seguinte), igual a paidHours().
+     A mesma regra esta no banco (gatilho zz_cliqueobras_validate_rdo_workforce,
+     SQL v4.5.16) e na RPC clique_obras_rdo_occupied_slots_v4516. */
+  entryWindow(entry){
+    if(!entry||this.isAbsent(entry)) return null;
+    const from=this.timeMinutes(entry.start),to=this.timeMinutes(entry.end);
+    if(from==null||to==null||from===to) return null;
+    return {from,to:to>from?to:to+1440};
+  },
+  windowsOverlap(a,b){
+    if(!a||!b) return true;
+    return a.from<b.to&&b.from<a.to;
+  },
+  // ocupacao vinda do banco (RPC) ou da copia local, no mesmo formato
+  slotOf(item){
+    if(!item) return null;
+    if(item.workforceStatus) return {situation:'Folga',start:'',end:'',regular:0};
+    if(item.entry) return {
+      situation:this.isAbsent(item.entry)?'Falta':'Outro RDO',
+      start:String(item.entry.start||''),end:String(item.entry.end||''),
+      regular:Number(item.entry.regular)||0
+    };
+    return {situation:String(item.situation||'Outro RDO'),start:String(item.start||''),end:String(item.end||''),regular:Number(item.regular)||0};
+  },
+  slotWindow(slot){
+    if(!slot||slot.situation==='Folga'||slot.situation==='Falta') return null;
+    return this.entryWindow({start:slot.start,end:slot.end});
+  },
+  // a ocupacao toma o dia inteiro (nao sobra horario para outra obra)?
+  slotBlocksWholeDay(slot){
+    return !this.slotWindow(slot);
+  },
+  slotLabel(slot){
+    if(!slot) return '';
+    if(slot.situation==='Folga') return 'está de folga nesta data';
+    if(slot.situation==='Falta') return 'tem falta registrada em outro RDO nesta data';
+    const span=this.slotWindow(slot);
+    return span?`já está em outro RDO das ${slot.start} às ${slot.end}`:'já está em outro RDO nesta data, sem horário informado';
+  },
+  // todas as ocupacoes do dia por colaborador (o occupiedEmployees guarda so a primeira)
+  occupationsOn(date,excludeRdoId=''){
+    const targetDate=String(date||'').slice(0,10);
+    const excluded=String(excludeRdoId||'');
+    const map=new Map();
+    const add=(employeeId,item)=>{
+      if(!employeeId) return;
+      if(!map.has(employeeId)) map.set(employeeId,[]);
+      map.get(employeeId).push(this.slotOf(item));
+    };
+    (Array.isArray(State.rdos)?State.rdos:[]).forEach(rdo=>{
+      if(!rdo||String(rdo.id||'')===excluded||String(rdo.date||'').slice(0,10)!==targetDate) return;
+      (Array.isArray(rdo.entries)?rdo.entries:[]).forEach(entry=>add(String(entry&&entry.employeeId||''),{rdo,entry}));
+    });
+    this.dayOffs(targetDate).forEach(item=>add(String(item.employeeId||''),{workforceStatus:item}));
+    return map;
+  },
+  // primeira ocupacao que bate com o horario deste lancamento (ou null)
+  slotConflict(entry,slots=[]){
+    const mine=this.entryWindow(entry);
+    return (Array.isArray(slots)?slots:[]).find(slot=>slot&&(
+      slot.situation==='Folga'||slot.situation==='Falta'||this.windowsOverlap(mine,this.slotWindow(slot))
+    ))||null;
+  },
+  // horas normais que o colaborador ja tem em outros RDOs do dia
+  regularUsedIn(slots=[]){
+    return (Array.isArray(slots)?slots:[]).reduce((sum,slot)=>sum+(slot&&slot.situation==='Outro RDO'?Number(slot.regular)||0:0),0);
+  },
   allocationConflicts(date,rdoId,entries=[]){
-    const occupied=this.occupiedEmployees(date,rdoId);
+    const occupations=this.occupationsOn(date,rdoId);
     return (Array.isArray(entries)?entries:[]).map(entry=>{
       const employeeId=String(entry&&entry.employeeId||'');
-      const conflict=occupied.get(employeeId);
+      const conflict=this.slotConflict(entry,occupations.get(employeeId)||[]);
       if(!conflict) return null;
       const employee=this.crewMembers().find(item=>String(item.id)===employeeId)||{};
       return {
         employeeId,
         employeeName:employee.name||entry.employeeName||'Colaborador',
-        rdoId:String(conflict.rdo?.id||''),
-        projectId:String(conflict.rdo?.projectId||''),
-        situation:conflict.workforceStatus?'Folga':'Outro RDO'
+        situation:conflict.situation==='Folga'?'Folga':'Outro RDO',
+        detail:this.slotLabel(conflict)
       };
     }).filter(Boolean);
+  },
+  conflictText(conflicts=[]){
+    const items=Array.isArray(conflicts)?conflicts:[];
+    const list=items.map(item=>`${item.employeeName} ${item.detail}`).join('; ');
+    const timed=items.some(item=>/ das \d/.test(String(item.detail||'')));
+    return `${list}.`+(timed
+      ?' Para alocar a mesma pessoa em duas obras no mesmo dia, os horários de entrada e saída não podem se sobrepor.'
+      :'');
   },
   linkedRdoIds(){
     return new Set(State.measurements.flatMap(m=>Array.isArray(m.rdoIds)?m.rdoIds.map(String):[]));
@@ -404,19 +487,37 @@ const RDO = {
   // com State.rdos, filtrado pela RLS; a RPC enxerga a organizacao inteira e e a
   // unica capaz de ver um colaborador ja alocado num projeto que este usuario nao
   // acessa. Qualquer falha da RPC cai no comportamento anterior, sem travar.
+  // v4.5.16 - a RPC agora devolve o horario de cada ocupacao; so conflita o
+  // que se sobrepoe (ou o que ocupa o dia inteiro).
+  async remoteSlots(date,excludeRdoId=''){
+    if(typeof Cloud==='undefined'||!Cloud.active()) return null;
+    if(typeof Cloud.occupiedRdoSlots==='function'){
+      try{ return await Cloud.occupiedRdoSlots(date,excludeRdoId); }catch(err){ return null; }
+    }
+    if(typeof Cloud.occupiedRdoEmployees!=='function') return null;
+    try{
+      const ids=await Cloud.occupiedRdoEmployees(date,excludeRdoId);
+      return (Array.isArray(ids)?ids:[]).map(id=>({employeeId:String(id),situation:'Outro RDO',start:'',end:'',regular:0}));
+    }catch(err){ return null; }
+  },
   async remoteAllocationConflicts(rdo){
-    if(typeof Cloud==='undefined'||!Cloud.active()||typeof Cloud.occupiedRdoEmployees!=='function') return [];
-    let occupied=[];
-    try{ occupied=await Cloud.occupiedRdoEmployees(rdo.date,rdo.id); }catch(err){ return []; }
-    if(!Array.isArray(occupied)||!occupied.length) return [];
-    const taken=new Set(occupied.map(String));
+    const slots=await this.remoteSlots(rdo.date,rdo.id);
+    if(!Array.isArray(slots)||!slots.length) return [];
+    const byEmployee=new Map();
+    slots.forEach(slot=>{
+      const id=String(slot&&slot.employeeId||'');
+      if(!id) return;
+      if(!byEmployee.has(id)) byEmployee.set(id,[]);
+      byEmployee.get(id).push(slot);
+    });
     const seen=new Set();
-    return (Array.isArray(rdo.entries)?rdo.entries:[]).filter(entry=>{
+    return (Array.isArray(rdo.entries)?rdo.entries:[]).map(entry=>{
       const employeeId=String(entry&&entry.employeeId||'');
-      if(!employeeId||!taken.has(employeeId)||seen.has(employeeId)) return false;
+      if(!employeeId||seen.has(employeeId)) return null;
       seen.add(employeeId);
-      return true;
-    }).map(entry=>String(entry.employeeName||'Colaborador'));
+      const conflict=this.slotConflict(entry,byEmployee.get(employeeId)||[]);
+      return conflict?{employeeId,employeeName:String(entry.employeeName||'Colaborador'),detail:this.slotLabel(conflict),situation:conflict.situation}:null;
+    }).filter(Boolean);
   },
   // v4.2.7 - hhConfigurationIssues() depende de State.projects para saber se o
   // contrato e HH; num perfil que nao enxerga o cadastro de projetos o tipo vem
@@ -721,21 +822,12 @@ const RDO = {
     const allowed=new Set(this.allowedProjects().map(x=>String(x.id)));
     if(!allowed.has(String(rdo.projectId))) throw new Error('Projeto indisponível para este RDO.');
     const conflicts=this.allocationConflicts(rdo.date,rdo.id,rdo.entries);
-    if(conflicts.length){
-      const names=conflicts.map(item=>item.employeeName).join(', ');
-      const hasDayOff=conflicts.some(item=>item.situation==='Folga');
-      throw new Error(hasDayOff
-        ?`${names} ${conflicts.length===1?'está de folga':'estão de folga'} nesta data. Remova a folga antes de incluir no RDO.`
-        :`${names} já ${conflicts.length===1?'está registrado':'estão registrados'} em outro RDO nesta data. Atualize a tela antes de continuar.`);
-    }
+    if(conflicts.length) throw new Error(this.conflictText(conflicts));
     // v4.2.7 - a checagem local acima só enxerga os RDOs entregues pela RLS.
     // A remota fecha o buraco que permitia o mesmo colaborador em dois diários
     // do mesmo dia quando o segundo RDO estava num projeto invisível ao usuário.
     const remoteConflicts=await this.remoteAllocationConflicts(rdo);
-    if(remoteConflicts.length){
-      const names=remoteConflicts.join(', ');
-      throw new Error(`${names} já ${remoteConflicts.length===1?'está registrado':'estão registrados'} em outro diário ou de folga nesta data. Remova ${remoteConflicts.length===1?'o colaborador':'os colaboradores'} antes de salvar.`);
-    }
+    if(remoteConflicts.length) throw new Error(this.conflictText(remoteConflicts));
     if(status==='Enviado'){
       const issues=this.hhConfigurationIssues(rdo.projectId,rdo.entries);
       if(issues.length){
@@ -987,6 +1079,7 @@ const RDO = {
             <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}</small></span></label>
           <span class="rdo-worker-actions"><button type="button" class="rdo-absence-toggle" aria-pressed="${absent?'true':'false'}"><i data-lucide="user-x"></i><span>${absent?'Falta registrada':'Registrar falta'}</span></button><span class="rdo-worker-total">${absent?'Falta':U.pct((Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0)).replace('%','h')}</span></span>
         </div>
+        <div class="rdo-worker-busy" hidden><i data-lucide="clock"></i><span></span></div>
         <div class="rdo-worker-fields">
           <label>Entrada<input data-field="start" type="time" value="${U.esc(row.start||defaultShift.start)}"></label>
           <label>Saída<input data-field="end" type="time" value="${U.esc(row.end||defaultShift.end)}"></label>
@@ -1114,12 +1207,34 @@ const RDO = {
           overtime100:byId('rdo-all-100').value,
           nightHours:byId('rdo-all-night').value
         });
+        // v4.5.16 - ocupacoes do colaborador em outros RDOs do mesmo dia
+        let busyByEmployee=new Map();
+        const busyOf=card=>busyByEmployee.get(String(card.dataset.employeeId))||[];
+        const cardEntry=card=>({
+          attendanceStatus:isAbsentCard(card)?'absent':'present',
+          start:card.querySelector('[data-field="start"]').value,
+          end:card.querySelector('[data-field="end"]').value
+        });
+        const refreshBusy=card=>{
+          const slots=busyOf(card);
+          const box=card.querySelector('.rdo-worker-busy');
+          const conflict=(isPresentCard(card)||isAbsentCard(card))?this.slotConflict(cardEntry(card),slots):null;
+          card.classList.toggle('busy-conflict',!!conflict);
+          box.hidden=!slots.length;
+          box.querySelector('span').textContent=!slots.length?''
+            :conflict?`Horário em conflito: ${this.slotLabel(conflict)}. Ajuste a entrada e a saída.`
+            :`${slots.map(slot=>this.slotLabel(slot)).join('; ').replace(/^j/,'J')}. Pode entrar neste RDO em horário que não se sobreponha.`;
+        };
         const applyToCard=card=>{
           if(isAbsentCard(card)) return;
           Object.entries(sharedValues()).forEach(([field,value])=>{
             card.querySelector(`[data-field="${field}"]`).value=value;
           });
+          // o limite de horas normais do dia e um so: o que ja foi lancado em
+          // outro RDO sai do limite deste, e o excedente vira hora extra
+          if(this.regularUsedIn(busyOf(card))>0) recalculateCard(card);
           refreshTotal(card);
+          refreshBusy(card);
         };
         const refreshTeamSummary=()=>{
           const selected=cards.filter(isPresentCard);
@@ -1151,32 +1266,37 @@ const RDO = {
         const currentHoliday=()=>byId('rdo-holiday').checked;
         const refreshAvailability=async()=>{
           const revision=++availabilityRevision;
-          const occupied=this.occupiedEmployees(currentDate(),existing?.id||'');
-          if(typeof Cloud!=='undefined'&&Cloud.active()&&typeof Cloud.occupiedRdoEmployees==='function'){
-            try{
-              const remoteIds=await Cloud.occupiedRdoEmployees(currentDate(),existing?.id||'');
-              if(revision!==availabilityRevision) return;
-              remoteIds.forEach(employeeId=>{
-                if(!occupied.has(String(employeeId))) occupied.set(String(employeeId),{remote:true});
-              });
-            }catch(err){
-              if(revision!==availabilityRevision) return;
-            }
-          }
+          // a RPC enxerga a organizacao inteira; a copia local so o que a RLS entrega
+          let busy=null;
+          const remote=await this.remoteSlots(currentDate(),existing?.id||'');
+          if(revision!==availabilityRevision) return;
+          if(Array.isArray(remote)){
+            busy=new Map();
+            remote.forEach(slot=>{
+              const id=String(slot&&slot.employeeId||'');
+              if(!id) return;
+              if(!busy.has(id)) busy.set(id,[]);
+              busy.get(id).push(slot);
+            });
+          }else busy=this.occupationsOn(currentDate(),existing?.id||'');
+          busyByEmployee=busy;
           let unavailable=0;
           cards.forEach(card=>{
-            const conflict=occupied.get(String(card.dataset.employeeId));
-            card.dataset.unavailable=conflict?'true':'false';
-            if(conflict){
+            const slots=busyOf(card);
+            // folga, falta ou outro RDO sem horario ocupam o dia inteiro: some da lista
+            const wholeDay=slots.some(slot=>this.slotBlocksWholeDay(slot));
+            card.dataset.unavailable=wholeDay?'true':'false';
+            if(wholeDay){
               unavailable++;
               if(isPresentCard(card)||isAbsentCard(card)) setAttendance(card,'none');
             }
+            refreshBusy(card);
           });
           const notice=byId('rdo-team-availability');
           notice.hidden=unavailable===0;
           notice.querySelector('span').textContent=unavailable===1
-            ?'1 colaborador já está registrado em outro RDO nesta data e foi ocultado.'
-            :`${unavailable} colaboradores já estão registrados em outros RDOs nesta data e foram ocultados.`;
+            ?'1 colaborador está de folga, com falta ou em outro RDO sem horário nesta data e foi ocultado.'
+            :`${unavailable} colaboradores estão de folga, com falta ou em outros RDOs sem horário nesta data e foram ocultados.`;
           filterTeam();
           refreshTeamSummary();
         };
@@ -1187,22 +1307,26 @@ const RDO = {
           const start=card.querySelector('[data-field="start"]').value;
           const end=card.querySelector('[data-field="end"]').value;
           const breakMinutes=this.breakInput(card.querySelector('[data-field="breakMinutes"]').value);
-          const hours=this.workedHours(start,end,breakMinutes,this.standardDailyHours(),currentDate(),currentHoliday());
+          const limit=Math.max(0,this.standardDailyHours()-this.regularUsedIn(busyOf(card)));
+          const hours=this.workedHours(start,end,breakMinutes,limit,currentDate(),currentHoliday());
           card.querySelector('[data-field="regular"]').value=hours.regular;
           card.querySelector('[data-field="overtime50"]').value=hours.overtime50;
           card.querySelector('[data-field="overtime100"]').value=hours.overtime100;
           card.querySelector('[data-field="nightHours"]').value=this.nightHours(start,end,breakMinutes);
           refreshTotal(card);
+          refreshBusy(card);
         };
         cards.forEach(card=>{
           const checkbox=card.querySelector('.rdo-worker-select input');
           checkbox.onchange=()=>{
             setAttendance(card,checkbox.checked?'present':'none');
             if(checkbox.checked) applyToCard(card);
+            refreshBusy(card);
             refreshTeamSummary();
           };
           card.querySelector('.rdo-absence-toggle').onclick=()=>{
             setAttendance(card,isAbsentCard(card)?'none':'absent');
+            refreshBusy(card);
             refreshTeamSummary();
           };
           card.querySelectorAll('[data-field="start"],[data-field="end"],[data-field="breakMinutes"]').forEach(input=>input.onchange=()=>{
