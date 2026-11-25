@@ -65,7 +65,7 @@ Views.financeiro = {
           <div style="flex:1;min-width:180px"><b>${U.esc(b.file)}</b><br><small style="color:var(--text3)">Importado em ${U.date(b.date)} · ${b.items.length} lançamento(s)</small></div>
           <b>${U.money2(b.total)}</b>
           <button class="btn btn-ghost btn-sm" onclick="Views.financeiro.viewBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="eye"></i>Ver / Editar</button>
-          ${b.items.some(item=>item.externalSource==='omie')?'':`<button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="trash-2"></i>Excluir bloco</button>`}
+          ${b.items.some(item=>this.lockedReason(item))?'':`<button class="btn btn-danger btn-sm" onclick="Views.financeiro.removeBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="trash-2"></i>Excluir bloco</button>`}
         </div></div>`).join('')
       : `<div class="empty card"><i data-lucide="layers"></i><br>Nenhuma importação registrada ainda.</div>`;
     U.icons();
@@ -117,9 +117,15 @@ Views.financeiro = {
       <td>${Views.financeiro.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
       <td class="num"><b>${U.money2(x.value)}</b></td>
-      <td>${x.externalSource==='omie'?'<i data-lucide="lock" title="Gerenciado pelo Omie"></i>':`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
+      <td>${Views.financeiro.lockedReason(x)?`<i data-lucide="lock" title="${U.esc(Views.financeiro.lockedReason(x))}"></i>`:`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
       || '<tr><td colspan="8"><div class="empty">Nenhum lançamento corresponde aos filtros.</div></td></tr>';
     U.icons();
+  },
+  // v4.5.17 - lançamento que a tela não pode editar nem excluir.
+  lockedReason(x){
+    if(x&&x.archiveSummary) return 'Resumo de obra arquivada (detalhes no arquivo da obra)';
+    if(x&&x.externalSource==='omie') return 'Gerenciado pelo Omie';
+    return '';
   },
   sourceTag(x){
     const cfg = {
@@ -310,7 +316,7 @@ Views.financeiro = {
           <td>${this.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
           <td>${U.esc(x.supplier||'—')}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td>${U.esc(x.order||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
-          <td onclick="event.stopPropagation()">${x.externalSource==='omie'?'<i data-lucide="lock" title="Gerenciado pelo Omie"></i>':`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
+          <td onclick="event.stopPropagation()">${Views.financeiro.lockedReason(x)?`<i data-lucide="lock" title="${U.esc(Views.financeiro.lockedReason(x))}"></i>`:`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
         || `<tr><td colspan="9"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
       ${rows.length?`<tr><td colspan="8" style="text-align:right"><b>Total (${rows.length} lançamentos)</b></td><td class="num"><b>${U.money2(total)}</b></td></tr>`:''}</tbody>`;
     document.getElementById('fin-pager').innerHTML = pages>1 ? `
@@ -340,7 +346,7 @@ Dash.showPurchase = function(id){
       ${x.externalSource!=='omie'&&Number(x.planningOffsetAmount)>0?`<b>Planejamento abatido automaticamente:</b> <span class="tag tag-green">${U.money2(x.planningOffsetAmount)}</span>${Number(x.planningUnmatchedAmount)>0?` · <span class="tag tag-amber">sem saldo: ${U.money2(x.planningUnmatchedAmount)}</span>`:''}<br>`:''}
       ${x.externalSource==='omie'&&Number(x.planningUnmatchedAmount)>0?`<b>Sem saldo planejado correspondente:</b> <span class="tag tag-orange">${U.money2(x.planningUnmatchedAmount)}</span><br>`:''}
       <small style="color:var(--text3)">Importado de ${U.esc(x.file||'—')} em ${U.date(x.importedAt)}</small></div>`,
-    footer:`${x.externalSource==='omie'?'<span style="margin-right:auto;color:var(--text3);font-size:.8rem"><i data-lucide="lock"></i> Gerenciado pela sincronização Omie</span>':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>
+    footer:`${x.archiveSummary?'<span style="margin-right:auto;color:var(--text3);font-size:.8rem"><i data-lucide="lock"></i> Resumo de obra arquivada. Os lançamentos estão no arquivo da obra.</span>':x.externalSource==='omie'?'<span style="margin-right:auto;color:var(--text3);font-size:.8rem"><i data-lucide="lock"></i> Gerenciado pela sincronização Omie</span>':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>
             <button class="btn btn-ghost" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i>Editar</button>`}
             <button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
 };

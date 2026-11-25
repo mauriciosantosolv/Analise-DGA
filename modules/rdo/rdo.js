@@ -1745,75 +1745,92 @@ const RDO = {
   },
 
   printBusy:false,
-  async print(id){
-    const rdo=State.rdos.find(item=>String(item.id)===String(id));
-    if(!rdo) return UI.toast('RDO não encontrado.','warn');
-    // v4.2.8 - o preparo do PDF faz duas idas ao servidor. Sem esta trava, um
-    // segundo clique montava um relatório novo e removia o do primeiro clique
-    // antes de ele chegar ao window.print().
-    if(this.printBusy) return UI.toast('O PDF anterior ainda está sendo preparado.','warn',4000);
-    this.printBusy=true;
-    try{
-      UI.loading(true,'Preparando PDF do diário…');
-      const attachments=await this.attachmentsFor(rdo.id,{refresh:true});
-      const images=[];
-      for(const attachment of attachments.filter(item=>this.isImage(item))){
-        try{ images.push({...attachment,url:await this.attachmentUrl(attachment)}); }catch(err){}
-      }
-      const old=document.getElementById('rdo-print-report');
-      if(old) old.remove();
-      const report=document.createElement('section');
-      report.id='rdo-print-report';
-      const header=await this.documentHeader(rdo);
-      const companyName=header.company.name||State.settings.companyName||'CliqueObras';
-      const logo=U.safeImageSrc(header.company.logo||State.settings.companyLogo)||'assets/logo-clique.png';
-      const companyCnpj=U.formatCnpj(header.company.cnpj||State.settings.companyCnpj||'');
-      const letterhead=U.safeImageSrc(header.company.letterhead||State.settings.pdfLetterhead||'');
-      const stateCustomer=this.projectClient(rdo.projectId);
-      const customer={
-        name:header.client.name||stateCustomer.name,
-        cnpj:U.formatCnpj(header.client.cnpj||(stateCustomer.client&&stateCustomer.client.cnpj)||''),
-        logo:U.safeImageSrc(header.client.logo||'')||stateCustomer.logo
-      };
-      const projectTitle=header.projectLabel||this.projectLabel(rdo.projectId);
-      const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
-      const snapshotFor=employeeId=>(financial?.rows||[]).find(row=>String(row.employeeId)===String(employeeId))||null;
-      const visibleEntries=this.visibleEntries(rdo);
-      const total=visibleEntries.reduce(
-        (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
-      );
-      const status={
-        Enviado:'Aguardando aprovação',
-        Devolvido:'Reprovado'
-      }[rdo.status]||rdo.status;
-      // v4.2.4 — serviço vendido ao cliente: tipo de contrato, proposta e as
-      // funções comerciais efetivamente apontadas neste diário.
-      // v4.2.7 - a função vendida ao cliente é informação comercial. Quem não tem
-      // permissão de leitura em labor_rates (perfil Apontador de RDO) passa a
-      // imprimir a função interna do colaborador, e o campo "Serviço contratado"
-      // deixa de listar as funções vendidas. Para owner/admin nada muda.
-      const canSeeCommercialRole=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
-      const internalRoleFor=row=>String(
-        row.internalRole
-        ||(this.crewMembers().find(item=>String(item.id)===String(row.employeeId))||{}).internalRole
-        ||''
-      );
-      const roleFor=row=>canSeeCommercialRole?this.displayRoleFor(
-        rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
-      ):internalRoleFor(row);
-      const soldRoles=canSeeCommercialRole?[...new Set(visibleEntries.map(roleFor).filter(Boolean))]:[];
-      // v4.2.6 — "Serviço contratado" descreve a venda por hora-homem: tipo do
-      // contrato, proposta e funções apontadas. Em projeto de Obra ou de
-      // Fornecimento a venda é por escopo, não por função apontada, então a linha
-      // deixa de ser impressa. O tipo vem do cabeçalho servido pela RPC, para
-      // continuar funcionando em perfis que não enxergam o cadastro de projetos.
-      const isHhContract=String(header.project.type||this.projectFor(rdo.projectId)?.type||'').toUpperCase()==='HH';
-      const contractLabel=isHhContract?[
-        header.project.type||'',
-        header.project.proposal?`Proposta ${header.project.proposal}`:'',
-        soldRoles.join(' · ')
-      ].filter(Boolean).join(' — '):'';
-      report.innerHTML=`${letterhead?`<div class="pdf-letterhead" aria-hidden="true"><img src="${U.esc(letterhead)}" alt=""></div>`:''}<header>
+
+  // v4.5.17 - dados do documento do RDO num só lugar. Usado pelo PDF impresso
+  // (computador) e pelo PDF em arquivo (celular e arquivo da obra). Para o
+  // arquivamento, recebe o snapshot financeiro e os anexos já lidos do banco.
+  async documentData(rdo,{financial=null,attachments=null,imageUrl=null}={}){
+    const list=Array.isArray(attachments)?attachments:await this.attachmentsFor(rdo.id,{refresh:true});
+    const images=[];
+    for(const attachment of list.filter(item=>this.isImage(item))){
+      try{ images.push({...attachment,url:await (imageUrl?imageUrl(attachment):this.attachmentUrl(attachment))}); }catch(err){}
+    }
+    const header=await this.documentHeader(rdo);
+    const companyName=header.company.name||State.settings.companyName||'CliqueObras';
+    const logo=U.safeImageSrc(header.company.logo||State.settings.companyLogo)||'assets/logo-clique.png';
+    const companyCnpj=U.formatCnpj(header.company.cnpj||State.settings.companyCnpj||'');
+    const letterhead=U.safeImageSrc(header.company.letterhead||State.settings.pdfLetterhead||'');
+    const stateCustomer=this.projectClient(rdo.projectId);
+    const customer={
+      name:header.client.name||stateCustomer.name,
+      cnpj:U.formatCnpj(header.client.cnpj||(stateCustomer.client&&stateCustomer.client.cnpj)||''),
+      logo:U.safeImageSrc(header.client.logo||'')||stateCustomer.logo
+    };
+    const projectTitle=header.projectLabel||this.projectLabel(rdo.projectId);
+    const snapshot=financial||State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
+    const snapshotFor=employeeId=>(snapshot?.rows||[]).find(row=>String(row.employeeId)===String(employeeId))||null;
+    const visibleEntries=this.visibleEntries(rdo);
+    const total=visibleEntries.reduce(
+      (sum,row)=>sum+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0
+    );
+    const status={
+      Enviado:'Aguardando aprovação',
+      Devolvido:'Reprovado'
+    }[rdo.status]||rdo.status;
+    // v4.2.4 — serviço vendido ao cliente: tipo de contrato, proposta e as
+    // funções comerciais efetivamente apontadas neste diário.
+    // v4.2.7 - a função vendida ao cliente é informação comercial. Quem não tem
+    // permissão de leitura em labor_rates (perfil Apontador de RDO) passa a
+    // imprimir a função interna do colaborador, e o campo "Serviço contratado"
+    // deixa de listar as funções vendidas. Para owner/admin nada muda.
+    const canSeeCommercialRole=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
+    const internalRoleFor=row=>String(
+      row.internalRole
+      ||(this.crewMembers().find(item=>String(item.id)===String(row.employeeId))||{}).internalRole
+      ||''
+    );
+    const roleFor=row=>canSeeCommercialRole?this.displayRoleFor(
+      rdo.projectId,row,snapshotFor(row.employeeId)||header.roles[String(row.employeeId)]||null
+    ):internalRoleFor(row);
+    const soldRoles=canSeeCommercialRole?[...new Set(visibleEntries.map(roleFor).filter(Boolean))]:[];
+    // v4.2.6 — "Serviço contratado" descreve a venda por hora-homem: tipo do
+    // contrato, proposta e funções apontadas. Em projeto de Obra ou de
+    // Fornecimento a venda é por escopo, não por função apontada, então a linha
+    // deixa de ser impressa. O tipo vem do cabeçalho servido pela RPC, para
+    // continuar funcionando em perfis que não enxergam o cadastro de projetos.
+    const isHhContract=String(header.project.type||this.projectFor(rdo.projectId)?.type||'').toUpperCase()==='HH';
+    const contractLabel=isHhContract?[
+      header.project.type||'',
+      header.project.proposal?`Proposta ${header.project.proposal}`:'',
+      soldRoles.join(' · ')
+    ].filter(Boolean).join(' — '):'';
+    const nightPct=row=>Number(row.nightPremiumPct??rdo.nightPremiumPct??this.nightPremiumPct());
+    const rows=visibleEntries.map(row=>({
+      registration:row.employeeRegistration||'—',
+      name:row.employeeName||'Colaborador',
+      role:roleFor(row)||'—',
+      start:row.start||'—',
+      breakLabel:U.durationMinutes(row.breakMinutes),
+      end:row.end||'—',
+      regular:`${Number(row.regular)||0}h`,
+      overtime50:`${Number(row.overtime50)||0}h`,
+      overtime100:`${Number(row.overtime100)||0}h`,
+      night:`${Number(row.nightHours)||0}h · ${nightPct(row)}%`
+    }));
+    return {
+      rdo,attachments:list,images,header,companyName,logo,companyCnpj,letterhead,customer,projectTitle,
+      visibleEntries,total,status,canSeeCommercialRole,roleFor,contractLabel,rows,
+      number:this.documentNumber(rdo),
+      dayType:this.dayTypeLabel(rdo.date,rdo.isHoliday),
+      files:list.filter(item=>!this.isImage(item)),
+      generatedAt:new Date()
+    };
+  },
+
+  printHtml(data){
+    const {rdo,images,companyName,logo,companyCnpj,letterhead,customer,projectTitle,visibleEntries,total,status,canSeeCommercialRole,roleFor,contractLabel}=data;
+    const attachments=data.attachments;
+    return `${letterhead?`<div class="pdf-letterhead" aria-hidden="true"><img src="${U.esc(letterhead)}" alt=""></div>`:''}<header>
         <div class="rdo-print-identities">
           <div class="rdo-print-brand"><img src="${U.esc(logo)}" alt=""><span><b>${U.esc(companyName)}</b><small>Relatório Diário de Obra${companyCnpj?` · CNPJ ${U.esc(companyCnpj)}`:''}</small></span></div>
           <div class="rdo-print-client">
@@ -1842,6 +1859,27 @@ const RDO = {
         ${attachments.some(item=>!this.isImage(item))?`<div class="rdo-print-files"><b>Documentos anexados:</b> ${attachments.filter(item=>!this.isImage(item)).map(item=>U.esc(item.description||item.fileName)).join(' · ')}</div>`:''}
       </section>
       <footer>Gerado pelo CliqueObras em ${new Date().toLocaleString('pt-BR')}.</footer>`;
+  },
+
+  async print(id){
+    const rdo=State.rdos.find(item=>String(item.id)===String(id));
+    if(!rdo) return UI.toast('RDO não encontrado.','warn');
+    // v4.5.17 - no celular (e no app instalado na tela inicial) a janela de
+    // impressão não abre. Lá o PDF vira arquivo, gerado no próprio aparelho.
+    if(typeof Pdf!=='undefined'&&Pdf.preferFile()) return this.downloadPdf(id);
+    // v4.2.8 - o preparo do PDF faz duas idas ao servidor. Sem esta trava, um
+    // segundo clique montava um relatório novo e removia o do primeiro clique
+    // antes de ele chegar ao window.print().
+    if(this.printBusy) return UI.toast('O PDF anterior ainda está sendo preparado.','warn',4000);
+    this.printBusy=true;
+    try{
+      UI.loading(true,'Preparando PDF do diário…');
+      const data=await this.documentData(rdo);
+      const old=document.getElementById('rdo-print-report');
+      if(old) old.remove();
+      const report=document.createElement('section');
+      report.id='rdo-print-report';
+      report.innerHTML=this.printHtml(data);
       document.body.appendChild(report);
       UI.loading(false);
       UI.toast('Na janela de impressão, selecione “Salvar como PDF”.','info',6000);
@@ -1854,6 +1892,224 @@ const RDO = {
       else document.body.classList.remove('printing-rdo');
       UI.toast('Não foi possível gerar o PDF: '+U.esc(err.message||err),'error',7000);
     }
+  },
+
+  pdfFileName(rdo){
+    const number=this.documentNumber(rdo);
+    const label=rdo&&rdo.number&&rdo.number!==number?`${rdo.number} (${number})`:number;
+    return `${Pdf.fileName(label,'RDO')}.pdf`;
+  },
+
+  // v4.5.17 - PDF do RDO como arquivo (celular, tablet e arquivo da obra).
+  async downloadPdf(id){
+    const rdo=State.rdos.find(item=>String(item.id)===String(id));
+    if(!rdo) return UI.toast('RDO não encontrado.','warn');
+    if(this.printBusy) return UI.toast('O PDF anterior ainda está sendo preparado.','warn',4000);
+    this.printBusy=true;
+    try{
+      UI.loading(true,'Gerando PDF do diário…');
+      const data=await this.documentData(rdo);
+      const blob=await this.pdfBlob(data);
+      UI.loading(false);
+      Pdf.deliver(blob,this.pdfFileName(rdo),{title:`PDF do ${rdo.number||this.documentNumber(rdo)}`});
+    }catch(err){
+      UI.loading(false);
+      UI.toast('Não foi possível gerar o PDF: '+U.esc(err.message||err),'error',7000);
+    }finally{
+      this.printBusy=false;
+    }
+  },
+
+  // Mesmo layout do PDF impresso (A4 retrato, margem 12 mm), desenhado com jsPDF.
+  async pdfBlob(data){
+    const doc=await Pdf.create('portrait');
+    const T=value=>Pdf.text(value);
+    const page={w:210,h:297,m:12};
+    const left=page.m, right=page.w-page.m, width=right-left, bottom=page.h-page.m-6;
+    const ink=[11,31,58], muted=[102,112,133], line=[223,228,234], soft=[245,247,250], body=[52,64,84];
+    const letterhead=data.letterhead?await Pdf.imageData(data.letterhead,{maxSide:1800,quality:.85}):null;
+    const logo=await Pdf.imageData(data.logo,{maxSide:300,quality:.9});
+    const clientLogo=data.customer.logo?await Pdf.imageData(data.customer.logo,{maxSide:300,quality:.9}):null;
+    const painted=new Set();
+    const paintPage=()=>{
+      const number=doc.getCurrentPageInfo().pageNumber;
+      if(painted.has(number)) return;
+      painted.add(number);
+      if(letterhead) Pdf.drawContain(doc,letterhead,0,0,page.w,page.h,'top');
+    };
+    paintPage();
+    let y=page.m;
+    const newPage=()=>{ doc.addPage(); paintPage(); y=page.m; };
+    const ensure=height=>{ if(y+height>bottom) newPage(); };
+    const font=(size,style='normal',color=ink)=>{ doc.setFont('helvetica',style); doc.setFontSize(size); doc.setTextColor(...color); };
+    const lines=(text,maxWidth)=>doc.splitTextToSize(T(text),maxWidth);
+    const lineHeight=size=>size*0.3528*1.35;
+
+    // Cabeçalho
+    const headerTop=y;
+    let x=left;
+    if(logo){ Pdf.drawContain(doc,logo,x,y,11,11); }
+    x+=13.5;
+    font(12.5,'bold');
+    const companyLines=lines(data.companyName,58).slice(0,2);
+    doc.text(companyLines,x,y+4.2);
+    font(6.5,'normal',muted);
+    const subtitle=`RELATÓRIO DIÁRIO DE OBRA${data.companyCnpj?` · CNPJ ${data.companyCnpj}`:''}`;
+    doc.text(lines(subtitle,60).slice(0,2),x,y+4.2+companyLines.length*lineHeight(12.5)+.4);
+    const clientX=left+80;
+    doc.setDrawColor(...line); doc.setLineWidth(.25); doc.line(clientX-4,y,clientX-4,y+12);
+    if(clientLogo){ Pdf.drawContain(doc,clientLogo,clientX,y+.5,10,10); }
+    else{
+      doc.setFillColor(...soft); doc.roundedRect(clientX,y+.5,10,10,2,2,'F');
+      font(7,'bold'); doc.text(T(U.initials(data.customer.name||'')),clientX+5,y+6.8,{align:'center'});
+    }
+    font(5.8,'normal',muted); doc.text('CLIENTE',clientX+12.5,y+3);
+    font(8,'bold');
+    const clientLines=lines(data.customer.name||'—',45).slice(0,2);
+    doc.text(clientLines,clientX+12.5,y+6.4);
+    if(data.customer.cnpj){ font(5.8,'normal',muted); doc.text(T(`CNPJ ${data.customer.cnpj}`),clientX+12.5,y+6.4+clientLines.length*lineHeight(8)); }
+    font(6.5,'normal',muted); doc.text('RDO',right,y+2.6,{align:'right'});
+    font(11,'bold'); doc.text(T(data.number),right,y+7.2,{align:'right'});
+    const statusText=T(data.status||'Rascunho');
+    font(6,'bold',[154,91,0]);
+    const pillW=doc.getTextWidth(statusText)+5;
+    doc.setFillColor(255,243,214); doc.roundedRect(right-pillW,y+9,pillW,4.4,2.2,2.2,'F');
+    doc.text(statusText,right-pillW/2,y+12,{align:'center'});
+    y=Math.max(headerTop+15.5,y+15.5);
+    doc.setDrawColor(...ink); doc.setLineWidth(.6); doc.line(left,y,right,y);
+    y+=4;
+
+    // Quadro de fatos
+    const gap=2.2;
+    const unit=(width-gap*3)/6;
+    const facts=[
+      {label:'Projeto',value:data.projectTitle||'—',span:2},
+      {label:'Data',value:`${U.date(data.rdo.date)} · ${data.dayType}`,span:1},
+      {label:'Local',value:data.rdo.location||'Não informado',span:2},
+      {label:'Total apontado',value:`${data.total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h`,span:1}
+    ];
+    const boxes=facts.map(fact=>{
+      const w=unit*fact.span+gap*(fact.span-1);
+      font(7.5,'bold');
+      return {...fact,w,valueLines:lines(fact.value,w-5)};
+    });
+    const factH=Math.max(...boxes.map(box=>7.2+box.valueLines.length*lineHeight(7.5)));
+    ensure(factH+2);
+    x=left;
+    for(const box of boxes){
+      doc.setDrawColor(...line); doc.setLineWidth(.25); doc.roundedRect(x,y,box.w,factH,2,2,'S');
+      font(6,'normal',muted); doc.text(T(box.label),x+2.5,y+4);
+      font(7.5,'bold'); doc.text(box.valueLines,x+2.5,y+7.8);
+      x+=box.w+gap;
+    }
+    y+=factH+gap;
+    if(data.contractLabel){
+      font(7.5,'bold');
+      const contractLines=lines(data.contractLabel,width-5);
+      const h=7.2+contractLines.length*lineHeight(7.5);
+      ensure(h+2);
+      doc.setDrawColor(...line); doc.roundedRect(left,y,width,h,2,2,'S');
+      font(6,'normal',muted); doc.text('Serviço contratado',left+2.5,y+4);
+      font(7.5,'bold'); doc.text(contractLines,left+2.5,y+7.8);
+      y+=h+gap;
+    }
+    y+=2;
+
+    const heading=title=>{ ensure(12); font(10,'bold'); doc.text(T(title),left,y+3.6); y+=7; };
+    const paragraph=(text,{color=body,size=7.5}={})=>{
+      font(size,'normal',color);
+      const all=lines(text||'—',width);
+      const lh=lineHeight(size);
+      for(const textLine of all){
+        ensure(lh);
+        doc.text(textLine,left,y+lh*.8);
+        y+=lh;
+      }
+      y+=3;
+    };
+
+    heading('Serviço realizado');
+    paragraph(data.rdo.description||'—');
+
+    heading('Equipe e horas');
+    const headers=['Matrícula','Colaborador',data.canSeeCommercialRole?'Função vendida':'Função','Entrada','Intervalo','Saída','Normal','HE 50%','HE 100%','Adic. noturno'];
+    const percents=[8,19,17,8,9,8,7,7,8,9];
+    const columnStyles={};
+    percents.forEach((pct,index)=>{ columnStyles[index]={cellWidth:width*pct/100}; });
+    const tableBody=data.rows.length?data.rows.map(row=>[row.registration,row.name,row.role,row.start,row.breakLabel,row.end,row.regular,row.overtime50,row.overtime100,row.night].map(T))
+      :[[{content:'Nenhum colaborador presente neste diário.',colSpan:10}]];
+    Pdf.table(doc,{
+      startY:y,
+      margin:{left,right:page.m,top:page.m,bottom:page.m+6},
+      head:[headers.map(item=>T(item.toUpperCase()))],
+      body:tableBody,
+      theme:'grid',
+      tableWidth:width,
+      columnStyles,
+      styles:{font:'helvetica',fontSize:6.6,cellPadding:1.5,textColor:ink,lineColor:line,lineWidth:.2,overflow:'linebreak',valign:'middle'},
+      headStyles:{fillColor:soft,textColor:[71,84,103],fontSize:5.6,fontStyle:'bold'},
+      willDrawPage:()=>paintPage()
+    });
+    y=(doc.lastAutoTable&&doc.lastAutoTable.finalY?doc.lastAutoTable.finalY:y)+5;
+
+    if(data.rdo.notes){ heading('Ocorrências e observações'); paragraph(data.rdo.notes); }
+    if(data.rdo.status==='Devolvido'&&data.rdo.rejectionComment){
+      font(7.5,'normal',body);
+      const rejection=lines(data.rdo.rejectionComment,width-6);
+      const h=10+rejection.length*lineHeight(7.5);
+      ensure(h);
+      doc.setFillColor(255,244,242); doc.rect(left,y,width,h,'F');
+      doc.setFillColor(180,35,24); doc.rect(left,y,.9,h,'F');
+      font(10,'bold'); doc.text('Comentário da reprovação',left+3,y+5);
+      font(7.5,'normal',body); doc.text(rejection,left+3,y+9.5);
+      y+=h+4;
+    }
+
+    heading('Evidências fotográficas');
+    if(!data.images.length){
+      paragraph('Nenhuma foto anexada.');
+    }else{
+      const photoGap=2.4, photoW=(width-photoGap)/2, photoH=55.5, captionH=5;
+      let column=0;
+      for(let index=0;index<data.images.length;index++){
+        const image=data.images[index];
+        if(column===0) ensure(photoH+captionH);
+        const px=left+column*(photoW+photoGap);
+        const picture=await Pdf.imageData(image.url,{maxSide:1100,quality:.78,cover:{width:photoW,height:photoH}});
+        if(picture) doc.addImage(picture.data,'JPEG',px,y,photoW,photoH,undefined,'FAST');
+        else{ doc.setFillColor(...soft); doc.rect(px,y,photoW,photoH,'F'); }
+        doc.setDrawColor(...line); doc.setLineWidth(.25); doc.rect(px,y,photoW,photoH,'S');
+        font(5.8,'normal',muted);
+        const caption=`Foto ${String(index+1).padStart(2,'0')} · ${image.description||image.fileName||''}`;
+        doc.text(lines(caption,photoW).slice(0,1),px,y+photoH+3.2);
+        column=column===0?1:0;
+        if(column===0) y+=photoH+captionH+1;
+      }
+      if(column===1) y+=photoH+captionH+1;
+      y+=1;
+    }
+    if(data.files.length){
+      font(6.8,'normal',[71,84,103]);
+      const fileLines=lines(`Documentos anexados: ${data.files.map(item=>item.description||item.fileName).join(' · ')}`,width-5);
+      const h=4+fileLines.length*lineHeight(6.8);
+      ensure(h);
+      doc.setFillColor(...soft); doc.roundedRect(left,y,width,h,1.8,1.8,'F');
+      doc.text(fileLines,left+2.5,y+3.6);
+      y+=h+3;
+    }
+
+    // Rodapé em todas as páginas
+    const pages=doc.getNumberOfPages();
+    const stamp=`Gerado pelo CliqueObras em ${data.generatedAt.toLocaleString('pt-BR')}.`;
+    for(let number=1;number<=pages;number++){
+      doc.setPage(number);
+      doc.setDrawColor(...line); doc.setLineWidth(.2); doc.line(left,page.h-page.m-3.5,right,page.h-page.m-3.5);
+      font(5.8,'normal',muted);
+      doc.text(T(stamp),page.w/2,page.h-page.m,{align:'center'});
+      doc.text(`${data.number} · Página ${number} de ${pages}`,right,page.h-page.m,{align:'right'});
+    }
+    doc.setProperties({title:T(`${data.number} - ${data.projectTitle||''}`),subject:'Relatório Diário de Obra'});
+    return doc.output('blob');
   },
 
   detail(id){

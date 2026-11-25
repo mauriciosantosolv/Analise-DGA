@@ -46,7 +46,7 @@ Views.projetos = {
           <td>${U.esc(p.name||'—')}</td>
           <td><div style="display:flex;align-items:center;gap:8px">${clientAvatar(p.client)}${U.esc(p.client||'—')}</div></td>
           <td><span class="tag tag-gray">${U.esc(p.type||'—')}</span></td>
-          <td>${statusTag(p.status)}</td>
+          <td>${statusTag(p.status)}${ProjectArchive.badge(p)}</td>
           <td class="num">${U.money(p.saleValue)}</td>
           <td class="num">${U.money(s.budgetTotal)}</td>
           <td class="num">${U.money(s.spent)}</td>
@@ -59,30 +59,32 @@ Views.projetos = {
   form(id){
     const p = id ? State.projects.find(x=>x.id===id) : {proposal:'',name:'',client:'',saleValue:0,type:'Obra',status:'A executar',start:'',deadline:'',expectedEnd:'',realEnd:'',notes:'',clientLogo:''};
     const measurement=id ? Biz.measurementCompletion(p) : {measured:0,target:0,remaining:0,pct:0,complete:false};
+    const archived = ProjectArchive.isArchived(p);
     const clientOpts = State.clients.map(c=>`<option ${c.name===p.client?'selected':''}>${U.esc(c.name)}</option>`).join('');
     UI.modal({ title: id?'Editar Projeto':'Novo Projeto', wide:true, body:`
       <div class="form-grid">
         <div><label>Número da Proposta *</label><input id="f-proposal" value="${U.esc(p.proposal)}"></div>
         <div><label>Nome</label><input id="f-name" value="${U.esc(p.name)}"></div>
         <div><label>Cliente</label><input id="f-client" list="client-list" value="${U.esc(p.client)}"><datalist id="client-list">${clientOpts}</datalist></div>
-        <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${U.esc(p.saleValue||'')}"></div>
-        <div><label>Tipo de contrato</label><select id="f-type">${[
+        <div><label>Valor de Venda</label><input id="f-sale" type="number" step="0.01" value="${U.esc(p.saleValue||'')}" ${archived?'disabled':''}></div>
+        <div><label>Tipo de contrato</label><select id="f-type" ${archived?'disabled':''}>${[
           ['HH','HH — venda por RDO'],
           ['Obra','Obra'],
           ['Fornecimento','Fornecimento de material'],
           ['Painel','Painel']
         ].map(([value,label])=>`<option value="${value}" ${value===p.type?'selected':''}>${label}</option>`).join('')}</select>
           <small>Somente projetos HH geram medição de venda a partir dos diários.</small></div>
-        <div><label>Status</label><select id="f-status">${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
+        <div><label>Status</label><select id="f-status" ${archived?'disabled':''}>${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
         <div><label>Data de Início</label><input id="f-start" type="date" value="${U.esc(p.start)}"></div>
         <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${U.esc(p.deadline)}"></div>
         <div><label>Término Previsto</label><input id="f-expected" type="date" value="${U.esc(p.expectedEnd)}"></div>
         <div><label>Encerramento Real</label><input id="f-real" type="date" value="${U.esc(p.realEnd)}"></div>
         <div class="full"><label>Observações</label><textarea id="f-notes" rows="2">${U.esc(p.notes)}</textarea></div>
+        ${archived?`<div class="full import-log" style="margin-top:0"><i data-lucide="archive"></i> <b>Obra arquivada.</b> Status, tipo de contrato e valor de venda ficam travados; nome, datas e observações podem ser ajustados.</div>`:''}
         ${id?`<div class="full import-log" style="margin-top:0"><b>Medição do contrato:</b> ${U.money(measurement.measured)} de ${U.money(measurement.target)} (${U.pct(measurement.pct)}).
           ${measurement.complete?'<span class="tag tag-green">Projeto liberado para conclusão</span>':`<span class="tag tag-amber">Falta medir ${U.money(measurement.remaining)}</span>`}</div>`:''}
       </div>`,
-      footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.projetos.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+      footer:`${id&&!archived?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.projetos.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="f-save"><i data-lucide="check"></i>Salvar</button>`
     });
@@ -143,6 +145,7 @@ Views.projetos = {
           ? `Economia prevista de ${U.pct(-s.deviation)}`
           : 'Sem desvio previsto';
     UI.modal({ title:`${U.esc(U.projLabel(p))}`, wide:true, body:`
+      ${ProjectArchive.detailCard(p)}
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
         ${ring}
         <div class="kpi-grid" style="flex:1;margin:0">
@@ -187,6 +190,7 @@ Views.projetos = {
       footer:`${canJustify?`<button class="btn btn-primary" onclick="Views.projetos.saveDeviationJustification(${U.jsArg(p.id)})"><i data-lucide="check-circle"></i>Salvar justificativa</button>`:''}
               <button class="btn btn-ghost" onclick="Dash.simulator(${U.jsArg(p.id)})"><i data-lucide="sliders-horizontal"></i>Simulador</button>
               <button class="btn btn-ghost" onclick="Exports.projectPDF(${U.jsArg(p.id)})"><i data-lucide="printer"></i>Imprimir Dashboard em PDF</button>
+              ${ProjectArchive.canArchive(p)?`<button class="btn btn-ghost" onclick="ProjectArchive.open(${U.jsArg(p.id)})"><i data-lucide="archive"></i>Arquivar obra</button>`:''}
               <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`
     });
   },

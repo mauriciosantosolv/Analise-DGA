@@ -885,6 +885,44 @@ const Cloud = (() => {
     });
   }
 
+  // v4.5.17 - arquivamento de obra concluida (somente proprietario/admin).
+  async function archiveProjectSnapshot(projectId){
+    await ensureFresh();
+    if(!organization() || !fullAccess())
+      throw new Error('Somente proprietário ou administrador pode arquivar obras.');
+    return request('/rest/v1/rpc/clique_obras_archive_project_snapshot',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({target_organization_id:organization().id,target_project_id:String(projectId)})
+    });
+  }
+  async function archiveProject(projectId,fingerprint,file){
+    await ensureFresh();
+    if(!organization() || !fullAccess())
+      throw new Error('Somente proprietário ou administrador pode arquivar obras.');
+    return request('/functions/v1/arquivar-obra',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        mode:'archive',
+        organizationId:organization().id,
+        projectId:String(projectId),
+        fingerprint:String(fingerprint||''),
+        file:{name:String(file&&file.name||'').slice(0,200),sha256:String(file&&file.sha256||''),bytes:Number(file&&file.bytes)||0}
+      })
+    });
+  }
+  async function archiveProjectPhotos(projectId){
+    await ensureFresh();
+    if(!organization() || !fullAccess())
+      throw new Error('Somente proprietário ou administrador pode arquivar obras.');
+    return request('/functions/v1/arquivar-obra',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({mode:'photos',organizationId:organization().id,projectId:String(projectId)})
+    });
+  }
+
   async function omieRequest(action,payload={}){
     await ensureFresh();
     if(!organization() || !isOwner())
@@ -1240,14 +1278,14 @@ const Cloud = (() => {
     return true;
   }
 
-  async function downloadRdoAttachment(objectPath){
+  async function downloadRdoAttachment(objectPath,{cache=true}={}){
     const path=String(objectPath||'');
     const cached=await cachedAttachment(path);
     if(cached) return cached;
     const bucket=await authenticatedStorage();
     const result=await bucket.download(path);
     if(result.error) throw result.error;
-    await cacheAttachment(path,result.data);
+    if(cache) await cacheAttachment(path,result.data);
     return result.data;
   }
 
@@ -1373,6 +1411,7 @@ const Cloud = (() => {
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
     measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
+    archiveProjectSnapshot, archiveProject, archiveProjectPhotos,
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,
     occupiedRdoSlots,
