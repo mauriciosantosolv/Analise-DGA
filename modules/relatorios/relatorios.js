@@ -80,7 +80,7 @@ Views.relatorios = {
     const projects=State.projects.slice().sort((a,b)=>U.projLabel(a).localeCompare(U.projLabel(b),'pt-BR'));
     const today=U.isoDate(new Date());
     UI.modal({title:'Histórico de Alocações',body:`
-      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, ociosos, folgas e férias. A ociosidade é apurada de segunda a sexta; sábados e domingos trazem apenas o que foi lançado no RDO. O período é obrigatório.</p>
+      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, atestados, ociosos, folgas e férias. A ociosidade é apurada de segunda a sexta; sábados e domingos trazem apenas o que foi lançado no RDO. O período é obrigatório.</p>
       <div class="form-grid">
         <div class="full"><label>Projeto</label><select id="allocation-project"><option value="">Todos os projetos</option>${projects.map(project=>`<option value="${U.esc(project.id)}">${U.esc(U.projLabel(project))}</option>`).join('')}</select></div>
         <div><label>Data inicial *</label><input id="allocation-date-from" type="date" value="${U.esc(today)}"></div>
@@ -139,6 +139,8 @@ Views.relatorios = {
           overtime100:Number(entry.overtime100)||0,nightHours:Number(entry.nightHours)||0,
           holiday:rdo.isHoliday===true,status:rdo.status||'Rascunho',rdoNumber:rdo.number||rdo.id||''
         });
+        // v4.5.20 - falta lancada no RDO num dia coberto por atestado sai como "Atestado"
+        if(absent&&typeof CrewHR!=='undefined'&&CrewHR.leaveOn(employee,rdo.date)) rows[rows.length-1].situation='Atestado';
         occupied.add(key(rdo.date,employeeId));
       });
     });
@@ -160,6 +162,25 @@ Views.relatorios = {
           occupied.add(key(date,employeeId));
         });
       });
+      // v4.5.20 - atestados (crew.medicalLeaves): dias uteis cobertos entram
+      // como "Atestado", sem custo de ociosidade. Ferias tem prioridade.
+      if(typeof CrewHR!=='undefined'){
+        this.allocationHistoryDates(filters).forEach(date=>{
+          if(this.allocationHistoryWeekend(date)) return;
+          crewList.forEach(employee=>{
+            if(!CrewHR.leaveOn(employee,date)) return;
+            const employeeId=String(employee.id||'');
+            if(!employeeId||occupied.has(key(date,employeeId))) return;
+            if(typeof RDO!=='undefined'&&typeof RDO.crewActiveOn==='function'&&!RDO.crewActiveOn(employee,date)) return;
+            rows.push({
+              employeeId,projectId:'',projectLabel:'',date,employeeName:employee.name||'Colaborador',registration:employee.registration||'',
+              role:employee.internalRole||'',situation:'Atestado',start:'',end:'',breakMinutes:0,
+              regular:0,overtime50:0,overtime100:0,nightHours:0,holiday:false,status:'',rdoNumber:''
+            });
+            occupied.add(key(date,employeeId));
+          });
+        });
+      }
       (Array.isArray(State.workforceStatus)?State.workforceStatus:[]).filter(item=>item&&item.status==='day_off').forEach(item=>{
         const date=String(item.date||'').slice(0,10),employeeId=String(item.employeeId||'');
         if(!employeeId||occupied.has(key(date,employeeId))) return;
@@ -216,7 +237,7 @@ Views.relatorios = {
     if(!source.length) return UI.toast('Nenhuma alocação encontrada para os filtros informados.','warn',5500);
     const rows=source.map(row=>({
       Projeto:row.projectLabel,Dia:U.date(row.date),Colaborador:row.employeeName,'Matrícula':row.registration,
-      'Função':row.role,'Situação':row.situation,Entrada:['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':row.start,'Saída':['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':row.end,'Intervalo':['Falta','Folga','Ocioso','Férias'].includes(row.situation)?'':U.durationMinutes(row.breakMinutes),
+      'Função':row.role,'Situação':row.situation,Entrada:['Falta','Folga','Ocioso','Férias','Atestado'].includes(row.situation)?'':row.start,'Saída':['Falta','Folga','Ocioso','Férias','Atestado'].includes(row.situation)?'':row.end,'Intervalo':['Falta','Folga','Ocioso','Férias','Atestado'].includes(row.situation)?'':U.durationMinutes(row.breakMinutes),
       'Horas normais':row.regular,'HE 50%':row.overtime50,'HE 100%':row.overtime100,
       'Adicional noturno (h)':row.nightHours,Feriado:row.holiday?'Sim':'Não','Status do RDO':row.status,'Número do RDO':row.rdoNumber
     }));

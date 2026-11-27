@@ -109,13 +109,56 @@
 @keyframes slideOut{to{opacity:0;transform:translateX(20px)}}
 
 
-/* ===== Menu lateral recolhível =====
-   Desativado no desktop por estabilidade — o botão só atua no celular.
-   As regras abaixo permanecem inertes (nenhum código aplica a classe). */
-#app.nav-collapsed{grid-template-columns:0 1fr}
-#app.nav-collapsed #sidebar{display:none}
-/* Esconde o botão de menu no desktop (sem função lá) */
-@media(min-width:861px){#menu-toggle{display:none}}
+/* ===== Menus laterais recolhíveis =====
+   v4.5.19/v4.5.20 - no computador o menu esquerdo recolhe para uma faixa só
+   com os ícones (64px) e o painel direito para uma faixa de 52px. A troca é
+   instantânea (sem animar a coluna do grid): uma única mudança de largura, e
+   não uma a cada quadro, para os gráficos (Chart.js) se ajustarem uma vez só.
+   Era o sumiço animado, somado ao loop de redimensionamento do canvas, que
+   travava a aba antes. As regras de estabilidade logo abaixo continuam.
+   O botão é a aba com a seta presa na borda do menu (modelo de 27/11/2026).
+   No celular (<=860px) nada muda: o ☰ abre/fecha o menu por cima. */
+.brand-row{position:relative;flex-shrink:0}
+.brand-row>.brand{width:100%}
+.edge-toggle{display:none;align-items:center;justify-content:center;padding:0;border:0;background:var(--color-active-bg);color:var(--text2);cursor:pointer;transition:background .12s ease-out,color .12s ease-out}
+.edge-toggle:hover{background:var(--border);color:var(--text)}
+.edge-toggle:focus-visible{outline:2px solid var(--text);outline-offset:-2px}
+.edge-toggle svg{width:22px;height:22px;stroke-width:1.5;transition:none}
+#rightbar-rail{display:none}
+@media(min-width:861px){
+  #menu-toggle{display:none}
+  .nav-edge-toggle{display:flex;position:absolute;top:0;right:0;bottom:1px;width:44px;z-index:40}
+  .brand-row>.brand{padding-right:52px}
+  .brand-row .brand-chevron{display:none}
+  #app.nav-collapsed{grid-template-columns:64px minmax(0,1fr)}
+  #app.nav-collapsed #sidebar{width:64px;position:relative;z-index:30}
+  #app.nav-collapsed .brand-row>.brand{justify-content:center;padding:14px 0}
+  #app.nav-collapsed .brand>div:nth-child(2){display:none}
+  #app.nav-collapsed .nav-edge-toggle{top:12px;right:-27px;bottom:auto;width:26px;height:42px;border:1px solid var(--border);border-left:0}
+  #app.nav-collapsed .nav-edge-toggle svg{transform:rotate(180deg)}
+  #app.nav-collapsed #nav{padding:8px;overflow-x:hidden}
+  #app.nav-collapsed .nav-sep{height:0;padding:0;margin:8px 6px;border-top:1px solid var(--border);font-size:0;overflow:hidden}
+  #app.nav-collapsed .nav-sep:first-child{margin-top:2px;border-top:0}
+  #app.nav-collapsed .nav-item{justify-content:center;gap:0;padding:9px 0;font-size:0;line-height:0}
+  #app.nav-collapsed .nav-item svg{width:18px;height:18px}
+  #app.nav-collapsed #sidebar-footer{display:none}
+}
+/* painel direito: so existe acima de 1280px (abaixo vira o botao de calendario) */
+@media(min-width:1281px){
+  #rightbar{position:relative;padding-left:36px}
+  .rb-edge-toggle{display:flex;position:absolute;top:0;left:0;width:24px;height:48px;z-index:2}
+  #content-wrap.rb-collapsed{grid-template-columns:minmax(0,1fr) 52px}
+  #content-wrap.rb-collapsed #rightbar{padding:0;overflow:hidden}
+  #content-wrap.rb-collapsed .rightbar-body{display:none}
+  #content-wrap.rb-collapsed .rb-edge-toggle{position:static;width:100%;height:48px}
+  #content-wrap.rb-collapsed .rb-edge-toggle svg{transform:rotate(180deg)}
+  #content-wrap.rb-collapsed #rightbar-rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0}
+}
+.rb-rail-btn{position:relative;display:flex;width:36px;height:36px;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--r);background:transparent;color:var(--text2);cursor:pointer}
+.rb-rail-btn:hover{border-color:var(--border);background:var(--surface2);color:var(--text)}
+.rb-rail-btn svg{width:18px;height:18px;stroke-width:1.6}
+.rb-rail-count{position:absolute;top:-3px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--text2);color:var(--bg);font-size:.62rem;font-weight:700;line-height:17px;text-align:center}
+.rb-rail-count.warn{background:var(--amber);color:#fff}.rb-rail-count.danger{background:var(--red);color:#fff}
 /* ===== Estabilidade de layout =====
    Itens de grid têm min-width:auto por padrão; com canvas (Chart.js) isso pode
    causar crescimento sem limite ao recolher/expandir o menu e travar a página. */

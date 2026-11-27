@@ -885,6 +885,24 @@ const Cloud = (() => {
     });
   }
 
+  // v4.5.18 - reabre RDO aprovado ainda nao medido (somente proprietario/admin).
+  // A funcao do banco desfaz custo, snapshot e abatimento do planejamento e
+  // devolve o RDO como 'Devolvido', com o motivo no comentario.
+  async function reopenRdo(rdoId,reason){
+    await ensureFresh();
+    if(!organization() || !fullAccess() || !canEditStore('rdos'))
+      throw new Error('Reabertura de RDO indisponível.');
+    return request('/rest/v1/rpc/clique_obras_reopen_rdo',{
+      method:'POST',
+      headers:authHeaders(true),
+      body:JSON.stringify({
+        target_organization_id:organization().id,
+        target_rdo_id:String(rdoId),
+        target_reason:String(reason||'').slice(0,1000)
+      })
+    });
+  }
+
   // v4.5.17 - arquivamento de obra concluida (somente proprietario/admin).
   async function archiveProjectSnapshot(projectId){
     await ensureFresh();
@@ -1410,7 +1428,7 @@ const Cloud = (() => {
     boundUserId:boundScopeId, isAccountSwitch, bindCurrentUser,
     startRealtime, stopRealtime, realtimeStatus:()=>realtimeStatus,
     listTeam, inviteMember, updateMember, removeMember, cancelInvitation,
-    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
+    measurementLinks, claimRdoMeasurement, releaseRdoMeasurement, deleteRdoMeasurement, deleteRdo, reopenRdo, ensureRdoCostPosting, approveRdo, repairRdoCosts,
     archiveProjectSnapshot, archiveProject, archiveProjectPhotos,
     repairRdoPlanning, offsetLaborPlanning, restoreLaborPlanning,
     occupiedRdoEmployees,

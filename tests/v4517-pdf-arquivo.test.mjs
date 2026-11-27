@@ -77,9 +77,10 @@ test('bibliotecas embarcadas e carregadas sob demanda', () => {
     assert.ok(read('assets/vendor/INTEGRITY-SHA256.txt').includes(file));
   }
   assert.ok(!index.includes('jspdf.umd.min.js'), 'jsPDF nao entra no carregamento inicial');
-  assert.ok(index.includes('<script src="utils/pdf.js?v=4.5.17"></script>'));
-  assert.ok(index.includes('<script src="modules/projetos/arquivo.js?v=4.5.17"></script>'));
-  assert.ok(index.includes('<meta name="application-version" content="4.5.17">'));
+  // v4.5.18 - a versao do cache muda a cada publicacao; o que importa e o script estar carregado.
+  assert.match(index, /<script src="utils\/pdf\.js\?v=\d+\.\d+\.\d+"><\/script>/);
+  assert.match(index, /<script src="modules\/projetos\/arquivo\.js\?v=\d+\.\d+\.\d+"><\/script>/);
+  assert.match(index, /<meta name="application-version" content="\d+\.\d+\.\d+">/);
 });
 
 test('arquivamento: so dono/admin, so Concluido, ZIP conferido antes de liberar', () => {

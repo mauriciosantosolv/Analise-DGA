@@ -125,6 +125,94 @@ const App = {
     app.classList.toggle('menu-open', willOpen);
     if(toggle) toggle.setAttribute('aria-expanded', String(willOpen));
   },
+  // v4.5.19 - menu recolhido no computador. Uma troca de classe por clique,
+  // com trava ate o proximo quadro (clique duplo nao alterna duas vezes no
+  // meio do ajuste dos graficos). A preferencia fica neste navegador.
+  navCollapsedKey:'cliqueobras.navCollapsed',
+  navToggleLock:false,
+  updateMenuToggle(){
+    const app=document.getElementById('app');
+    if(!app) return;
+    // v4.5.20 - no computador o botao e a aba com seta na borda do menu
+    // com o menu recolhido, o nome de cada item aparece ao passar o mouse
+    const navCollapsed=app.classList.contains('nav-collapsed');
+    document.querySelectorAll('#nav .nav-item').forEach(item=>{
+      if(navCollapsed) item.title=(item.textContent||'').trim();
+      else item.removeAttribute('title');
+    });
+    const edge=document.getElementById('nav-collapse-toggle');
+    if(edge){
+      const collapsed=navCollapsed;
+      edge.title=collapsed?'Expandir menu':'Recolher menu';
+      edge.setAttribute('aria-label',edge.title);
+      edge.setAttribute('aria-expanded',String(!collapsed));
+    }
+    const wrap=document.getElementById('content-wrap');
+    const rb=document.getElementById('rightbar-toggle');
+    if(wrap&&rb){
+      const collapsed=wrap.classList.contains('rb-collapsed');
+      rb.title=collapsed?'Expandir painel':'Recolher painel';
+      rb.setAttribute('aria-label',rb.title);
+      rb.setAttribute('aria-expanded',String(!collapsed));
+    }
+  },
+  setNavCollapsed(collapsed,{persist=true}={}){
+    const app=document.getElementById('app');
+    if(!app) return;
+    const next=!!collapsed;
+    if(app.classList.contains('nav-collapsed')===next){ this.updateMenuToggle(); return; }
+    if(this.navToggleLock) return;
+    this.navToggleLock=true;
+    app.classList.toggle('nav-collapsed',next);
+    this.updateMenuToggle();
+    if(persist){ try{ localStorage.setItem(this.navCollapsedKey,next?'1':'0'); }catch(err){} }
+    const raf=typeof requestAnimationFrame==='function'?requestAnimationFrame:fn=>setTimeout(fn,16);
+    raf(()=>{
+      this.navToggleLock=false;
+      // a largura do letreiro mudou: recalcula as copias uma vez
+      const ticker=document.getElementById('finance-ticker');
+      if(ticker) ticker.dataset.tickerSignature='';
+      try{ this.renderTicker(); }catch(err){}
+    });
+  },
+  toggleDesktopNav(){
+    const app=document.getElementById('app');
+    if(!app || window.innerWidth <= 860) return;
+    this.setNavCollapsed(!app.classList.contains('nav-collapsed'));
+  },
+  restoreNavCollapsed(){
+    let saved=false, savedRight=false;
+    try{
+      saved=localStorage.getItem(this.navCollapsedKey)==='1';
+      savedRight=localStorage.getItem(this.rightbarCollapsedKey)==='1';
+    }catch(err){}
+    const app=document.getElementById('app');
+    if(app) app.classList.toggle('nav-collapsed',saved);
+    const wrap=document.getElementById('content-wrap');
+    if(wrap) wrap.classList.toggle('rb-collapsed',savedRight);
+    this.updateMenuToggle();
+  },
+  // v4.5.20 - painel lateral direito recolhivel (faixa de icones com contador).
+  // Mesmas regras do menu esquerdo: troca instantanea, trava ate o proximo
+  // quadro e preferencia guardada neste navegador.
+  rightbarCollapsedKey:'cliqueobras.rightbarCollapsed',
+  setRightbarCollapsed(collapsed){
+    const wrap=document.getElementById('content-wrap');
+    if(!wrap) return;
+    const next=!!collapsed;
+    if(wrap.classList.contains('rb-collapsed')===next){ this.updateMenuToggle(); return; }
+    if(this.navToggleLock) return;
+    this.navToggleLock=true;
+    wrap.classList.toggle('rb-collapsed',next);
+    this.updateMenuToggle();
+    try{ localStorage.setItem(this.rightbarCollapsedKey,next?'1':'0'); }catch(err){}
+    const raf=typeof requestAnimationFrame==='function'?requestAnimationFrame:fn=>setTimeout(fn,16);
+    raf(()=>{ this.navToggleLock=false; });
+  },
+  toggleRightbar(){
+    const wrap=document.getElementById('content-wrap');
+    if(wrap) this.setRightbarCollapsed(!wrap.classList.contains('rb-collapsed'));
+  },
   renderTicker(){
     const el = document.getElementById('finance-ticker'); if(!el) return;
     const selection=State.settings.tickerProjects;
@@ -220,14 +308,64 @@ const App = {
     document.getElementById('rightbar-content').innerHTML =
       block('Hoje', fut.today) + block('Próximos 7 dias', fut.d7) +
       block('8–15 dias', fut.d15) + block('16–30 dias', fut.d30);
+    const hrBox=document.getElementById('rightbar-hr');
+    if(hrBox){
+      try{ hrBox.innerHTML=this.hrAlertsMarkup(5); }
+      catch(err){ hrBox.innerHTML=''; }
+    }
+    // v4.5.20 - faixa do painel recolhido: icones com contador; clicar expande.
+    const rail=document.getElementById('rightbar-rail');
+    if(rail){
+      let hrCount=0, hrExpired=0;
+      try{
+        if(this.canSeeHrAlerts()){
+          const alerts=CrewHR.alertsFor(RDO.crewMembers());
+          hrCount=alerts.length; hrExpired=alerts.filter(item=>item.level==='expired').length;
+        }
+      }catch(err){}
+      const soonCount=fut.today.length+fut.d7.length;
+      const badge=(count,tone='')=>count?`<span class="rb-rail-count ${tone}">${count>99?'99+':count}</span>`:'';
+      rail.innerHTML=`${this.canSeeHrAlerts()?`<button type="button" class="rb-rail-btn" onclick="App.setRightbarCollapsed(false)" title="Alertas de RH${hrCount?`: ${hrCount}`:''}" aria-label="Alertas de RH"><i data-lucide="bell-ring"></i>${badge(hrCount,hrExpired?'danger':'warn')}</button>`:''}
+        <button type="button" class="rb-rail-btn" onclick="App.setRightbarCollapsed(false)" title="Gastos futuros (hoje e próximos 7 dias): ${soonCount}" aria-label="Gastos futuros"><i data-lucide="clock"></i>${badge(soonCount)}</button>`;
+    }
     U.icons();
+  },
+  // v4.5.19 - alertas de RH (integracao, ASO, EPI) no painel lateral, acima
+  // dos gastos futuros. So para quem enxerga Colaboradores.
+  canSeeHrAlerts(){
+    if(typeof CrewHR==='undefined' || typeof RDO==='undefined') return false;
+    if(typeof Cloud==='undefined' || !Cloud.active()) return true;
+    if(typeof Cloud.isRdoOnly==='function' && Cloud.isRdoOnly()) return false;
+    return Cloud.canViewStore('crew');
+  },
+  hrAlertsMarkup(limit=5){
+    if(!this.canSeeHrAlerts()) return '';
+    const alerts=CrewHR.alertsFor(RDO.crewMembers());
+    const canEdit=typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('crew');
+    const expired=alerts.filter(item=>item.level==='expired').length;
+    const icon={aso:'stethoscope',integration:'building-2',ppe:'hard-hat'};
+    const items=alerts.slice(0,limit).map(alert=>{
+      const action=canEdit
+        ?`UI.closeAll();Views.colaboradores.form(${U.jsArg(alert.employee.id)},${U.jsArg(alert.kind==='ppe'?'epis':'rh')})`
+        :`App.go('colaboradores')`;
+      return `<button type="button" class="rb-item rb-item-action rb-hr-item ${alert.level}" onclick="${action}" title="${U.esc(`${alert.employee.name||''} · ${alert.label}`)}">
+        <i data-lucide="${icon[alert.kind]||'alert-triangle'}"></i>
+        <span class="rb-item-info"><b>${U.esc(alert.employee.name||'Colaborador')}</b><small>${U.esc(alert.label)}</small></span>
+        <span class="rb-hr-status">${U.esc(alert.status)}</span></button>`;
+    }).join('');
+    return `<div class="rb-section rb-hr">
+      <div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="bell-ring" style="width:15px;height:15px"></i>&nbsp;Alertas de RH${alerts.length?` · ${alerts.length}`:''}</div>
+      ${alerts.length?`${expired?`<small class="rb-hr-summary danger">${expired} vencido${expired===1?'':'s'}</small>`:''}${items}
+      ${alerts.length>limit?`<button type="button" class="rb-hr-more" onclick="UI.closeAll();Views.colaboradores.hrAlerts()">Ver todos (${alerts.length})</button>`:''}`
+      :`<small style="color:var(--text3)">Integrações, ASO e EPIs em dia nos próximos ${CrewHR.ALERT_DAYS} dias.</small>`}
+    </div>`;
   },
   showFutureExpenses(){
     const fut = Biz.futureExpenses(this.futureExpenseRows());
     const sections = [['Hoje',fut.today],['Próximos 7 dias',fut.d7],['8–15 dias',fut.d15],['16–30 dias',fut.d30]];
     UI.modal({
       title:'Gastos Previstos',
-      body:`<div class="future-mobile-list">${sections.map(([title,items])=>`
+      body:`<div class="future-mobile-list">${this.hrAlertsMarkup(5)}${sections.map(([title,items])=>`
         <div class="rb-section"><div class="rb-title">${title} · ${U.money(items.reduce((s,x)=>s+x.value,0))}</div>
           ${items.length ? items.map(x=>{ const p=State.projects.find(pr=>pr.id===x.projectId); return `
             <button type="button" class="rb-item rb-item-action" onclick="UI.close();Views.planejamento.form(${U.jsArg(x.id)})">
@@ -699,15 +837,30 @@ const App = {
     const panelButton=document.getElementById('tv-mode-toggle');
     if(panelButton) panelButton.onclick=()=>DashboardPanel.enter();
     if(typeof DashboardPanel!=='undefined') DashboardPanel.init();
-    // Recolher menu no desktop foi REMOVIDO por estabilidade (travava a aba
-    // com gráficos abertos). No celular (<=860px) o botão abre/fecha o menu.
+    // v4.5.19 - no computador o botao recolhe/expande o menu (faixa de icones,
+    // ver css/components.css). No celular (<=860px) continua abrindo/fechando
+    // o menu por cima, como antes.
+    this.restoreNavCollapsed();
+    const navEdge=document.getElementById('nav-collapse-toggle');
+    if(navEdge) navEdge.onclick=()=>{
+      try{ this.toggleDesktopNav(); }
+      catch(err){ UI.toast('Erro ao alternar o menu: ' + U.esc(err.message||err), 'error', 6000); }
+    };
+    const rightEdge=document.getElementById('rightbar-toggle');
+    if(rightEdge) rightEdge.onclick=()=>{
+      try{ this.toggleRightbar(); }
+      catch(err){ UI.toast('Erro ao alternar o painel: ' + U.esc(err.message||err), 'error', 6000); }
+    };
     document.getElementById('menu-toggle').onclick = () => {
-      try{ this.toggleMobileMenu(); }
+      try{
+        if(window.innerWidth > 860) this.toggleDesktopNav();
+        else this.toggleMobileMenu();
+      }
       catch(err){ UI.toast('Erro ao alternar o menu: ' + U.esc(err.message||err), 'error', 6000); }
     };
     const backdrop = document.getElementById('mobile-menu-backdrop');
     if(backdrop) backdrop.onclick = () => this.closeMobileMenu();
-    window.addEventListener('resize', () => { if(window.innerWidth > 860) this.closeMobileMenu(); });
+    window.addEventListener('resize', () => { if(window.innerWidth > 860) this.closeMobileMenu(); this.updateMenuToggle(); });
     document.addEventListener('keydown', e => {
       if(typeof DashboardPanel!=='undefined' && DashboardPanel.active){
         if(e.key==='Escape'){ e.preventDefault(); DashboardPanel.exit(); return; }

@@ -699,7 +699,10 @@ const RDO = {
       missingRates:rows.filter(row=>!row.rate||!(Number(row.rate.costRegular)>0))
     };
   },
-  statusTag(status){
+  statusTag(status,rdo=null){
+    // v4.5.18 - RDO reaberto continua 'Devolvido' no banco; so muda o rotulo.
+    if(status==='Devolvido'&&rdo&&rdo.reopenedAt&&rdo.reopenedAt===rdo.rejectedAt)
+      return '<span class="tag tag-amber">Reaberto</span>';
     const tone={Aprovado:'tag-green',Enviado:'tag-amber',Devolvido:'tag-red',Rascunho:'tag-gray'}[status]||'tag-gray';
     const label={Enviado:'Aguardando aprovação',Devolvido:'Reprovado'}[status]||status||'Rascunho';
     return `<span class="tag ${tone}">${U.esc(label)}</span>`;
@@ -736,6 +739,14 @@ const RDO = {
   canEdit(rdo){
     if(!rdo || !['Rascunho','Devolvido'].includes(rdo.status||'Rascunho')) return false;
     return typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos');
+  },
+  // v4.5.18 - RDO aprovado que ainda nao entrou em medicao pode ser reaberto
+  // por proprietario/administrador (o banco confere de novo tudo isso).
+  canReopen(rdo){
+    if(!rdo || rdo.status!=='Aprovado' || this.linkedRdoIds().has(String(rdo.id))) return false;
+    const project=State.projects.find(item=>String(item.id)===String(rdo.projectId));
+    if(project&&project.archive) return false;
+    return this.fullAccess() && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('rdos'));
   },
   canDelete(rdo){
     if(!rdo || this.linkedRdoIds().has(String(rdo.id))) return false;
@@ -1000,6 +1011,65 @@ const RDO = {
       }catch(err){
         UI.loading(false);
         UI.toast('Não foi possível reprovar o RDO: '+U.esc(err.message||err),'error',7500);
+      }
+    };
+  },
+
+  reopen(id){
+    const rdo=State.rdos.find(x=>String(x.id)===String(id));
+    if(!rdo || !this.canReopen(rdo))
+      return UI.toast('Somente RDO aprovado e ainda não medido pode ser reaberto, por proprietário ou administrador.','warn',7500);
+    UI.modal({
+      title:'Reabrir diário',
+      body:`<div class="form-grid">
+        <div class="full"><label>Motivo da reabertura *</label><textarea id="rdo-reopen-reason" rows="4" maxlength="1000" placeholder="O que precisa ser corrigido neste diário."></textarea></div>
+      </div>
+      <div class="import-log">O custo da mão de obra deste RDO sai do realizado e volta ao planejamento. O diário fica liberado para edição e precisa ser enviado e aprovado de novo. Fotos e anexos são mantidos.</div>`,
+      footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="rdo-reopen-confirm"><i data-lucide="undo-2"></i>Reabrir diário</button>'
+    });
+    document.getElementById('rdo-reopen-confirm').onclick=async()=>{
+      const reason=document.getElementById('rdo-reopen-reason').value.trim();
+      if(reason.length<3) return UI.toast('Informe o motivo da reabertura.','warn');
+      try{
+        UI.loading(true,'Reabrindo diário…');
+        if(typeof Cloud!=='undefined' && Cloud.active()){
+          await Cloud.reopenRdo(rdo.id,reason);
+          await DB.syncFromCloud();
+        }else{
+          const financial=State.rdoFinancial.find(item=>String(item.rdoId||item.id)===String(rdo.id));
+          const purchase=State.purchases.find(item=>String(item.sourceRdoId||'')===String(rdo.id));
+          if(purchase && Array.isArray(purchase.planningOffsets) && purchase.planningOffsets.length){
+            const restore=State.planPlanningRestore(purchase.planningOffsets,rdo.id,
+              'rdo_restored','rdo','Planejamento restaurado após reabertura do RDO');
+            for(const row of restore.planningRows) await DB.put('planning',row);
+            for(const row of restore.historyRows) await DB.put('planning_history',row);
+          }
+          if(financial) await DB.del('rdo_financial',financial.id);
+          if(purchase) await DB.del('purchases',purchase.id);
+          const now=new Date().toISOString();
+          const comment=`Reaberto para correção: ${reason}`;
+          const {approvedAt,approvedBy,submittedAt,...rest}=rdo;
+          await DB.put('rdos',{
+            ...rest,
+            status:'Devolvido',
+            rejectionComment:comment,
+            rejectedAt:now,
+            rejectedBy:this.authorName(),
+            reopenedAt:now,
+            reopenedBy:this.authorName(),
+            rejectionHistory:[...(Array.isArray(rdo.rejectionHistory)?rdo.rejectionHistory:[]),{comment,rejectedAt:now,rejectedBy:this.authorName(),reopened:true}].slice(-20),
+            reopenHistory:[...(Array.isArray(rdo.reopenHistory)?rdo.reopenHistory:[]),{reason,reopenedAt:now,reopenedBy:this.authorName(),previousApprovedAt:approvedAt||null,previousApprovedBy:approvedBy||null}],
+            updatedAt:now
+          });
+        }
+        await State.reload();
+        UI.loading(false);
+        UI.closeAll();
+        UI.toast('RDO reaberto. O custo saiu do realizado e o diário está liberado para edição.','success',7000);
+        App.render();
+      }catch(err){
+        UI.loading(false);
+        UI.toast('Não foi possível reabrir o RDO: '+U.esc(err.message||err),'error',8000);
       }
     };
   },
@@ -1679,21 +1749,91 @@ const RDO = {
     }
   },
 
+  // v4.5.18 - visualizador com setas para passar pelas fotos do RDO (botoes,
+  // setas do teclado e deslizar o dedo no celular). Documentos (PDF etc.)
+  // continuam sendo baixados como antes.
   async previewAttachment(rdoId,attachmentId){
     try{
       const rows=await this.attachmentsFor(rdoId);
       const attachment=rows.find(item=>String(item.id)===String(attachmentId));
       if(!attachment) throw new Error('Anexo não encontrado.');
       if(!this.isImage(attachment)) return this.downloadAttachment(rdoId,attachmentId);
+      const photos=rows.filter(item=>this.isImage(item));
+      let index=Math.max(0,photos.findIndex(item=>String(item.id)===String(attachmentId)));
+      const label=item=>item.description||item.fileName||'Foto';
       UI.loading(true,'Abrindo foto…');
-      const url=await this.attachmentUrl(attachment);
+      const url=await this.attachmentUrl(photos[index]);
       UI.loading(false);
+      const many=photos.length>1;
       UI.modal({
-        title:U.esc(attachment.description||attachment.fileName),
+        title:label(photos[index]),
         wide:true,
-        body:`<div class="rdo-photo-preview"><img src="${U.esc(url)}" alt="${U.esc(attachment.description||attachment.fileName)}"></div>`,
-        footer:`<button class="btn btn-ghost" onclick="RDO.downloadAttachment(${U.jsArg(rdoId)},${U.jsArg(attachmentId)})"><i data-lucide="download"></i>Baixar</button><button class="btn btn-primary" onclick="UI.close()">Fechar</button>`
+        body:`<div class="rdo-photo-preview" id="rdo-photo-viewer"><img id="rdo-photo-image" src="${U.esc(url)}" alt="${U.esc(label(photos[index]))}">
+          ${many?`<button type="button" class="rdo-photo-nav prev" id="rdo-photo-prev" aria-label="Foto anterior"><i data-lucide="chevron-left"></i></button><button type="button" class="rdo-photo-nav next" id="rdo-photo-next" aria-label="Próxima foto"><i data-lucide="chevron-right"></i></button><span class="rdo-photo-counter" id="rdo-photo-counter">${index+1} de ${photos.length}</span>`:''}
+        </div>`,
+        footer:`<button class="btn btn-ghost" id="rdo-photo-download"><i data-lucide="download"></i>Baixar</button><button class="btn btn-primary" id="rdo-photo-close">Fechar</button>`
       });
+      const modal=document.getElementById('modal');
+      const image=document.getElementById('rdo-photo-image');
+      let token=0;
+      const onKey=event=>{
+        if(!document.getElementById('rdo-photo-viewer')){ document.removeEventListener('keydown',onKey); return; }
+        if(event.key==='ArrowLeft'){ event.preventDefault(); go(-1); }
+        else if(event.key==='ArrowRight'){ event.preventDefault(); go(1); }
+      };
+      const close=()=>{ document.removeEventListener('keydown',onKey); UI.close(); };
+      const preload=position=>{
+        const next=photos[(position+photos.length)%photos.length];
+        if(next) this.attachmentUrl(next).catch(()=>{});
+      };
+      const go=async step=>{
+        if(!many) return;
+        index=(index+step+photos.length)%photos.length;
+        const current=photos[index];
+        const mine=++token;
+        const counter=document.getElementById('rdo-photo-counter');
+        if(counter) counter.textContent=`${index+1} de ${photos.length}`;
+        const title=modal.querySelector('.modal-head h2');
+        if(title) title.textContent=UI.plainText(label(current));
+        image.style.opacity='.35';
+        try{
+          const src=await this.attachmentUrl(current);
+          if(mine!==token||!document.getElementById('rdo-photo-viewer')) return;
+          image.src=src;
+          image.alt=label(current);
+        }catch(err){
+          if(mine===token) UI.toast('Não foi possível carregar esta foto.','warn',4500);
+        }finally{
+          if(mine===token) image.style.opacity='';
+        }
+        preload(index+step);
+      };
+      const prev=document.getElementById('rdo-photo-prev');
+      const next=document.getElementById('rdo-photo-next');
+      if(prev) prev.onclick=()=>go(-1);
+      if(next) next.onclick=()=>go(1);
+      document.getElementById('rdo-photo-download').onclick=()=>this.downloadAttachment(rdoId,photos[index].id);
+      document.getElementById('rdo-photo-close').onclick=close;
+      const headClose=modal.querySelector('.modal-head .icon-btn');
+      if(headClose) headClose.onclick=close;
+      if(many){
+        document.addEventListener('keydown',onKey);
+        const viewer=document.getElementById('rdo-photo-viewer');
+        let startX=null,startY=0;
+        viewer.addEventListener('touchstart',event=>{
+          if(event.touches.length!==1) return;
+          startX=event.touches[0].clientX; startY=event.touches[0].clientY;
+        },{passive:true});
+        viewer.addEventListener('touchend',event=>{
+          if(startX===null) return;
+          const touch=event.changedTouches[0];
+          const dx=touch.clientX-startX, dy=touch.clientY-startY;
+          startX=null;
+          if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.3) go(dx<0?1:-1);
+        },{passive:true});
+        preload(index+1);
+        preload(index-1);
+      }
     }catch(err){
       UI.loading(false);
       UI.toast('Não foi possível abrir o anexo: '+U.esc(err.message||err),'error',6500);
@@ -2124,7 +2264,7 @@ const RDO = {
       body:`<div class="rdo-detail-head">
         <div><small>Projeto</small><b>${U.esc(this.projectLabel(rdo.projectId))}</b></div>
         <div><small>Data</small><b>${U.date(rdo.date)}</b><small>${U.esc(this.dayTypeLabel(rdo.date,rdo.isHoliday))}</small></div>
-        <div><small>Status</small>${this.statusTag(rdo.status)}</div>
+        <div><small>Status</small>${this.statusTag(rdo.status,rdo)}</div>
         <div><small>Medição</small><b>${linked?'Incluído em medição':'Não medido'}</b></div>
       </div>
       <div class="card rdo-description-card"><h3>Serviço realizado</h3><p>${U.esc(rdo.description||'—')}</p>${rdo.location?`<small>${U.esc(rdo.location)}</small>`:''}</div>
@@ -2141,7 +2281,7 @@ const RDO = {
         <div class="kpi accent-blue"><div class="k-label">Venda apurada</div><div class="k-value">${U.money(financial.saleTotal)}</div></div>
       </div>`:''}
       ${rdo.notes?`<div class="import-log"><b>Observações:</b> ${U.esc(rdo.notes)}</div>`:''}
-      ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<div class="import-log rdo-rejection-comment"><b>Motivo da reprovação:</b> ${U.esc(rdo.rejectionComment)}
+      ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<div class="import-log rdo-rejection-comment"><b>${rdo.reopenedAt&&rdo.reopenedAt===rdo.rejectedAt?'Motivo da reabertura:':'Motivo da reprovação:'}</b> ${U.esc(rdo.rejectionComment)}
         <small>${rdo.rejectedAt?`Registrado em ${U.date(rdo.rejectedAt)}`:''}${rdo.rejectedBy?` por ${U.esc(rdo.rejectedBy)}`:''}</small></div>`:''}
       ${this.auditMarkup(rdo)}
       <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
@@ -2150,6 +2290,7 @@ const RDO = {
         ${rdo.status==='Enviado'&&this.canReview()?`<button class="btn btn-danger" onclick="RDO.reject(${U.jsArg(rdo.id)})"><i data-lucide="x-square"></i>Reprovar</button>`:''}
         ${rdo.status==='Enviado'&&this.canApprove()?`<button class="btn btn-primary" onclick="RDO.approve(${U.jsArg(rdo.id)})"><i data-lucide="badge-check"></i>Aprovar diário</button>`:''}
         ${this.canDelete(rdo)?`<button class="btn btn-danger" onclick="RDO.remove(${U.jsArg(rdo.id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
+        ${this.canReopen(rdo)?`<button class="btn btn-ghost" onclick="RDO.reopen(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Reabrir</button>`:''}
         <button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
         <button class="btn btn-ghost" onclick="UI.close()">Fechar</button>`,
       onOpen:()=>this.renderDetailAttachments(rdo.id)
@@ -2217,7 +2358,7 @@ Views.rdos={
         <span class="rdo-main"><b>${U.esc(rdo.number||'RDO')}</b><small>${U.esc(RDO.projectLabel(rdo.projectId))}</small><em>${U.esc(rdo.description||'')}</em></span>
         <span class="rdo-team"><b>${RDO.visibleEntries(rdo).length}</b><small>pessoas</small></span>
         <span class="rdo-hours"><b>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>apontadas</small></span>
-        <span class="rdo-status">${RDO.statusTag(rdo.status)}${linked.has(String(rdo.id))?'<small>Medido</small>':''}</span>
+        <span class="rdo-status">${RDO.statusTag(rdo.status,rdo)}${linked.has(String(rdo.id))?'<small>Medido</small>':''}</span>
         <i data-lucide="chevron-right"></i>
       </button>`;
     }).join('')||'<div class="empty card"><i data-lucide="clipboard-check"></i><br>Nenhum diário encontrado.</div>'}</div>`;
@@ -2247,6 +2388,8 @@ Views.colaboradores={
     const hoje=typeof U.isoDate==='function'?U.isoDate(new Date()):new Date().toISOString().slice(0,10);
     const ferias=typeof RDO!=='undefined'&&typeof RDO.vacationOn==='function'?RDO.vacationOn(employee,hoje):null;
     if(ferias) return `<span class="tag tag-blue">Férias até ${U.date(ferias.to)}</span>`;
+    const atestado=typeof CrewHR!=='undefined'?CrewHR.leaveOn(employee,hoje):null;
+    if(atestado&&CrewHR.inCompany(employee,hoje)) return `<span class="tag tag-amber">Atestado até ${U.date(atestado.to)}</span>`;
     return `<span class="tag ${employee.active===false?'tag-gray':'tag-green'}">${employee.active===false?(employee.inactiveSince?`Inativo a partir de ${U.date(employee.inactiveSince)}`:'Inativo'):(employee.admissionDate?`Ativo desde ${U.date(employee.admissionDate)}`:'Ativo')}</span>`;
   },
   // v4.2.18 - lista de periodos de ferias dentro do cadastro do colaborador.
@@ -2255,6 +2398,28 @@ Views.colaboradores={
     const linhas=periodos.map((item,indice)=>`<div class="crew-vacation-row"><span><b>${U.date(item.from)} a ${U.date(item.to)}</b><small>${RDO.vacationDays(item)} dia(s)</small></span><button class="btn btn-ghost btn-sm" type="button" data-vacation-remove="${indice}" aria-label="Remover período de férias"><i data-lucide="trash-2"></i></button></div>`).join('');
     return `<div class="crew-vacation-list">${linhas||'<small class="crew-vacation-empty">Nenhum período cadastrado.</small>'}</div>
       <div class="crew-vacation-new"><label>De<input id="crew-vacation-from" type="date"></label><label>Até<input id="crew-vacation-to" type="date"></label><button class="btn btn-ghost btn-sm" type="button" id="crew-vacation-add"><i data-lucide="plus"></i>Adicionar período</button></div>`;
+  },
+  // v4.5.18 - aviso de vencimentos de RH (ASO, integracoes e EPIs) no topo da
+  // lista. Fica fora do .crew-directory para nao mexer no grid dos cartoes.
+  hrBanner(employees){
+    if(typeof CrewHR==='undefined') return '';
+    const alerts=CrewHR.alertsFor(employees);
+    if(!alerts.length) return '';
+    const expired=alerts.filter(item=>item.level==='expired').length;
+    const soon=alerts.length-expired;
+    return `<button type="button" class="crew-hr-banner ${expired?'danger':'warn'}" onclick="Views.colaboradores.hrAlerts()"><i data-lucide="bell-ring"></i><span><b>Vencimentos de RH</b><small>${[expired?`${expired} vencido${expired===1?'':'s'}`:'',soon?`${soon} vence${soon===1?'':'m'} em até ${CrewHR.ALERT_DAYS} dias`:''].filter(Boolean).join(' · ')}</small></span><span class="crew-hr-banner-cta">Ver lista<i data-lucide="chevron-right"></i></span></button>`;
+  },
+  hrAlerts(){
+    if(typeof CrewHR==='undefined') return;
+    const canEdit=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('crew');
+    const alerts=CrewHR.alertsFor(RDO.crewMembers());
+    UI.modal({title:'Vencimentos de RH',wide:true,body:`<div class="crew-hr-alert-list">${alerts.map(alert=>`<div class="crew-hr-alert-row">
+        ${this.avatar(alert.employee)}
+        <span><b>${U.esc(alert.employee.name||'Colaborador')}</b><small>${U.esc(alert.label)}${alert.date?` · ${U.date(alert.date)}`:''}</small></span>
+        ${CrewHR.tag({level:alert.level,label:alert.status})}
+        ${canEdit?`<button class="btn btn-ghost btn-sm" type="button" onclick="UI.close();Views.colaboradores.form(${U.jsArg(alert.employee.id)},${U.jsArg(alert.kind==='ppe'?'epis':'rh')})"><i data-lucide="pencil"></i>Abrir</button>`:''}
+      </div>`).join('')||'<div class="empty"><i data-lucide="shield-check"></i><br>Nenhum vencimento nos próximos dias.</div>'}</div>`,
+      footer:'<button class="btn btn-primary" onclick="UI.close()">Fechar</button>'});
   },
   avatar(employee,size='normal'){
     const photo=U.safeImageSrc(employee&&employee.photo||'');
@@ -2267,15 +2432,16 @@ Views.colaboradores={
     const canViewCost=typeof Cloud==='undefined'||!Cloud.active()||Cloud.canViewStore('labor_rates');
     const normalized=U.norm(this.query);
     const all=RDO.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-    const employees=all.filter(employee=>!normalized||U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''}`).includes(normalized));
+    const employees=all.filter(employee=>!normalized||(U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''} ${employee.cpf||''}`).includes(normalized)||(normalized.replace(/\D/g,'').length>=3&&String(employee.cpf||'').replace(/\D/g,'').includes(normalized.replace(/\D/g,'')))));
     $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2><small>Colaboradores disponíveis para os diários.</small></div><div class="spacer"></div>
       ${canEdit?'<div class="toolbar-actions"><button class="btn btn-ghost" onclick="Views.colaboradores.rolesForm()"><i data-lucide="briefcase"></i>Funções</button><button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button></div>':''}</div>
-      <div class="crew-filter-panel"><div class="rdo-search"><i data-lucide="search"></i><input id="crew-search" type="search" value="${U.esc(this.query)}" placeholder="Buscar por matrícula, nome ou cargo" aria-label="Buscar colaboradores">${this.query?'<button id="crew-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div><span>${employees.length} de ${all.length} colaboradores</span></div>
-      <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''}">
+      <div class="crew-filter-panel"><div class="rdo-search"><i data-lucide="search"></i><input id="crew-search" type="search" value="${U.esc(this.query)}" placeholder="Buscar por matrícula, nome, CPF ou cargo" aria-label="Buscar colaboradores">${this.query?'<button id="crew-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div><span>${employees.length} de ${all.length} colaboradores</span></div>
+      ${this.hrBanner(all)}
+      <div class="crew-directory">${employees.map(employee=>`<div class="crew-card ${employee.active===false?'inactive':''} ${canEdit?'clickable':''}"${canEdit?` data-crew-open="${U.esc(employee.id)}" role="button" tabindex="0" title="Abrir cadastro"`:''}>
         ${this.avatar(employee)}
-        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small></span>
+        <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small>${typeof CrewHR!=='undefined'?CrewHR.cardFlag(employee):''}</span>
         ${this.statusTag(employee)}
-        ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
+        ${canEdit?`<button class="btn btn-ghost btn-sm" type="button" aria-label="Editar colaborador" onclick="event.stopPropagation();Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
       </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
     const search=document.getElementById('crew-search');
     if(search) search.oninput=U.debounce(()=>{
@@ -2285,9 +2451,20 @@ Views.colaboradores={
     },180);
     const clear=document.getElementById('crew-search-clear');
     if(clear) clear.onclick=()=>{this.query='';this.render();};
+    // v4.5.19 - o cartao inteiro abre o cadastro (antes so o lapis).
+    document.querySelectorAll('[data-crew-open]').forEach(card=>{
+      card.onclick=()=>this.form(card.dataset.crewOpen);
+      card.onkeydown=event=>{
+        if(event.target!==card) return;
+        if(event.key==='Enter'||event.key===' '){ event.preventDefault(); this.form(card.dataset.crewOpen); }
+      };
+    });
     U.icons();
   },
-  form(id=''){
+  // v4.5.18 - abas Contrato / RH / EPIs / Ocorrencias. Os campos de sempre
+  // ficam em Contrato, com os mesmos ids e a mesma gravacao; RH, EPIs e
+  // Ocorrencias vivem em modules/rdo/colaboradores-rh.js (CrewHR).
+  form(id='',tab='contrato'){
     if(typeof Cloud!=='undefined'&&Cloud.active()&&!Cloud.canEditStore('crew')) return;
     const employee=id?RDO.crewMembers().find(x=>String(x.id)===String(id)):{id:U.id(),name:'',registration:'',photo:'',internalRole:'',active:true,admissionDate:''};
     if(!employee) return;
@@ -2306,18 +2483,61 @@ Views.colaboradores={
     const hourlyCost=RDO.baseCostFor(employee.id,baseRecord||legacyRate).costRegular;
     const hasRegisteredCost=!!(baseRecord||legacyRate);
     let photo=U.safeImageSrc(employee.photo||'');
-    UI.modal({title:id?'Editar colaborador':'Novo colaborador',body:`<div class="employee-form-photo">
-      <div id="crew-photo-preview">${this.avatar(employee,'large')}</div><div><b>Foto do colaborador</b><small>JPG, PNG ou WebP. A imagem será reduzida antes de sincronizar.</small><div><button class="btn btn-ghost btn-sm" id="crew-photo-select" type="button"><i data-lucide="image-plus"></i>${photo?'Alterar foto':'Adicionar foto'}</button>${photo?'<button class="btn btn-ghost btn-sm" id="crew-photo-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div></div></div>
+    const hasHr=typeof CrewHR!=='undefined';
+    const tabs=[['contrato','file-text','Contrato'],['rh','briefcase','RH'],['epis','hard-hat','EPIs'],['ocorrencias','clipboard-list','Ocorrências']]
+      .filter(([key])=>key==='contrato'||hasHr);
+    const activeTab=tabs.some(([key])=>key===tab)?tab:'contrato';
+    UI.modal({title:id?'Editar colaborador':'Novo colaborador',body:`${tabs.length>1?`<div class="tabs crew-form-tabs" role="tablist">${tabs.map(([key,icon,label])=>`<button class="tab ${key===activeTab?'active':''}" type="button" role="tab" data-crew-tab="${key}" aria-selected="${key===activeTab}"><i data-lucide="${icon}"></i>${label}<span class="crew-tab-dot" data-crew-tab-dot="${key}"></span></button>`).join('')}</div>`:''}
+      <section class="crew-form-panel" data-crew-panel="contrato" ${activeTab==='contrato'?'':'hidden'}><div class="employee-form-photo">
+      <div id="crew-photo-preview">${this.avatar(employee,'large')}</div><div><b>Foto do colaborador</b><div><button class="btn btn-ghost btn-sm" id="crew-photo-select" type="button"><i data-lucide="image-plus"></i>${photo?'Alterar foto':'Adicionar foto'}</button>${photo?'<button class="btn btn-ghost btn-sm" id="crew-photo-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div></div></div>
       <div class="form-grid">
       <div><label>Matrícula</label><input id="crew-registration" maxlength="60" value="${U.esc(employee.registration||'')}" autocomplete="off"></div>
       <div><label>Nome *</label><input id="crew-name" maxlength="140" value="${U.esc(employee.name||'')}" autocomplete="name"></div>
-      <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select><small>Cadastre novas funções pelo botão “Funções” no menu de colaboradores.</small></div>
-      <div><label>Custo padrão por hora <small>Opcional</small></label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled'}><small>${canEditCost?'Obrigatório somente quando o colaborador for usado no RDO de um projeto HH. HE 50% e 100% serão calculadas automaticamente.':'Sem permissão para visualizar ou alterar custos.'}</small></div>
-      <div><label>Data de admissão <small>Opcional</small></label><input id="crew-admission" type="date" value="${U.esc(String(employee.admissionDate||'').slice(0,10))}"><small>Antes dela o colaborador não conta como ocioso nem entra no Planejamento de Colaboradores.</small></div>
-      <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select><small>Inativo = não trabalha mais na empresa.</small></div>
-      <div><label>Inativo a partir de <small>Recomendado</small></label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}><small>Com a data, os dias anteriores continuam apurados e o colaborador ainda pode ser lançado no RDO retroativo. Sem ela, ele some de todo o histórico.</small></div>
-      <div class="full"><label>Férias <small>Opcional</small></label><div id="crew-vacation-box"></div></div>
-    </div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
+      <div><label>CPF</label><input id="crew-cpf" maxlength="14" inputmode="numeric" placeholder="000.000.000-00" value="${U.esc(typeof CrewHR!=='undefined'&&employee.cpf?CrewHR.formatCpf(employee.cpf):String(employee.cpf||''))}" autocomplete="off"></div>
+      <div><label>Função interna</label><select id="crew-role"><option value="">Sem função</option>${roleNames.sort((a,b)=>a.localeCompare(b,'pt-BR')).map(role=>`<option value="${U.esc(role)}" ${U.norm(role)===U.norm(employee.internalRole)?'selected':''}>${U.esc(role)}</option>`).join('')}</select></div>
+      <div><label>Custo padrão por hora</label><input id="crew-hourly-cost" type="number" min="0" step="0.01" value="${hasRegisteredCost?hourlyCost:''}" ${canEditCost?'':'disabled title="Sem permissão para alterar custos."'}></div>
+      <div><label>Data de admissão</label><input id="crew-admission" type="date" value="${U.esc(String(employee.admissionDate||'').slice(0,10))}"></div>
+      <div><label>Status</label><select id="crew-active"><option value="true" ${employee.active!==false?'selected':''}>Ativo</option><option value="false" ${employee.active===false?'selected':''}>Inativo</option></select></div>
+      <div><label>Inativo a partir de</label><input id="crew-inactive-since" type="date" value="${U.esc(String(employee.inactiveSince||'').slice(0,10))}" ${employee.active===false?'':'disabled'}></div>
+      <div class="full"><label>Férias</label><div id="crew-vacation-box"></div></div>
+    </div></section>
+      ${hasHr?`<section class="crew-form-panel" data-crew-panel="rh" ${activeTab==='rh'?'':'hidden'}><div class="crew-hr-section" id="crew-hr-integrations"></div><div class="crew-hr-section" id="crew-hr-asos"></div><div class="crew-hr-section" id="crew-hr-leaves"></div></section>
+      <section class="crew-form-panel" data-crew-panel="epis" ${activeTab==='epis'?'':'hidden'}><div class="crew-hr-section" id="crew-hr-ppe"></div></section>
+      <section class="crew-form-panel" data-crew-panel="ocorrencias" ${activeTab==='ocorrencias'?'':'hidden'}><div class="crew-hr-section" id="crew-hr-occurrences"></div></section>`:''}`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="crew-save"><i data-lucide="check"></i>Salvar</button>'});
+    const hr=hasHr?CrewHR.normalize(employee):null;
+    const cpfInput=document.getElementById('crew-cpf');
+    if(cpfInput&&hasHr) cpfInput.oninput=()=>{ cpfInput.value=CrewHR.formatCpf(cpfInput.value); };
+    if(hasHr){
+      const paintDots=()=>{
+        ['rh','epis'].forEach(key=>{
+          const dot=document.querySelector(`[data-crew-tab-dot="${key}"]`);
+          if(dot) dot.className=`crew-tab-dot ${CrewHR.tabLevel(hr,key==='rh'?'rh':'ppe',employee)}`;
+        });
+      };
+      document.querySelectorAll('[data-crew-tab]').forEach(button=>button.onclick=()=>{
+        document.querySelectorAll('[data-crew-tab]').forEach(item=>{
+          const on=item===button;
+          item.classList.toggle('active',on);
+          item.setAttribute('aria-selected',String(on));
+        });
+        document.querySelectorAll('[data-crew-panel]').forEach(panel=>{ panel.hidden=panel.dataset.crewPanel!==button.dataset.crewTab; });
+        const body=document.querySelector('#modal .modal-body');
+        if(body) body.scrollTop=0;
+      });
+      CrewHR.bindIntegrations(document.getElementById('crew-hr-integrations'),hr,paintDots);
+      CrewHR.bindAsos(document.getElementById('crew-hr-asos'),hr,paintDots);
+      CrewHR.bindMedicalLeaves(document.getElementById('crew-hr-leaves'),hr,paintDots);
+      CrewHR.bindPpe(document.getElementById('crew-hr-ppe'),hr,paintDots,{onPdf:()=>CrewHR.downloadPpePdf({
+        ...employee,
+        name:document.getElementById('crew-name').value.trim()||employee.name,
+        registration:document.getElementById('crew-registration').value.trim(),
+        cpf:document.getElementById('crew-cpf').value.trim(),
+        internalRole:document.getElementById('crew-role').value.trim(),
+        admissionDate:String((document.getElementById('crew-admission')||{}).value||'').slice(0,10)
+      },hr)});
+      CrewHR.bindOccurrences(document.getElementById('crew-hr-occurrences'),hr,paintDots);
+      paintDots();
+    }
     let vacations=typeof RDO!=='undefined'&&typeof RDO.vacationPeriods==='function'?RDO.vacationPeriods(employee):[];
     const paintVacations=()=>{
       const box=document.getElementById('crew-vacation-box');
@@ -2398,6 +2618,13 @@ Views.colaboradores={
       if(!name) return UI.toast('Informe o nome do colaborador','warn');
       if(registration&&RDO.crewMembers().some(item=>String(item.id)!==String(employee.id)&&U.norm(item.registration)===U.norm(registration)))
         return UI.toast('Esta matrícula já pertence a outro colaborador.','warn');
+      // v4.5.19 - CPF opcional; quando informado, precisa ser valido e unico.
+      const cpfRaw=String((document.getElementById('crew-cpf')||{}).value||'').trim();
+      const cpfDigits=cpfRaw.replace(/\D/g,'');
+      if(cpfDigits&&hasHr&&!CrewHR.validCpf(cpfDigits)) return UI.toast('CPF inválido. Confira os números.','warn',5500);
+      if(cpfDigits&&RDO.crewMembers().some(item=>String(item.id)!==String(employee.id)&&String(item.cpf||'').replace(/\D/g,'')===cpfDigits))
+        return UI.toast('Este CPF já pertence a outro colaborador.','warn',5500);
+      const cpf=cpfDigits&&hasHr?CrewHR.formatCpf(cpfDigits):cpfRaw;
       const admissionValue=String((document.getElementById('crew-admission')||{}).value||'').slice(0,10);
       const inactiveValue=document.getElementById('crew-active').value==='false'
         ?String((document.getElementById('crew-inactive-since')||{}).value||'').slice(0,10):'';
@@ -2412,12 +2639,14 @@ Views.colaboradores={
           createdAt:employee.createdAt||new Date().toISOString(),
           name,
           registration,
+          cpf,
           photo,
           internalRole:document.getElementById('crew-role').value.trim(),
           active:document.getElementById('crew-active').value==='true',
           admissionDate:admissionValue,
           inactiveSince:inactiveValue,
           vacations:vacations.map(item=>({id:String(item.id||U.id()),from:item.from,to:item.to})),
+          ...(hr?CrewHR.serialize(hr):{}),
           updatedAt:new Date().toISOString()
         });
         if(canEditCost&&rawCost!==''){

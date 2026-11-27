@@ -402,3 +402,70 @@
 /* v4.5.16 - colaborador ja alocado em outro RDO do dia, em outro horario */
 .rdo-worker-busy{display:flex;align-items:flex-start;gap:6px;margin-top:8px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text2);font-size:.7rem;line-height:1.35}.rdo-worker-busy[hidden]{display:none}.rdo-worker-busy svg{width:13px;height:13px;flex:0 0 auto;margin-top:1px;color:var(--text3)}
 .rdo-worker-card.busy-conflict{border-color:color-mix(in srgb,var(--red) 58%,var(--border))}.rdo-worker-card.busy-conflict .rdo-worker-busy{border-color:color-mix(in srgb,var(--red) 38%,var(--border));background:var(--red-soft);color:var(--red)}.rdo-worker-card.busy-conflict .rdo-worker-busy svg{color:var(--red)}
+/* v4.5.18 - cadastro do colaborador em abas (Contrato / RH / EPIs / Ocorrencias) */
+.crew-form-tabs{display:flex;width:100%;margin-bottom:14px}
+.crew-form-tabs .tab{position:relative;display:inline-flex;flex:1 1 0;align-items:center;justify-content:center;gap:6px;min-width:0;white-space:nowrap}
+.crew-form-tabs .tab svg{width:15px;height:15px;flex:0 0 auto}
+.crew-tab-dot{display:none;width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.crew-tab-dot.warn{display:inline-block;background:var(--amber)}.crew-tab-dot.danger{display:inline-block;background:var(--red)}
+.crew-form-panel[hidden]{display:none!important}
+.crew-hr-section+.crew-hr-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.crew-hr-section-title{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.crew-hr-section-title svg{width:16px;height:16px;color:var(--text2)}
+.crew-hr-section-title b{font-size:.9rem}
+.crew-hr-section-title small{padding:1px 7px;border:1px solid var(--border);border-radius:var(--radius-badge);color:var(--text3);font-size:.7rem}
+.crew-hr-section-title .btn{margin-left:auto}
+.crew-hr-list{display:grid;gap:6px;margin-bottom:10px}
+.crew-hr-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+.crew-hr-row.editing{border-color:var(--text2)}
+.crew-hr-row>span:first-child{display:flex;min-width:0;flex-direction:column}
+.crew-hr-row>span:first-child b{font-size:.84rem;overflow-wrap:anywhere}
+.crew-hr-row>span:first-child small{margin-top:2px;color:var(--text3);font-size:.72rem;overflow-wrap:anywhere}
+.crew-hr-row .tag{white-space:nowrap}
+.crew-hr-row-actions{display:flex;gap:2px}
+.crew-hr-new{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;padding:10px;border:1px dashed var(--border);border-radius:var(--r);background:var(--surface2)}
+.crew-hr-new label{display:flex;min-width:118px;flex:1 1 118px;flex-direction:column;gap:4px;margin:0;font-size:.74rem;color:var(--text2)}
+.crew-hr-new label.wide{flex:2 1 220px}
+.crew-hr-new input,.crew-hr-new select{width:100%}
+.crew-hr-new-actions{display:flex;gap:6px;margin-left:auto}
+/* aviso de vencimentos e marcacao no cartao */
+.crew-hr-banner{display:flex;width:100%;align-items:center;gap:11px;margin:0 0 12px;padding:11px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);text-align:left;cursor:pointer}
+.crew-hr-banner.warn{border-color:color-mix(in srgb,var(--amber) 45%,var(--border));background:var(--amber-soft)}
+.crew-hr-banner.danger{border-color:color-mix(in srgb,var(--red) 45%,var(--border));background:var(--red-soft)}
+.crew-hr-banner>svg{width:18px;height:18px;flex:0 0 auto}.crew-hr-banner.warn>svg{color:var(--amber)}.crew-hr-banner.danger>svg{color:var(--red)}
+.crew-hr-banner>span:nth-child(2){display:flex;min-width:0;flex:1;flex-direction:column}.crew-hr-banner small{color:var(--text2);font-size:.76rem}
+.crew-hr-banner-cta{display:inline-flex;align-items:center;gap:3px;font-size:.78rem;font-weight:600;white-space:nowrap}.crew-hr-banner-cta svg{width:14px;height:14px}
+.crew-hr-flag{display:inline-flex;align-items:center;gap:4px;margin-top:3px;font-size:.72rem;font-style:normal;font-weight:600;overflow-wrap:anywhere}
+.crew-hr-flag svg{width:12px;height:12px;flex:0 0 auto}
+.crew-hr-flag.warn{color:var(--amber)}.crew-hr-flag.danger{color:var(--red)}
+.crew-hr-alert-list{display:grid;gap:6px}
+.crew-hr-alert-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--r)}
+.crew-hr-alert-row .employee-avatar,.crew-hr-alert-row .avatar-ph{width:36px;height:36px}
+.crew-hr-alert-row>span:nth-child(2){display:flex;min-width:0;flex-direction:column}.crew-hr-alert-row small{color:var(--text3);font-size:.74rem}
+/* navegacao entre fotos do RDO */
+.rdo-photo-preview{position:relative}
+.rdo-photo-nav{position:absolute;top:50%;display:grid;width:42px;height:42px;place-items:center;transform:translateY(-50%);border:1px solid rgba(255,255,255,.22);border-radius:50%;background:rgba(24,24,27,.62);color:#fff;cursor:pointer}
+.rdo-photo-nav:hover{background:rgba(24,24,27,.85)}
+.rdo-photo-nav svg{width:22px;height:22px}
+.rdo-photo-nav.prev{left:10px}.rdo-photo-nav.next{right:10px}
+.rdo-photo-counter{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);padding:3px 10px;border-radius:999px;background:rgba(24,24,27,.68);color:#fff;font-size:.74rem;font-weight:600}
+.rdo-photo-caption{margin-top:8px;color:var(--text2);font-size:.8rem;text-align:center;overflow-wrap:anywhere}
+@media(max-width:760px){
+  .crew-form-tabs{overflow-x:auto}
+  .crew-form-tabs .tab{flex:1 0 auto;padding:6px 10px}
+  .crew-hr-row{grid-template-columns:minmax(0,1fr) auto}
+  .crew-hr-row .tag{grid-column:1;justify-self:start}
+  .crew-hr-row-actions{grid-column:2;grid-row:1/span 2}
+  .crew-hr-new label{flex:1 1 100%}
+  .crew-hr-new-actions{width:100%}.crew-hr-new-actions .btn{flex:1}
+  .crew-hr-alert-row{grid-template-columns:36px minmax(0,1fr) auto}
+  .crew-hr-alert-row>.tag{grid-column:2;justify-self:start}
+  .crew-hr-alert-row>.btn{grid-column:3;grid-row:1/span 2}
+  .rdo-photo-nav{width:36px;height:36px}
+}
+/* v4.5.19 - cartao do colaborador inteiro clicavel */
+.crew-card.clickable{cursor:pointer;transition:border-color .12s ease-out,background .12s ease-out}
+.crew-card.clickable:hover{border-color:var(--text3);background:var(--surface2)}
+.crew-card.clickable:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+/* v4.5.20 - filtro de obra nas medicoes */
+.md-project-filter{min-width:220px;max-width:340px;flex:1 1 260px}.md-project-filter select{width:100%}

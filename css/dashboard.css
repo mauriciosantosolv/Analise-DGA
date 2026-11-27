@@ -149,3 +149,12 @@ kbd{background:var(--surface2);border:1px solid var(--border);border-bottom-widt
 .loading-brand img{display:block;width:64%;height:auto}
 @keyframes co-brand-pulse{0%,100%{transform:scale(.94)}50%{transform:scale(1.06)}}
 @media(prefers-reduced-motion:reduce){.loading-brand{animation:none}}
+/* v4.5.19 - alertas de RH no painel lateral */
+.rb-hr{padding-bottom:14px;border-bottom:1px solid var(--border)}
+.rb-hr-item>svg:first-child{width:15px;height:15px;flex:0 0 auto;color:var(--text3)}
+.rb-hr-item.expired>svg:first-child{color:var(--red)}.rb-hr-item.soon>svg:first-child{color:var(--amber)}
+.rb-hr-status{flex:0 0 auto;max-width:96px;font-size:.68rem;font-weight:700;text-align:right;line-height:1.2}
+.rb-hr-item.expired .rb-hr-status{color:var(--red)}.rb-hr-item.soon .rb-hr-status{color:var(--amber)}
+.rb-hr-summary{display:block;margin:-4px 0 6px;font-size:.72rem;font-weight:700}.rb-hr-summary.danger{color:var(--red)}
+.rb-hr-more{display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text2);font-size:.76rem;font-weight:600;cursor:pointer}
+.rb-hr-more:hover{background:var(--surface2);color:var(--text)}
