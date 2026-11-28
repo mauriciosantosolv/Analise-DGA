@@ -57,7 +57,7 @@ Views.planejamento = {
     }
     return rows.sort((a,b)=>a.date.localeCompare(b.date));
   },
-  eventStyle(projectId){ const c=App.projectColor(projectId); return `background:${c}1F;color:${c};border-left:3px solid ${c}`; },
+  eventStyle(projectId){ const c=App.projectColor(projectId); return `background:${c}1F;color:color-mix(in srgb,${c} 72%,var(--foreground))`; },
   showDay(date, sourceRows=State.planning){
     const rows=sourceRows.filter(x=>x.date===date).sort((a,b)=>b.value-a.value);
     const total=rows.reduce((s,x)=>s+x.value,0);
@@ -91,7 +91,7 @@ Views.planejamento = {
             || `<tr><td colspan="8"><div class="empty"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div></td></tr>`}</tbody></table></div></div>`;
       } else {
         body.innerHTML = items.length ? `<div class="card"><div class="timeline">${items.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
-          <div class="tl-item"><b>${U.date(x.date)}</b> · <span class="tag" style="background:${App.projectColor(x.projectId)}1F;color:${App.projectColor(x.projectId)}">${U.esc(p?p.proposal:'?')}</span> ${U.esc(x.category)}<br>
+          <div class="tl-item"><b>${U.date(x.date)}</b> · <span class="tag" style="background:${App.projectColor(x.projectId)}1F;color:color-mix(in srgb,${App.projectColor(x.projectId)} 72%,var(--foreground))">${U.esc(p?p.proposal:'?')}</span> ${U.esc(x.category)}<br>
           <span style="color:var(--text2)">${U.esc(x.desc||'')}</span> — <b>${U.money2(x.value)}</b></div>`;}).join('')}</div></div>`
           : `<div class="empty card"><i data-lucide="calendar-days"></i><br>Nenhum item planejado.</div>`;
       }

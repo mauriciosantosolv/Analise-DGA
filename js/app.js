@@ -102,7 +102,7 @@ const App = {
     this.go(view);
   },
   projectColor(projectId){
-    const palette = ['#2563EB','#16A34A','#EAB308','#7C3AED','#0891B2','#EA580C','#DB2777','#4F46E5','#65A30D','#DC2626'];
+    const palette = ['#2E67FF','#00A8A7','#00B38C','#FF6C35','#5B6487','#FF2822','#8AA8FF','#A6AC1F','#008F8E','#9AA0B4'];
     const idx = Math.max(0, State.projects.findIndex(p=>p.id===projectId));
     return palette[idx % palette.length];
   },
@@ -225,7 +225,7 @@ const App = {
       const value=metric==='profit'?st.profit:st.balance;
       const positive = value >= 0;
       const label=metric==='profit'?'Lucro estimado':'Saldo orçado';
-      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="${label} · abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'↑':'↓'} ${U.money(value)}</span></button>`;
+      return `<button class="ticker-item ${positive?'positive':'negative'}" onclick="Views.projetos.detail(${U.jsArg(p.id)})" title="${label} · abrir ${U.esc(U.projLabel(p))}"><b>${U.esc(p.proposal||p.name||'Projeto')}</b><span>${positive?'<svg class="ticker-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>':'<svg class="ticker-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>'} ${U.money(value)}</span></button>`;
     }).join('');
     // v4.2.5 - reconstruir o ticker reinicia a animacao do letreiro. Quando o
     // conteudo e o mesmo, deixa como esta: era o "pulo" visivel do rodape a
@@ -357,7 +357,7 @@ const App = {
       <div class="rb-title" style="font-size:.8rem;color:var(--text)"><i data-lucide="bell-ring" style="width:15px;height:15px"></i>&nbsp;Alertas de RH${alerts.length?` · ${alerts.length}`:''}</div>
       ${alerts.length?`${expired?`<small class="rb-hr-summary danger">${expired} vencido${expired===1?'':'s'}</small>`:''}${items}
       ${alerts.length>limit?`<button type="button" class="rb-hr-more" onclick="UI.closeAll();Views.colaboradores.hrAlerts()">Ver todos (${alerts.length})</button>`:''}`
-      :`<small style="color:var(--text3)">Integrações, ASO e EPIs em dia nos próximos ${CrewHR.ALERT_DAYS} dias.</small>`}
+      :`<small style="color:var(--text3)">Nenhum alerta.</small>`}
     </div>`;
   },
   showFutureExpenses(){
@@ -390,7 +390,7 @@ const App = {
       State.projects.forEach(p => { if(U.norm(`${p.proposal} ${p.name} ${p.client}`).includes(q))
         out.push({icon:'hard-hat', label:U.projLabel(p), tag:'Projeto', action:()=>Views.projetos.detail(p.id)}); });
       State.clients.forEach(c => { if(U.norm(c.name).includes(q))
-        out.push({icon:'users', label:c.name, tag:'Cliente', action:()=>Views.clientes.form(c.id)}); });
+        out.push({icon:'building-2', label:c.name, tag:'Cliente', action:()=>Views.clientes.form(c.id)}); });
       const sups = new Set(), catsSeen = new Set();
       State.purchases.forEach(x => {
         if(x.supplier && !sups.has(x.supplier) && U.norm(x.supplier).includes(q)){ sups.add(x.supplier);
@@ -443,6 +443,8 @@ const App = {
 
   applyTheme(t){
     document.documentElement.dataset.theme = t;
+    // v4.5.23 - barra de status do PWA/celular acompanha o tema escolhido no sistema
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta=>{ meta.setAttribute('content', t==='dark'?'#000000':'#fcfcfc'); });
     const btn = document.querySelector('#theme-toggle i');
     document.getElementById('theme-toggle').innerHTML = `<i data-lucide="${t==='dark'?'sun':'moon'}"></i>`;
     U.icons();
@@ -494,22 +496,22 @@ const App = {
     if(typeof Cloud!=='undefined' && Cloud.active()){
       const pending=Cloud.pendingCount();
       const org=Cloud.organization();
-      el.textContent=`v4.5.16 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
-    }else el.textContent='v4.5.16 · dados locais';
+      el.textContent=`v4.5.23 · ${org?org.name:'nuvem conectada'}${pending?` · ${pending} pendente(s)`:''}`;
+    }else el.textContent='v4.5.23 · dados locais';
   },
   showCloudLogin(){
     this.bootShield('auth-gate');
     const old=document.getElementById('cloud-login'); if(old) old.remove();
     const el=document.createElement('div'); el.id='cloud-login'; el.className='cloud-login';
     el.innerHTML=`<div class="cloud-login-card">
-      <div class="cloud-login-brand"><div class="brand-logo"><img src="assets/logo-clique.png" alt="Clique Obras"></div><div><h2>Entrar no Clique Obras</h2><p>Seus dados serão carregados da base segura na nuvem.</p></div></div>
+      <div class="cloud-login-brand"><div class="brand-logo"><img src="assets/logo-clique.png" alt="Clique Obras"></div><div><h2>Entrar no Clique Obras</h2></div></div>
       <form id="cloud-login-form">
         <div><label>E-mail</label><input id="cloud-email" type="email" autocomplete="username" required></div>
         <div><label>Senha</label><input id="cloud-password" type="password" autocomplete="current-password" required></div>
         <div id="cloud-login-error" class="cloud-login-error"></div>
         <button class="btn btn-primary" id="cloud-login-submit" type="submit"><i data-lucide="log-in"></i>Entrar</button>
       </form>
-      <p style="margin-top:14px"><small>O acesso é criado pelo administrador da base. Nenhuma senha é salva pelo Clique Obras.</small></p>
+      <p style="margin-top:14px"></p>
     </div>`;
     document.body.appendChild(el); U.icons();
     document.getElementById('cloud-login-form').onsubmit=async e=>{

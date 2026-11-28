@@ -22,13 +22,31 @@
 const Dash = {
   charts:{},
   destroyCharts(){ Object.values(this.charts).forEach(c=>{try{c.destroy()}catch(e){}}); this.charts = {}; },
-  color(i){ const pal = ['#2563EB','#16A34A','#D97706','#DC2626','#7C3AED','#0891B2','#DB2777','#65A30D','#EA580C','#4F46E5','#0D9488','#9333EA']; return pal[i % pal.length]; },
+  // v4.5.21 — cores da identidade (variables.css: --chart-1..5, --secondary).
+  token(name,fallback=''){ try{ return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback; }catch(e){ return fallback; } },
+  palette(){
+    // v4.5.22 — paleta sóbria: azul = orçado/planejado, laranja = realizado,
+    // azul claro = projeção, cinza = saldo. Verde/vermelho só na margem.
+    const dark=document.documentElement.getAttribute('data-theme')==='dark';
+    const t=(n,f)=>this.token(n,f);
+    return {
+      budget:t('--primary','#2e67ff'), spent:t('--destructive','#ff6c35'), projected:dark?'#3f5fae':'#a9bfff',
+      balance:dark?'#3a3d4a':'#cdd0d8', planned:dark?'#3f5fae':'#a9bfff', supplier:dark?'#8a90a6':'#5b6487',
+      positive:dark?'#33c9a6':'#2f9e7f', warning:t('--destructive','#ff6c35'), negative:dark?'#ff534e':'#d93a2b'
+    };
+  },
+  // v4.5.23 — rosca com mais contraste: tons fortes alternando claro/escuro,
+  // ainda dentro da marca (azul, laranja, navy) com apoio de cores firmes.
+  color(i){ const dark=document.documentElement.getAttribute('data-theme')==='dark'; const pal = ['#2E67FF','#FF6C35',dark?'#E4E6EE':'#0E142B','#00A39A','#D93A2B','#F2B705','#1B3784','#8E5BD9','#5B6487','#B4441F']; return pal[i % pal.length]; },
   chartDefaults(){
     if(typeof Chart === 'undefined') return; // CDN indisponível: segue sem gráficos
     const cs = getComputedStyle(document.body);
-    Chart.defaults.font.family = 'Inter';
+    Chart.defaults.font.family = "'Open Sans', sans-serif";
     Chart.defaults.color = cs.getPropertyValue('--text2').trim();
     Chart.defaults.borderColor = cs.getPropertyValue('--border2').trim();
+    Chart.defaults.elements.bar.borderRadius = 3;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.pointStyle = 'rectRounded';
   },
   trendIcon(t){
     return t==='up' ? '<span class="trend-up" title="Gastando acima do esperado">⬆</span>'
@@ -88,7 +106,7 @@ const Dash = {
   projectFilterForm(){
     const selected=new Set(State.selectedProjectIds());
     UI.modal({title:'Filtrar projetos',wide:true,body:`
-      <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Selecione somente os projetos que deseja comparar no dashboard, gráficos, categorias e gastos futuros. A lista mostra as obras <b>Em andamento</b>.</p>
+      
       <div class="rdo-search project-filter-search"><i data-lucide="search"></i><input id="filter-project-search" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por número, nome ou cliente" aria-label="Buscar projeto"><button type="button" id="filter-project-search-clear" aria-label="Limpar busca" title="Limpar busca"><i data-lucide="x"></i></button></div>
       <div class="project-filter-actions"><button class="btn btn-ghost btn-sm" id="filter-project-all" type="button" title="Marca os projetos visíveis na lista">Selecionar todos</button><button class="btn btn-ghost btn-sm" id="filter-project-none" type="button" title="Desmarca os projetos visíveis na lista">Limpar seleção</button><span class="project-filter-count" id="filter-project-count"></span></div>
       <div class="check-list project-filter-list" id="filter-project-list">${this.projectFilterProjects(selected).map(project=>`
@@ -175,9 +193,9 @@ Dash.projectBanner = function(){
   const st = Biz.projectStats(p, State.filters.category || '');
   return `<div class="card" style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">
     ${logo ? `<img src="${U.esc(logo)}" class="logo-clean" style="width:84px;height:84px;object-fit:contain">`
-           : `<span class="avatar-ph" style="width:84px;height:84px;font-size:1.6rem;border-radius:14px">${U.esc(U.initials(p.client||p.name||p.proposal))}</span>`}
+           : `<span class="avatar-ph" style="width:84px;height:84px;font-size:1.6rem;border-radius:var(--radius-lg)">${U.esc(U.initials(p.client||p.name||p.proposal))}</span>`}
     <div style="flex:1;min-width:220px">
-      <small style="color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.07em">Projeto em análise</small>
+      <small style="color:var(--text3);font-weight:600">Projeto em análise</small>
       <h1 style="margin:2px 0 6px">${U.esc(U.projLabel(p))}</h1>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         ${statusTag(p.status)}<span class="tag tag-gray">${U.esc(p.type||'—')}</span>
@@ -239,7 +257,7 @@ Dash.drill = function(filter){
     <div class="drill-path">${crumbs.map(c=>`<span class="crumb">${U.esc(c)}</span>`).join('<i data-lucide="chevron-right" style="width:13px;height:13px"></i>')}
       <span style="margin-left:auto"><b>${rows.length}</b> lançamentos${overheadRows.length?` + <b>${overheadRows.length}</b> cálculo(s)`:''} · <b>${U.money2(total)}</b></span></div>
     ${overheadRows.length?`<section class="card" style="margin-bottom:14px;padding:14px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px"><div><b>Composição calculada pela base de incidência</b><small style="display:block;margin-top:3px;color:var(--text3)">Percentual aplicado sobre a receita contratada de cada projeto.</small></div><b>${U.money2(overheadTotal)}</b></div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px"><div><b>Composição calculada pela base de incidência</b></div><b>${U.money2(overheadTotal)}</b></div>
       <div class="table-wrap"><table><thead><tr><th>Projeto</th><th class="num">Base de incidência</th><th class="num">Percentual</th><th class="num">Valor calculado</th></tr></thead><tbody>
         ${overheadRows.map(item=>`<tr><td><b>${U.esc(U.projLabel(item.project))}</b></td><td class="num">${U.money2(item.base)}</td><td class="num"><b>${U.pct(item.rate,2)}</b></td><td class="num"><b>${U.money2(item.value)}</b></td></tr>`).join('')}
       </tbody></table></div>
@@ -253,7 +271,7 @@ Dash.drill = function(filter){
         <tr class="clickable" onclick="Dash.showPurchase(${U.jsArg(x.id)})">
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td><td>${U.esc(x.supplier||'—')}</td>
           <td>${U.esc(x.order||'—')}</td>
-          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(x.desc||'—')}</td>
+          <td style="min-width:7rem">${U.esc(x.desc||'—')}</td>
           <td class="num"><b>${U.money2(x.value)}</b></td></tr>`;}).join('')||'<tr><td colspan="6" class="empty-state">Nenhum lançamento manual nesta categoria. O valor acima é calculado pela base de incidência.</td></tr>'}</tbody></table></div></div>`,
     footer:`<button class="btn btn-primary" onclick="UI.close()">Fechar</button>` });
 };
@@ -273,7 +291,7 @@ Dash.simulator = function(projectId){
       <div><label>Outros (%)</label><input id="sim-other" type="number" step="0.1" value="${U.esc(b.other)}"></div>
     </div>
     <div class="kpi-grid" style="margin-top:16px" id="sim-out"></div>
-    <small style="color:var(--text3)">Simulação não altera dados salvos. Valores de referência atuais: lucro ${U.money(s.profit)}, margem ${U.pct(s.marginCurrent)}.</small>`,
+    <small style="color:var(--text3)">Atual: lucro ${U.money(s.profit)} · margem ${U.pct(s.marginCurrent)}</small>`,
     footer:`<button class="btn btn-primary" onclick="UI.close()">Fechar</button>`,
     onOpen(){
       const calc = () => {

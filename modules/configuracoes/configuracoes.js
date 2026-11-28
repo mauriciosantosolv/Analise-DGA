@@ -187,45 +187,45 @@ Views.configuracoes = {
             <input id="cfg-user-name" type="text" maxlength="100" autocomplete="name" value="${U.esc(currentDisplayName)}" placeholder="Digite seu nome">
             <button class="btn btn-primary" id="cfg-user-name-save" type="button"><i data-lucide="check"></i>Salvar meu nome</button>
           </div>
-          <small>Este nome aparece no perfil e para os demais usuários da organização.</small>
+          
         </div>
       </section>`:''}
       <section class="card settings-card settings-card-wide settings-company" id="company-settings-card">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-          <div style="flex:1"><h2>Configurações da empresa</h2><p style="font-size:.84rem;color:var(--text2)">Identidade da organização, logotipo, funcionários e permissões em um único lugar.</p></div>
+          <div style="flex:1"><h2>Configurações da empresa</h2></div>
           ${cloudConnected&&canManageCompany?'<button class="btn btn-primary btn-sm" onclick="Views.configuracoes.inviteForm()"><i data-lucide="user-plus"></i>Convidar usuário</button>':''}
         </div>
         <div class="form-grid">
           <div><label>Nome da empresa</label><input id="cfg-name" maxlength="120" value="${U.esc(cloudConnected?(org?.name||''):(State.settings.companyName||''))}" placeholder="Nome da organização" ${canManageCompany?'':'disabled'}></div>
-          <div><label>CNPJ da empresa</label><input id="cfg-cnpj" inputmode="numeric" maxlength="18" value="${U.esc(U.formatCnpj(State.settings.companyCnpj||''))}" placeholder="00.000.000/0000-00" ${canManageCompany?'':'disabled'}><small>Será exibido nos documentos PDF.</small></div>
+          <div><label>CNPJ da empresa</label><input id="cfg-cnpj" inputmode="numeric" maxlength="18" value="${U.esc(U.formatCnpj(State.settings.companyCnpj||''))}" placeholder="00.000.000/0000-00" ${canManageCompany?'':'disabled'}></div>
           <div class="full" style="display:flex;gap:12px;align-items:center">
             <div id="cfg-logo-preview">${U.safeImageSrc(State.settings.companyLogo)?`<img class="avatar logo-clean" style="width:48px;height:48px" src="${U.esc(U.safeImageSrc(State.settings.companyLogo))}">`:`<span class="avatar-ph" style="width:48px;height:48px"><i data-lucide="zap" style="width:18px;height:18px"></i></span>`}</div>
-            ${canManageCompany?'<button class="btn btn-ghost btn-sm" id="cfg-logo-btn"><i data-lucide="image-plus"></i>Alterar logo</button>':'<small style="color:var(--text3)">Somente proprietário ou administrador pode alterar a identidade da empresa.</small>'}</div>
+            ${canManageCompany?'<button class="btn btn-ghost btn-sm" id="cfg-logo-btn"><i data-lucide="image-plus"></i>Alterar logo</button>':'<small style="color:var(--text3)">Somente proprietário ou administrador pode alterar.</small>'}</div>
           <div class="full company-settings-section">
-            <div class="company-settings-heading"><span><i data-lucide="clock-3"></i></span><div><h3>Jornada padrão dos RDOs</h3><small>Estes valores preenchem todos os colaboradores. O que exceder o limite diário será lançado como hora extra.</small></div></div>
+            <div class="company-settings-heading"><span><i data-lucide="clock-3"></i></span><div><h3>Jornada padrão dos RDOs</h3></div></div>
             <div class="company-shift-grid">
-              <div class="company-shift-subtitle"><b>Segunda a sexta</b><small>Jornada normal e limite diário.</small></div>
+              <div class="company-shift-subtitle"><b>Segunda a sexta</b></div>
               <div><label>Entrada padrão</label><input id="cfg-rdo-start" type="time" value="${U.esc(State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Saída padrão</label><input id="cfg-rdo-end" type="time" value="${U.esc(State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Intervalo (min)</label><input id="cfg-rdo-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60}" ${canManageCompany?'':'disabled'}></div>
-              <div><label>Horas normais/dia</label><input id="cfg-rdo-daily-hours" type="number" min="0.25" max="24" step="0.01" value="${Number(State.settings.rdoDailyHours)||8.8}" ${canManageCompany?'':'disabled'}><small>Ex.: 8,8 horas</small></div>
-              <div class="company-shift-subtitle"><b>Sábado</b><small>Toda a jornada é classificada automaticamente como hora extra de 50%.</small></div>
+              <div><label>Horas normais/dia</label><input id="cfg-rdo-daily-hours" type="number" min="0.25" max="24" step="0.01" value="${Number(State.settings.rdoDailyHours)||8.8}" ${canManageCompany?'':'disabled'}></div>
+              <div class="company-shift-subtitle"><b>Sábado</b><small>HE 50%</small></div>
               <div><label>Entrada sábado</label><input id="cfg-rdo-saturday-start" type="time" value="${U.esc(State.settings.rdoSaturdayStart||State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Saída sábado</label><input id="cfg-rdo-saturday-end" type="time" value="${U.esc(State.settings.rdoSaturdayEnd||State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Intervalo sábado (min)</label><input id="cfg-rdo-saturday-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoSaturdayBreakMinutes))?Number(State.settings.rdoSaturdayBreakMinutes):(Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60)}" ${canManageCompany?'':'disabled'}></div>
               <div></div>
-              <div class="company-shift-subtitle"><b>Domingo</b><small>Toda a jornada é classificada automaticamente como hora extra de 100%.</small></div>
+              <div class="company-shift-subtitle"><b>Domingo</b><small>HE 100%</small></div>
               <div><label>Entrada domingo</label><input id="cfg-rdo-sunday-start" type="time" value="${U.esc(State.settings.rdoSundayStart||State.settings.rdoShiftStart||'07:30')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Saída domingo</label><input id="cfg-rdo-sunday-end" type="time" value="${U.esc(State.settings.rdoSundayEnd||State.settings.rdoShiftEnd||'17:18')}" ${canManageCompany?'':'disabled'}></div>
               <div><label>Intervalo domingo (min)</label><input id="cfg-rdo-sunday-break" type="number" min="0" max="360" step="5" value="${Number.isFinite(Number(State.settings.rdoSundayBreakMinutes))?Number(State.settings.rdoSundayBreakMinutes):(Number.isFinite(Number(State.settings.rdoShiftBreakMinutes))?Number(State.settings.rdoShiftBreakMinutes):60)}" ${canManageCompany?'':'disabled'}></div>
               <div></div>
-              <div class="company-shift-subtitle"><b>Adicional noturno</b><small>O período termina às 05:00. O percentual configurado incide sobre o custo-hora normal da mão de obra.</small></div>
+              <div class="company-shift-subtitle"><b>Adicional noturno</b><small>Até 05:00</small></div>
               <div><label>Início do adicional</label><input id="cfg-rdo-night-start" type="time" value="${U.esc(State.settings.rdoNightStart||'22:00')}" ${canManageCompany?'':'disabled'}></div>
-              <div><label>Percentual adicional</label><input id="cfg-rdo-night-premium" type="number" min="0" max="300" step="0.01" value="${Number.isFinite(Number(State.settings.rdoNightPremiumPct))?Number(State.settings.rdoNightPremiumPct):20}" ${canManageCompany?'':'disabled'}><small>Ex.: 20%</small></div>
+              <div><label>Percentual adicional</label><input id="cfg-rdo-night-premium" type="number" min="0" max="300" step="0.01" value="${Number.isFinite(Number(State.settings.rdoNightPremiumPct))?Number(State.settings.rdoNightPremiumPct):20}" ${canManageCompany?'':'disabled'}></div>
             </div>
           </div>
           <div class="full company-settings-section">
-            <div class="company-settings-heading"><span><i data-lucide="file-image"></i></span><div><h3>Papel timbrado dos PDFs</h3><small>Envie uma imagem JPG ou PNG em proporção A4. A escala será preservada no RDO, na medição e nos relatórios do dashboard.</small></div></div>
+            <div class="company-settings-heading"><span><i data-lucide="file-image"></i></span><div><h3>Papel timbrado dos PDFs</h3></div></div>
             <div class="letterhead-control">
               <div id="cfg-letterhead-preview">${U.safeImageSrc(State.settings.pdfLetterhead)?`<img src="${U.esc(U.safeImageSrc(State.settings.pdfLetterhead))}" alt="Prévia do papel timbrado">`:'<span><i data-lucide="image"></i>Sem papel timbrado</span>'}</div>
               ${canManageCompany?`<div><button class="btn btn-ghost btn-sm" id="cfg-letterhead-btn" type="button"><i data-lucide="upload"></i>${State.settings.pdfLetterhead?'Substituir imagem':'Adicionar JPG/PNG'}</button>${State.settings.pdfLetterhead?'<button class="btn btn-ghost btn-sm" id="cfg-letterhead-remove" type="button"><i data-lucide="trash-2"></i>Remover</button>':''}</div>`:''}
@@ -235,13 +235,13 @@ Views.configuracoes = {
         ${canManageCompany?`<div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button class="btn btn-primary" id="cfg-company-save"><i data-lucide="check"></i>Salvar empresa</button></div>`:''}
         ${cloudConnected?`<div class="settings-company-team">
-          <div style="margin:20px 0 8px"><h3>Funcionários e acessos</h3><p style="font-size:.84rem;color:var(--text2)">${canManageCompany?'Gerencie os usuários e o acesso aos módulos da empresa.':'Esta área é administrada somente pelo proprietário e pelos administradores.'}</p></div>
+          <div style="margin:20px 0 8px"><h3>Funcionários e acessos</h3></div>
           <div id="team-content"><div class="empty"><i data-lucide="loader-2"></i><br>Carregando equipe…</div></div>
         </div>`:''}
       </section>
       <section class="card settings-card settings-card-wide settings-ticker">
         <h2 style="margin-bottom:6px">Projetos no ticker financeiro</h2>
-        <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha os projetos e o indicador exibido na faixa superior do sistema.</p>
+        
         <div style="max-width:360px;margin-bottom:12px"><label>Indicador do ticker</label><select id="ticker-metric" ${canEditTicker?'':'disabled'}><option value="budget_balance" ${State.settings.tickerMetric!=='profit'?'selected':''}>Saldo do orçamento</option><option value="profit" ${State.settings.tickerMetric==='profit'?'selected':''}>Lucro estimado</option></select></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
           <button class="btn btn-ghost btn-sm" id="ticker-all" ${canEditTicker?'':'disabled'}>Selecionar todos</button>
@@ -249,7 +249,7 @@ Views.configuracoes = {
         </div>
         <div class="check-list" id="ticker-projects">
           ${State.projects.map(p=>`<label class="check-item"><input type="checkbox" value="${U.esc(p.id)}" ${tickerSelected.has(p.id)?'checked':''} ${canEditTicker?'':'disabled'}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||p.client||'')}</small></span></label>`).join('')
-            || '<small style="color:var(--text3)">Cadastre um projeto para configurar o ticker.</small>'}
+            || '<small style="color:var(--text3)">Nenhum projeto cadastrado.</small>'}
         </div>
         ${canEditTicker?'<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" id="ticker-save"><i data-lucide="check"></i>Salvar ticker</button></div>':''}
       </section>
@@ -258,18 +258,18 @@ Views.configuracoes = {
         <h2 style="margin-bottom:6px">Base de dados em nuvem</h2>
         ${cloudConnected?`<p style="font-size:.84rem;color:var(--text2)">Conectado como <b>${U.esc((Cloud.user()||{}).email||'usuário autenticado')}</b>. ${Cloud.pendingCount()?`Há ${Cloud.pendingCount()} alteração(ões) aguardando sincronização.`:'Todos os registros locais estão sincronizados.'}</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="App.syncCloudNow()"><i data-lucide="upload-cloud"></i>Sincronizar agora</button><button class="btn btn-ghost btn-sm" onclick="App.logoutCloud()"><i data-lucide="log-out"></i>Sair neste aparelho</button></div>`
-          :`<p style="font-size:.84rem;color:var(--text2)">A nuvem ainda não está ativa. Siga o arquivo <b>README-INSTALACAO-NUVEM.md</b> antes de publicar a versão definitiva.</p>`}
+          :`<p style="font-size:.84rem;color:var(--text2)">Nuvem não configurada.</p>`}
       </section>
       <section class="card settings-card settings-card-wide">
         <h2 style="margin-bottom:6px">Modelos das bases financeiras</h2>
-        <p style="font-size:.84rem;color:var(--text2);margin-bottom:14px">Cada base mantém seu próprio modelo. A substituição salva apenas os cabeçalhos e o mapeamento; nenhum lançamento já importado é alterado ou apagado.</p>
+        
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
           ${Object.entries(Importer.KIND_LABELS).map(([kind,label])=>{const m=(State.settings.importMappings||{})[kind];const learned=m&&m.fields?Object.values(m.fields).filter(Boolean):[];return `<div class="card" style="padding:13px;background:var(--surface2)"><b>${label}</b><small style="display:block;color:var(--text3);margin:5px 0 10px">${m?`Modelo: ${U.esc(m.fileName)}<br>${learned.length} coluna(s) reconhecida(s) · salvo em ${U.date(m.savedAt)}`:'Reconhecimento padrão por cabeçalho'}</small><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="Importer.pickModel('${kind}')"><i data-lucide="upload"></i>${m?'Substituir':'Cadastrar'} modelo</button>${m?`<button class="btn btn-ghost btn-sm" onclick="Importer.clearModel('${kind}')">Remover</button>`:''}</div></div>`;}).join('')}
         </div>
       </section>
       <section class="card settings-card settings-card-wide">
         <h3 style="margin-bottom:8px">Mão de obra e planejamento</h3>
-        <p style="font-size:.84rem;color:var(--text2);margin-bottom:10px">A partir da versão 4.0.2 todo RDO aprovado e toda planilha de mão de obra importada abatem o planejamento automaticamente. Use o botão abaixo apenas uma vez, se quiser aplicar o mesmo abatimento aos RDOs que já estavam aprovados antes da atualização.</p>
+        
         <div style="display:flex;gap:9px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="Views.configuracoes.repairLaborPlanning()"><i data-lucide="calendar-check"></i>Abater RDOs aprovados antes da v4.0.2</button>
         </div>
@@ -492,7 +492,7 @@ Views.configuracoes = {
   async loadTeam(){
     const box=document.getElementById('team-content'); if(!box) return;
     if(!Cloud.canManageUsers()){
-      box.innerHTML='<div class="permission-banner" style="margin-top:12px"><i data-lucide="shield"></i><span>Somente o proprietário e os administradores podem gerenciar funcionários e permissões.</span></div>';
+      box.innerHTML='<div class="permission-banner" style="margin-top:12px"><i data-lucide="shield"></i><span>Somente proprietário ou administrador.</span></div>';
       U.icons(); return;
     }
     try{
@@ -536,7 +536,7 @@ Views.configuracoes = {
       </div>`).join('')}</div>
       <div style="display:flex;gap:22px;margin-top:10px;color:var(--text2);font-size:.78rem"><span>1ª caixa: visualizar</span><span>2ª caixa: editar</span></div>
       <div class="permission-projects">
-        <div class="permission-projects-head"><span><b>Projetos disponíveis no RDO</b><small>Somente estes projetos aparecem no preenchimento do diário.</small></span>
+        <div class="permission-projects-head"><span><b>Projetos disponíveis no RDO</b></span>
           <div><button class="btn btn-ghost btn-sm" type="button" id="perm-projects-all">Todos</button><button class="btn btn-ghost btn-sm" type="button" id="perm-projects-none">Nenhum</button></div>
         </div>
         <div class="check-list permission-project-list" id="member-rdo-projects">
@@ -621,8 +621,8 @@ Views.configuracoes = {
         <div><label>E-mail do usuário *</label><input id="member-email" type="email" placeholder="usuario@empresa.com.br"></div>
         <div><label>Perfil</label><select id="member-role"><option value="viewer">Leitor</option><option value="editor">Editor</option><option value="${this.RDO_ONLY_ROLE}">${this.RDO_ONLY_LABEL}</option>${adminOption}</select></div>
       </div>
-      <p id="member-role-hint" hidden style="font-size:.83rem;color:var(--text2);margin-bottom:10px;padding:9px 11px;border-left:3px solid var(--blue,#2563eb);background:var(--surface2)">O <b>${this.RDO_ONLY_LABEL}</b> só enxerga o menu <b>Diários de Obra</b> e os projetos marcados abaixo. Ele não vê custos, valores de venda, medições nem qualquer outro cadastro — mas o PDF que ele gera sai com o timbrado, os logotipos, os CNPJs e a função vendida ao cliente.</p>
-      <p style="font-size:.83rem;color:var(--text2);margin-bottom:10px">Para uma conta nova, o CliqueObras enviará o link de convite por e-mail. Se a pessoa já tiver conta, o acesso será liberado no próximo login.</p>
+      <p id="member-role-hint" hidden class="role-hint">O <b>${this.RDO_ONLY_LABEL}</b> só vê os Diários de obra dos projetos marcados.</p>
+      
       ${this.permissionControls(defaults,'viewer')}`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="member-invite-save"><i data-lucide="send"></i>Criar vínculo</button>',
       onOpen:()=>{
@@ -661,7 +661,7 @@ Views.configuracoes = {
     const adminOption=Cloud.role()==='owner'?`<option value="admin" ${member.role==='admin'?'selected':''}>Administrador</option>`:'';
     UI.modal({title:`Permissões — ${U.esc(profile.full_name||profile.email||'Usuário')}`,wide:true,body:`
       <div class="form-grid" style="margin-bottom:14px"><div><label>Perfil</label><select id="member-role"><option value="viewer" ${!currentIsRdoOnly&&member.role==='viewer'?'selected':''}>Leitor</option><option value="editor" ${!currentIsRdoOnly&&member.role==='editor'?'selected':''}>Editor</option><option value="${this.RDO_ONLY_ROLE}" ${currentIsRdoOnly?'selected':''}>${this.RDO_ONLY_LABEL}</option>${adminOption}</select></div><div><label>E-mail</label><input value="${U.esc(profile.email||'')}" disabled></div></div>
-      <p id="member-role-hint" ${currentIsRdoOnly?'':'hidden'} style="font-size:.83rem;color:var(--text2);margin-bottom:10px;padding:9px 11px;border-left:3px solid var(--blue,#2563eb);background:var(--surface2)">O <b>${this.RDO_ONLY_LABEL}</b> só enxerga o menu <b>Diários de Obra</b> e os projetos marcados abaixo.</p>
+      <p id="member-role-hint" ${currentIsRdoOnly?'':'hidden'} class="role-hint">O <b>${this.RDO_ONLY_LABEL}</b> só vê os Diários de obra dos projetos marcados.</p>
       ${this.permissionControls(member.permissions,currentIsRdoOnly?this.RDO_ONLY_ROLE:member.role)}`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="member-permission-save"><i data-lucide="check"></i>Salvar permissões</button>',
       onOpen:()=>{
@@ -756,16 +756,16 @@ Views.backup = {
       <div class="kpi-grid">${Object.entries(counts).map(([k,v])=>`<div class="kpi"><div class="k-label">${k}</div><div class="k-value">${v}</div></div>`).join('')}</div>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
         <div class="card"><h3 style="margin-bottom:8px"><i data-lucide="download" style="width:16px;height:16px"></i> Backup em JSON</h3>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Exporta todo o banco de dados para um arquivo JSON. Guarde em local seguro.</p>
+          
           <button class="btn btn-primary btn-sm" onclick="Backup.export()">Exportar Backup</button></div>
         <div class="card"><h3 style="margin-bottom:8px"><i data-lucide="upload" style="width:16px;height:16px"></i> Restaurar Backup</h3>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Mescla um backup JSON com o banco atual. Nada é apagado.</p>
+          
           <button class="btn btn-ghost btn-sm" onclick="Backup.restore()">Restaurar</button></div>
         <div class="card"><h3 style="margin-bottom:8px"><i data-lucide="file-spreadsheet" style="width:16px;height:16px"></i> Exportar Banco (Excel)</h3>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Gera um Excel com todas as tabelas em abas separadas.</p>
+          
           <button class="btn btn-ghost btn-sm" onclick="Views.backup.fullExcel()">Exportar Excel</button></div>
         <div class="card"><h3 style="margin-bottom:8px"><i data-lucide="history" style="width:16px;height:16px"></i> Snapshot Automático</h3>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Cópia diária dos dados guardada neste navegador. ${(()=>{ try{ const t = +localStorage.getItem('ccf_snap_time'); return t ? 'Último: ' + U.date(t) : 'Ainda não criado.'; }catch(e){ return '—'; } })()}</p>
+          <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">${(()=>{ try{ const t = +localStorage.getItem('ccf_snap_time'); return t ? 'Último: ' + U.date(t) : 'Ainda não criado.'; }catch(e){ return '—'; } })()}</p>
           <button class="btn btn-ghost btn-sm" onclick="Views.backup.restoreSnapshot()">Restaurar Snapshot</button></div>
       </div>`;
     U.icons();

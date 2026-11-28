@@ -27,7 +27,7 @@ Views.orcamentos = {
         <div class="spacer"></div>
         <button class="btn btn-ghost" onclick="Exports.table('budgets')"><i data-lucide="download"></i>Exportar</button>
       </div>
-      <div class="drop-zone" id="dz-budget"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de orçamentos aqui</b><br><small>Formato: PROJETO · DESCRIÇÃO · VALOR ORÇADO — os dados são somados, nunca substituídos</small></div>
+      <div class="drop-zone" id="dz-budget"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de orçamentos aqui</b><br></div>
       <div class="section-title"><h2>Orçamentos por Projeto</h2></div>
       ${Object.keys(byProj).length ? Object.entries(byProj).map(([pid, items]) => {
         const p = State.projects.find(x=>x.id===pid);

@@ -300,7 +300,7 @@
   body.printing-crewplan #modal-overlay,
   body.printing-crewplan #toasts,
   body.printing-crewplan .loading-overlay{display:none!important}
-  body.printing-crewplan #crewplan-print-report{display:block!important;width:100%;padding:0;color:#27272a;background:#fff;font-family:Inter,Arial,sans-serif;page:crewplan-report}
+  body.printing-crewplan #crewplan-print-report{display:block!important;width:100%;padding:0;color:#27272a;background:#fff;font-family:'Open Sans',Arial,sans-serif;page:crewplan-report}
   /* v4.5.4 — cabeçalho de UMA linha. O que era um bloco de 14 mm com três
      linhas virou 9 mm: cada milímetro aqui é um milímetro a mais de gráfico. */
   .crewplan-print-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding-bottom:5px;border-bottom:1.5px solid #27272a}

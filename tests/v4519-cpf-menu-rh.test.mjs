@@ -53,7 +53,7 @@ test('menu recolhivel: so no computador, faixa de icones, sem animar o grid', ()
 });
 
 test('painel lateral: alertas de RH acima dos gastos futuros', () => {
-  assert.ok(index.indexOf('id="rightbar-hr"') < index.indexOf('Gastos Futuros'));
+  assert.ok(index.indexOf('id="rightbar-hr"') < index.indexOf('Gastos futuros'));
   assert.ok(appSource.includes('hrBox.innerHTML=this.hrAlertsMarkup(5)'));
   assert.ok(appSource.includes("Cloud.canViewStore('crew')"));
   assert.ok(appSource.includes('${this.hrAlertsMarkup(5)}${sections.map'), 'tambem no botao de gastos previstos (tela menor)');

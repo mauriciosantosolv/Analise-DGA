@@ -43,7 +43,7 @@ Views.clientes = {
           ${c.email?`<i data-lucide="mail" style="width:13px;height:13px"></i> ${U.esc(c.email)}<br>`:''}
           <span class="tag tag-blue" style="margin-top:6px">${projs.length} projeto(s) · ${U.money(revenue)}</span>
           <span class="tag ${c.paymentTerm?'tag-gray':'tag-amber'}" style="margin-top:6px">${c.paymentTerm?`${U.esc(String(c.paymentTerm))} DDL`:'Sem condição de pagamento'}</span></div></div>`;
-    }).join('') || `<div class="empty card" style="grid-column:1/-1"><i data-lucide="users"></i><br>Nenhum cliente cadastrado.</div>`;
+    }).join('') || `<div class="empty card" style="grid-column:1/-1"><i data-lucide="building-2"></i><br>Nenhum cliente cadastrado.</div>`;
     U.icons();
   },
   form(id){
@@ -58,7 +58,7 @@ Views.clientes = {
         <div><label>Contato</label><input id="cl-contact" value="${U.esc(c.contact)}"></div>
         <div><label>Telefone</label><input id="cl-phone" value="${U.esc(c.phone)}"></div>
         <div class="full"><label>Email</label><input id="cl-email" value="${U.esc(c.email)}"></div>
-        <div class="full"><label>Condição de Pagamento *</label><select id="cl-term">${[30,60,90].map(days=>`<option value="${days}" ${Number(c.paymentTerm)===days?'selected':''}>${days} DDL — recebimento ${days} dias após o faturamento</option>`).join('')}</select><small>Usada para calcular a data prevista de recebimento das previsões deste cliente.</small></div>
+        <div class="full"><label>Condição de Pagamento *</label><select id="cl-term">${[30,60,90].map(days=>`<option value="${days}" ${Number(c.paymentTerm)===days?'selected':''}>${days} DDL — recebimento ${days} dias após o faturamento</option>`).join('')}</select></div>
         <div class="full"><label>Observações</label><textarea id="cl-notes" rows="2">${U.esc(c.notes)}</textarea></div>
       </div>`,
       footer:`${id?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.clientes.remove(${U.jsArg(id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}

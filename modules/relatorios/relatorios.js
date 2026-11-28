@@ -24,34 +24,34 @@ Views.relatorios = {
            ['purchases','Relatório Financeiro','Todos os lançamentos de compras com fornecedor, categoria e datas.','wallet'],
            ['budgets','Relatório de Orçamentos','Orçado por projeto e categoria com pesos percentuais.','calculator']]
           .map(([store,title,desc,icon])=>`
-          <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:9px">
-            <span style="width:38px;height:38px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center"><i data-lucide="${icon}"></i></span>
+          <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:16px">
+            <span style="width:38px;height:38px;border-radius:var(--radius-md);background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center"><i data-lucide="${icon}"></i></span>
             <h3>${title}</h3></div>
-            <p style="font-size:.84rem;color:var(--text2);margin-bottom:13px">${desc}</p>
-            <button class="btn btn-primary btn-sm" onclick="Exports.table('${store}')"><i data-lucide="download"></i>Exportar</button></div>`).join('')}
+            
+            <button class="btn btn-ghost btn-sm" onclick="Exports.table('${store}')"><i data-lucide="download"></i>Exportar</button></div>`).join('')}
 
-        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:9px">
-          <span style="width:38px;height:38px;border-radius:10px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center"><i data-lucide="alert-triangle"></i></span>
+        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:16px">
+          <span style="width:38px;height:38px;border-radius:var(--radius-md);background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center"><i data-lucide="alert-triangle"></i></span>
           <h3>Desvios Negativos</h3></div>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:13px">Gera uma análise somente das categorias cujo saldo está negativo nos projetos selecionados.</p>
-          <button class="btn btn-primary btn-sm" onclick="Views.relatorios.negativeDeviationForm()"><i data-lucide="filter"></i>Selecionar projetos</button></div>
-        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:9px">
-          <span style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center"><i data-lucide="printer"></i></span>
+          
+          <button class="btn btn-ghost btn-sm" onclick="Views.relatorios.negativeDeviationForm()"><i data-lucide="filter"></i>Selecionar projetos</button></div>
+        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:16px">
+          <span style="width:38px;height:38px;border-radius:var(--radius-md);background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center"><i data-lucide="printer"></i></span>
           <h3>Dashboard em PDF</h3></div>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:13px">Imprime a visão atual do dashboard (use os filtros antes de exportar).</p>
-          <button class="btn btn-primary btn-sm" onclick="App.go('dashboard');setTimeout(()=>Exports.toPDF(),600)"><i data-lucide="file-down"></i>Gerar PDF</button></div>
-        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:9px">
-          <span style="width:38px;height:38px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-range"></i></span>
+          
+          <button class="btn btn-ghost btn-sm" onclick="App.go('dashboard');setTimeout(()=>Exports.toPDF(),600)"><i data-lucide="file-down"></i>Gerar PDF</button></div>
+        <div class="card"><div style="display:flex;gap:11px;align-items:center;margin-bottom:16px">
+          <span style="width:38px;height:38px;border-radius:var(--radius-md);background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-range"></i></span>
           <h3>Histórico de Alocações</h3></div>
-          <p style="font-size:.84rem;color:var(--text2);margin-bottom:13px">Relatório por projeto, dia e colaborador, com entrada, saída, intervalo e classificação das horas.</p>
-          <button class="btn btn-primary btn-sm" onclick="Views.relatorios.allocationHistoryForm()"><i data-lucide="download"></i>Gerar relatório</button></div>
+          
+          <button class="btn btn-ghost btn-sm" onclick="Views.relatorios.allocationHistoryForm()"><i data-lucide="download"></i>Gerar relatório</button></div>
       </div>`;
     U.icons();
   },
   negativeDeviationForm(){
     const projects = State.projects.filter(p=>p.status!=='Cancelado');
     UI.modal({title:'Relatório de Desvios Negativos', wide:true, body:`
-      <p style="color:var(--text2);margin-bottom:12px">Selecione os projetos que serão analisados. O arquivo mostrará apenas categorias com saldo inferior a zero.</p>
+      
       <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.neg-proj').forEach(x=>x.checked=true)">Marcar todos</button><button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.neg-proj').forEach(x=>x.checked=false)">Limpar</button></div>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:420px;overflow:auto">${projects.map(p=>`<label class="card" style="padding:10px;display:flex;align-items:center;gap:9px;cursor:pointer"><input class="neg-proj" type="checkbox" value="${U.esc(p.id)}" ${State.filters.project===p.id?'checked':''}><span><b>${U.esc(p.proposal||'Projeto')}</b><small style="display:block;color:var(--text3)">${U.esc(p.name||'')}</small></span></label>`).join('')}</div>`,
       footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" onclick="Views.relatorios.exportNegativeDeviations()"><i data-lucide="download"></i>Exportar análise</button>`});
@@ -80,12 +80,12 @@ Views.relatorios = {
     const projects=State.projects.slice().sort((a,b)=>U.projLabel(a).localeCompare(U.projLabel(b),'pt-BR'));
     const today=U.isoDate(new Date());
     UI.modal({title:'Histórico de Alocações',body:`
-      <p style="color:var(--text2);margin-bottom:14px">O arquivo reúne alocados, faltas, atestados, ociosos, folgas e férias. A ociosidade é apurada de segunda a sexta; sábados e domingos trazem apenas o que foi lançado no RDO. O período é obrigatório.</p>
+      
       <div class="form-grid">
         <div class="full"><label>Projeto</label><select id="allocation-project"><option value="">Todos os projetos</option>${projects.map(project=>`<option value="${U.esc(project.id)}">${U.esc(U.projLabel(project))}</option>`).join('')}</select></div>
         <div><label>Data inicial *</label><input id="allocation-date-from" type="date" value="${U.esc(today)}"></div>
         <div><label>Data final *</label><input id="allocation-date-to" type="date" value="${U.esc(today)}"></div>
-        <div class="full"><label>Status do RDO</label><select id="allocation-status"><option value="">Todos os status</option><option>Rascunho</option><option>Enviado</option><option>Aprovado</option><option>Devolvido</option></select><small>Ao filtrar um status, o arquivo mostra apenas alocações e faltas vinculadas aos RDOs correspondentes.</small></div>
+        <div class="full"><label>Status do RDO</label><select id="allocation-status"><option value="">Todos os status</option><option>Rascunho</option><option>Enviado</option><option>Aprovado</option><option>Devolvido</option></select></div>
       </div>`,footer:`<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" onclick="Views.relatorios.exportAllocationHistory()"><i data-lucide="download"></i>Exportar Excel</button>`});
   },
   // v4.2.18 - sabado e domingo passam a trazer apenas o que foi lancado no

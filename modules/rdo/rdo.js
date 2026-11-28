@@ -730,7 +730,7 @@ const RDO = {
     const labels={created:'Criado',edited:'Editado',submitted:'Enviado',approved:'Aprovado',rejected:'Reprovado',reopened:'Reaberto'};
     const icons={created:'file-plus-2',edited:'pencil',submitted:'send',approved:'badge-check',rejected:'x-circle',reopened:'undo-2'};
     const events=this.auditTrail(rdo).slice().reverse();
-    return `<section class="rdo-audit"><div class="rdo-section-title"><div><h3>Histórico interno</h3><small>Auditoria de ações no sistema. Este histórico não aparece no PDF do cliente.</small></div></div>
+    return `<section class="rdo-audit"><div class="rdo-section-title"><div><h3>Histórico interno</h3></div></div>
       <div class="rdo-audit-list">${events.map(event=>{
         const date=new Date(event.at); const when=isNaN(date)?'Data não informada':date.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
         return `<article><i data-lucide="${icons[event.action]||'history'}"></i><span><b>${U.esc(labels[event.action]||'Atualizado')}</b><small>${U.esc(event.actorName||'Usuário')} · ${U.esc(when)}</small></span></article>`;
@@ -982,7 +982,7 @@ const RDO = {
       body:`<div class="form-grid">
         <div class="full"><label>Comentário da reprovação *</label><textarea id="rdo-rejection-comment" rows="5" maxlength="1200" placeholder="Explique o que precisa ser corrigido antes de um novo envio."></textarea></div>
       </div>
-      <div class="import-log">O diário voltará para edição e o comentário ficará visível ao responsável pelo preenchimento.</div>`,
+      <div class="import-log">O diário volta para edição com o comentário.</div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-danger" id="rdo-reject-confirm"><i data-lucide="x-square"></i>Reprovar diário</button>'
     });
     document.getElementById('rdo-reject-confirm').onclick=async()=>{
@@ -1024,7 +1024,7 @@ const RDO = {
       body:`<div class="form-grid">
         <div class="full"><label>Motivo da reabertura *</label><textarea id="rdo-reopen-reason" rows="4" maxlength="1000" placeholder="O que precisa ser corrigido neste diário."></textarea></div>
       </div>
-      <div class="import-log">O custo da mão de obra deste RDO sai do realizado e volta ao planejamento. O diário fica liberado para edição e precisa ser enviado e aprovado de novo. Fotos e anexos são mantidos.</div>`,
+      <div class="import-log">O custo sai do realizado e o diário volta para edição e nova aprovação.</div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="rdo-reopen-confirm"><i data-lucide="undo-2"></i>Reabrir diário</button>'
     });
     document.getElementById('rdo-reopen-confirm').onclick=async()=>{
@@ -1172,23 +1172,23 @@ const RDO = {
             ['3','Serviço e anexos','camera'],
             ['4','Revisão','badge-check']
           ].map(([step,label,icon])=>`<button type="button" data-rdo-step-target="${step}"><span><i data-lucide="${icon}"></i></span><b>${label}</b></button>`).join('')}
-          <div class="rdo-draft-note"><i data-lucide="shield-check"></i><span><b>Rascunho protegido</b><small>Salve para continuar depois.</small></span></div>
+          <div class="rdo-draft-note"><i data-lucide="shield-check"></i><span><b>Rascunho protegido</b></span></div>
         </aside>
         <div class="rdo-composer-main">
           <section class="rdo-step" data-rdo-step="1">
             ${existing?.status==='Devolvido'&&existing.rejectionComment?`<div class="rdo-rejection-banner"><i data-lucide="alert-triangle"></i><div><b>Correção solicitada</b><p>${U.esc(existing.rejectionComment)}</p></div></div>`:''}
-            <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3><p>Defina o projeto, a data e a frente de serviço.</p></div></div>
+            <div class="rdo-step-heading"><span>01</span><div><h3>Informações do diário</h3></div></div>
             <div class="form-grid">
               <div><label>Projeto *</label><select id="rdo-project" ${existing?'disabled':''}>${projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(existing?.projectId||'')?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
               <div><label>Data do serviço *</label><input id="rdo-date" type="date" value="${U.esc(initialDate)}"></div>
-              <div class="full"><label class="rdo-holiday-toggle"><input id="rdo-holiday" type="checkbox" ${initialHoliday?'checked':''}><span><i data-lucide="calendar-check"></i></span><b>Este dia é feriado</b><small>Feriados são calculados integralmente como hora extra de 100%.</small></label><div class="rdo-day-type" id="rdo-day-type">${U.esc(this.dayTypeLabel(initialDate,initialHoliday))}</div></div>
+              <div class="full"><label class="rdo-holiday-toggle"><input id="rdo-holiday" type="checkbox" ${initialHoliday?'checked':''}><span><i data-lucide="calendar-check"></i></span><b>Este dia é feriado</b></label><div class="rdo-day-type" id="rdo-day-type">${U.esc(this.dayTypeLabel(initialDate,initialHoliday))}</div></div>
               <div class="full"><label>Local / frente de serviço</label><input id="rdo-location" maxlength="180" value="${U.esc(existing?.location||'')}" placeholder="Ex.: Subestação SE-04"></div>
             </div>
-            <div class="rdo-context-card"><i data-lucide="briefcase"></i><div><b>Projeto autorizado para este usuário</b><small>A lista respeita as permissões configuradas pelo administrador.</small></div><i data-lucide="check-circle-2"></i></div>
+            
           </section>
 
           <section class="rdo-step" data-rdo-step="2" hidden>
-            <div class="rdo-step-heading"><span>02</span><div><h3>Equipe e horas trabalhadas</h3><p>O horário geral preenche automaticamente todos os colaboradores selecionados.</p></div></div>
+            <div class="rdo-step-heading"><span>02</span><div><h3>Equipe e horas trabalhadas</h3></div></div>
             <div class="rdo-team-template">
               <label>Entrada<input id="rdo-all-start" type="time" value="${U.esc(sharedEntry.start||defaultShift.start)}"></label>
               <label>Saída<input id="rdo-all-end" type="time" value="${U.esc(sharedEntry.end||defaultShift.end)}"></label>
@@ -1210,17 +1210,17 @@ const RDO = {
           </section>
 
           <section class="rdo-step" data-rdo-step="3" hidden>
-            <div class="rdo-step-heading"><span>03</span><div><h3>Serviço e evidências</h3><p>Descreva o trabalho e registre as fotos do campo.</p></div></div>
+            <div class="rdo-step-heading"><span>03</span><div><h3>Serviço e evidências</h3></div></div>
             <div class="form-grid">
               <div class="full"><label>Serviço realizado *</label><textarea id="rdo-description" rows="5" maxlength="1600" placeholder="Descreva claramente o que foi executado.">${U.esc(existing?.description||'')}</textarea><small class="rdo-char-count"><span id="rdo-description-count">${String(existing?.description||'').length}</span>/1.600 caracteres</small></div>
             </div>
             <div class="rdo-upload-grid">
-              <button class="rdo-upload-card primary" id="rdo-camera-button" type="button"><i data-lucide="camera"></i><b>Tirar foto</b><small>Usar a câmera do celular</small></button>
-              <button class="rdo-upload-card" id="rdo-file-button" type="button"><i data-lucide="paperclip"></i><b>Anexar arquivo</b><small>Foto ou documento PDF</small></button>
+              <button class="rdo-upload-card primary" id="rdo-camera-button" type="button"><i data-lucide="camera"></i><b>Tirar foto</b></button>
+              <button class="rdo-upload-card" id="rdo-file-button" type="button"><i data-lucide="paperclip"></i><b>Anexar arquivo</b></button>
               <input id="rdo-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
               <input id="rdo-file-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
             </div>
-            <div class="rdo-attachments-head"><b id="rdo-attachment-count">0 anexos adicionados</b><small>As fotos serão incluídas no PDF do diário.</small></div>
+            <div class="rdo-attachments-head"><b id="rdo-attachment-count">0 anexos adicionados</b></div>
             <div class="rdo-attachment-list" id="rdo-attachment-list"><div class="rdo-attachment-empty">Nenhuma evidência anexada.</div></div>
             <div class="form-grid">
               <div class="full"><label>Ocorrências e observações <small>Opcional</small></label><textarea id="rdo-notes" rows="3" maxlength="1200" placeholder="Registre atrasos, impedimentos ou outros eventos relevantes.">${U.esc(existing?.notes||'')}</textarea></div>
@@ -1228,7 +1228,7 @@ const RDO = {
           </section>
 
           <section class="rdo-step" data-rdo-step="4" hidden>
-            <div class="rdo-step-heading"><span>04</span><div><h3>Revise antes de enviar</h3><p>Confira as informações que seguirão para aprovação.</p></div></div>
+            <div class="rdo-step-heading"><span>04</span><div><h3>Revise antes de enviar</h3></div></div>
             <div class="rdo-review-grid" id="rdo-review"></div>
             <label class="rdo-confirmation"><input id="rdo-confirmation" type="checkbox"><span><i data-lucide="check"></i></span>Confirmo que revisei os horários, colaboradores, serviço e anexos.</label>
           </section>
@@ -1709,7 +1709,7 @@ const RDO = {
         <span class="rdo-success-icon"><i data-lucide="check"></i></span>
         <small>${U.esc(rdo.number||'Diário de Obra')}</small>
         <h2>Diário enviado para aprovação</h2>
-        <p>O registro ficou disponível para revisão do responsável e está bloqueado para edição enquanto aguarda aprovação.</p>
+        <p>Bloqueado para edição até a aprovação.</p>
         <div><span><i data-lucide="calendar-days"></i>${U.date(rdo.date)}</span><span><i data-lucide="users"></i>${this.visibleEntries(rdo).length} colaboradores presentes</span><span><i data-lucide="clock-3"></i>${total.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</span><span><i data-lucide="paperclip"></i>${attachmentCount} anexos</span></div>
       </section>`,
       footer:`<button class="btn btn-ghost" onclick="RDO.print(${U.jsArg(rdo.id)})"><i data-lucide="file-down"></i>Gerar PDF</button>
@@ -2284,7 +2284,7 @@ const RDO = {
       ${rdo.status==='Devolvido'&&rdo.rejectionComment?`<div class="import-log rdo-rejection-comment"><b>${rdo.reopenedAt&&rdo.reopenedAt===rdo.rejectedAt?'Motivo da reabertura:':'Motivo da reprovação:'}</b> ${U.esc(rdo.rejectionComment)}
         <small>${rdo.rejectedAt?`Registrado em ${U.date(rdo.rejectedAt)}`:''}${rdo.rejectedBy?` por ${U.esc(rdo.rejectedBy)}`:''}</small></div>`:''}
       ${this.auditMarkup(rdo)}
-      <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3><small>Evidências registradas no diário.</small></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
+      <div class="rdo-detail-evidence"><div class="rdo-section-title"><div><h3>Fotos e documentos</h3></div></div><div class="rdo-evidence-grid" id="rdo-detail-attachments"><div class="rdo-attachment-empty">Carregando evidências…</div></div></div>`,
       footer:`${this.canEdit(rdo)?`<button class="btn btn-ghost" onclick="UI.close();RDO.form(${U.jsArg(rdo.id)})"><i data-lucide="pencil"></i>Editar</button>`:''}
         ${rdo.status==='Enviado'&&!this.canReview()&&(typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos'))?`<button class="btn btn-ghost" onclick="UI.close();RDO.returnToDraft(${U.jsArg(rdo.id)})"><i data-lucide="undo-2"></i>Voltar para rascunho</button>`:''}
         ${rdo.status==='Enviado'&&this.canReview()?`<button class="btn btn-danger" onclick="RDO.reject(${U.jsArg(rdo.id)})"><i data-lucide="x-square"></i>Reprovar</button>`:''}
@@ -2299,7 +2299,7 @@ const RDO = {
 };
 
 Views.rdos={
-  title:'Diários de Obra',
+  title:'Diários de obra',
   query:'',
   status:'Todos',
   setStatus(status){ this.status=status; this.render(); },
@@ -2328,7 +2328,6 @@ Views.rdos={
     const returned=searched.filter(x=>x.status==='Devolvido').length;
     const hours=searched.reduce((sum,rdo)=>sum+(rdo.entries||[]).reduce((s,row)=>s+(Number(row.regular)||0)+(Number(row.overtime50)||0)+(Number(row.overtime100)||0),0),0);
     $c().innerHTML=`<div class="toolbar rdo-page-toolbar">
-      <div><h2>Diários de obra</h2><small>Acompanhe o preenchimento, as evidências e o fluxo de aprovação.</small></div>
       <div class="spacer"></div>
       ${RDO.fullAccess()?'<button class="btn btn-ghost" onclick="RDO.dayOffForm()"><i data-lucide="calendar-off"></i>Controlar folgas</button>':''}
       ${typeof Cloud==='undefined'||!Cloud.active()||Cloud.canEditStore('rdos')?'<button class="btn btn-primary" onclick="RDO.form()"><i data-lucide="plus"></i>Novo RDO</button>':''}
@@ -2433,7 +2432,7 @@ Views.colaboradores={
     const normalized=U.norm(this.query);
     const all=RDO.crewMembers().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     const employees=all.filter(employee=>!normalized||(U.norm(`${employee.registration||''} ${employee.name||''} ${employee.internalRole||''} ${employee.cpf||''}`).includes(normalized)||(normalized.replace(/\D/g,'').length>=3&&String(employee.cpf||'').replace(/\D/g,'').includes(normalized.replace(/\D/g,'')))));
-    $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2><small>Colaboradores disponíveis para os diários.</small></div><div class="spacer"></div>
+    $c().innerHTML=`<div class="toolbar"><div><h2>Equipe</h2></div><div class="spacer"></div>
       ${canEdit?'<div class="toolbar-actions"><button class="btn btn-ghost" onclick="Views.colaboradores.rolesForm()"><i data-lucide="briefcase"></i>Funções</button><button class="btn btn-primary" onclick="Views.colaboradores.form()"><i data-lucide="user-plus"></i>Novo colaborador</button></div>':''}</div>
       <div class="crew-filter-panel"><div class="rdo-search"><i data-lucide="search"></i><input id="crew-search" type="search" value="${U.esc(this.query)}" placeholder="Buscar por matrícula, nome, CPF ou cargo" aria-label="Buscar colaboradores">${this.query?'<button id="crew-search-clear" type="button" aria-label="Limpar pesquisa"><i data-lucide="x"></i></button>':''}</div><span>${employees.length} de ${all.length} colaboradores</span></div>
       ${this.hrBanner(all)}
@@ -2442,7 +2441,7 @@ Views.colaboradores={
         <span><b>${U.esc(employee.name||'Colaborador')}</b><small>${employee.registration?`Matrícula ${U.esc(employee.registration)} · `:''}${U.esc(employee.internalRole||'Sem função')}${canViewCost?` · Custo ${U.money(RDO.baseCostFor(employee.id).costRegular)}/h`:''}</small>${typeof CrewHR!=='undefined'?CrewHR.cardFlag(employee):''}</span>
         ${this.statusTag(employee)}
         ${canEdit?`<button class="btn btn-ghost btn-sm" type="button" aria-label="Editar colaborador" onclick="event.stopPropagation();Views.colaboradores.form(${U.jsArg(employee.id)})"><i data-lucide="pencil"></i></button>`:''}
-      </div>`).join('')||'<div class="empty card"><i data-lucide="users"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
+      </div>`).join('')||'<div class="empty card"><i data-lucide="contact"></i><br>Nenhum colaborador encontrado.</div>'}</div>`;
     const search=document.getElementById('crew-search');
     if(search) search.oninput=U.debounce(()=>{
       this.query=search.value; this.render();
@@ -2719,7 +2718,7 @@ Views.valoreshh={
       &&(!this.projectFilter||String(rate.projectId)===String(this.projectFilter))
     ).sort((a,b)=>RDO.projectLabel(a.projectId).localeCompare(RDO.projectLabel(b.projectId)));
     const rateProjects=hhProjects;
-    $c().innerHTML=`<div class="toolbar"><div><h2>Valores de venda por projeto</h2><small>O custo vem do cadastro do colaborador; somente o valor de venda varia por obra.</small></div><div class="spacer"></div>
+    $c().innerHTML=`<div class="toolbar"><div><h2>Valores de venda por projeto</h2></div><div class="spacer"></div>
       ${canEdit?'<button class="btn btn-primary" onclick="Views.valoreshh.form()"><i data-lucide="plus"></i>Configurar valor</button>':''}</div>
       <div class="rate-filter-panel"><label>Filtrar por projeto<select id="rate-project-filter"><option value="">Todos os projetos</option>${rateProjects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(this.projectFilter)?'selected':''}>${U.esc(U.projLabel(project))}</option>`).join('')}</select></label><span>${rows.length} configuração(ões)</span></div>
       <div class="rate-list">${rows.map(rate=>{
@@ -2750,8 +2749,8 @@ Views.valoreshh={
     UI.modal({title:id?'Editar valores':'Configurar valores',wide:true,body:`<div class="form-grid">
       <div><label>Projeto HH *</label><select id="rate-project">${hhProjects.map(p=>`<option value="${U.esc(p.id)}" ${String(p.id)===String(rate.projectId)?'selected':''}>${U.esc(U.projLabel(p))}</option>`).join('')}</select></div>
       <div><label>Colaborador *</label><select id="rate-employee">${employees.filter(x=>x.active!==false||String(x.id)===String(rate.employeeId)).map(employee=>`<option value="${U.esc(employee.id)}" ${String(employee.id)===String(rate.employeeId)?'selected':''}>${U.esc(employee.name)}</option>`).join('')}</select></div>
-      <div><label>Função exibida nos documentos</label><select id="rate-role-mode"><option value="client" ${displayMode==='client'?'selected':''}>Função externa do cliente</option><option value="internal" ${displayMode==='internal'?'selected':''}>Função interna do colaborador</option></select><small>Define a função do PDF do RDO e da medição.</small></div>
-      <div><label>Status do valor HH</label><select id="rate-active"><option value="true" ${rate.active!==false?'selected':''}>Ativo</option><option value="false" ${rate.active===false?'selected':''}>Inativo</option></select><small>Valores inativos não entram em novos cálculos.</small></div>
+      <div><label>Função exibida nos documentos</label><select id="rate-role-mode"><option value="client" ${displayMode==='client'?'selected':''}>Função externa do cliente</option><option value="internal" ${displayMode==='internal'?'selected':''}>Função interna do colaborador</option></select></div>
+      <div><label>Status do valor HH</label><select id="rate-active"><option value="true" ${rate.active!==false?'selected':''}>Ativo</option><option value="false" ${rate.active===false?'selected':''}>Inativo</option></select></div>
       <div class="full" id="rate-role-wrap" ${displayMode==='internal'?'hidden':''}><label>Função externa apresentada ao cliente *</label><input id="rate-role" maxlength="140" value="${U.esc(rate.commercialRole||'')}" placeholder="Ex.: Técnico em Elétrica"></div>
       <div class="full import-log" id="rate-cost-summary">Custo padrão do colaborador: <b>${U.money(costs.costRegular)}/h</b> · HE 50%: <b>${U.money(costs.cost50)}/h</b> · HE 100%: <b>${U.money(costs.cost100)}/h</b>.</div>
       ${field('Venda · hora normal','saleRegular')}

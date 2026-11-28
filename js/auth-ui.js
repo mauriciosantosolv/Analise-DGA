@@ -19,21 +19,18 @@ const AuthUI = (() => {
       <section class="cloud-auth-hero">
         <div class="cloud-auth-brand"><span class="cloud-auth-logo"><img src="assets/logo-clique-branco.png" alt="" width="76" height="59"></span><strong>cliqueobras</strong></div>
         <div class="cloud-auth-message">
-          <span class="cloud-auth-kicker">GESTÃO DE OBRAS</span>
           <h1>Decisões seguras começam com uma obra bem controlada.</h1>
-          <p>Orçamentos, financeiro, planejamento e medições reunidos em um só lugar.</p>
-          <ul><li><i data-lucide="shield-check"></i>Dados protegidos por conta</li><li><i data-lucide="download-cloud"></i>Sincronização automática</li><li><i data-lucide="monitor"></i>Acesso no computador e celular</li></ul>
         </div>
       </section>
       <section class="cloud-auth-panel">
         <div class="cloud-auth-mobile-brand"><span><img src="assets/logo-clique.png" alt=""></span><div><b>cliqueobras</b><small>Gestão segura de obras</small></div></div>
         ${content}
-        <p class="cloud-auth-foot">&copy; ${new Date().getFullYear()} CliqueObras &middot; Ambiente seguro</p>
+        <p class="cloud-auth-foot">&copy; ${new Date().getFullYear()} CliqueObras</p>
       </section>
     </div>`;
   }
   function login(message='',messageType='error'){
-    return shell(`<div class="cloud-auth-heading"><h2>Bem-vindo de volta</h2><p>Entre com seus dados para acessar o painel.</p></div>
+    return shell(`<div class="cloud-auth-heading"><h2>Bem-vindo de volta</h2></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>E-mail<input id="cloud-email" type="email" autocomplete="username" required placeholder="voce@empresa.com.br"></label>
         <label>Senha<input id="cloud-password" type="password" autocomplete="current-password" required placeholder="Digite sua senha"></label>
@@ -41,13 +38,14 @@ const AuthUI = (() => {
         <button class="btn btn-primary cloud-auth-submit" type="submit">Entrar<i data-lucide="arrow-right"></i></button>
       </form>
       <button class="cloud-auth-link" data-mode="recover" type="button">Esqueci minha senha</button>
-      <p class="cloud-auth-hint"><i data-lucide="info"></i><span>Entrou por convite e nunca criou uma senha? Use <b>Esqueci minha senha</b> — o link do e-mail deixa você definir uma.</span></p>
+      <p class="cloud-auth-hint"><i data-lucide="info"></i><span>Entrou por convite? Use <b>Esqueci minha senha</b> para criar a senha.</span></p>
+      
       <div class="cloud-auth-divider"><span>ou</span></div>
       <p class="cloud-auth-switch">Ainda não possui conta? <button class="cloud-auth-signup" data-mode="signup" type="button">Criar uma conta</button></p>`);
   }
   function signup(message='',messageType='error'){
     return shell(`<button class="cloud-auth-back" data-mode="login" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
-      <div class="cloud-auth-heading"><h2>Criar conta</h2><p>Seus dados ficarão isolados dos demais usuários.</p></div>
+      <div class="cloud-auth-heading"><h2>Criar conta</h2></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>Seu nome ou empresa<input id="cloud-name" type="text" autocomplete="organization" required maxlength="100" placeholder="Nome da empresa"></label>
         <label>E-mail<input id="cloud-email" type="email" autocomplete="username" required placeholder="voce@empresa.com.br"></label>
@@ -56,7 +54,7 @@ const AuthUI = (() => {
         ${feedback(message,messageType)}
         <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="user-plus"></i>Criar conta</button>
       </form>
-      <p class="cloud-auth-note"><i data-lucide="mail-check"></i>Você poderá precisar confirmar o endereço pelo e-mail recebido.</p>`);
+      `);
   }
   /* ---------- v4.5.5 — A TELA QUE FALTAVA NO CONVITE ----------
      O link do convite entrega uma SESSÃO VÁLIDA e nenhuma senha. Sem esta
@@ -64,18 +62,18 @@ const AuthUI = (() => {
      o login pede uma senha que nunca chegou a existir, e a única porta que
      restava era "Criar uma conta". Aqui ela define a senha ANTES de entrar. */
   function invite(message='',messageType='error'){
-    return shell(`<div class="cloud-auth-heading"><h2>Crie sua senha</h2><p>Seu acesso já está liberado. Defina uma senha para poder entrar sozinho das próximas vezes.</p></div>
+    return shell(`<div class="cloud-auth-heading"><h2>Crie sua senha</h2></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>Senha<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres"></label>
         <label>Confirmar senha<input id="cloud-password-confirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repita a senha"></label>
         ${feedback(message,messageType)}
         <button class="btn btn-primary cloud-auth-submit" type="submit"><i data-lucide="key-round"></i>Criar senha e entrar</button>
       </form>
-      <p class="cloud-auth-note"><i data-lucide="shield-check"></i>O link do e-mail vale uma vez só. Com a senha criada, você entra pela tela normal sempre que precisar.</p>`);
+      `);
   }
   function recover(message='',messageType='error'){
     return shell(`<button class="cloud-auth-back" data-mode="login" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
-      <div class="cloud-auth-heading"><h2>Recuperar senha</h2><p>Enviaremos um link seguro para criar uma nova senha.</p></div>
+      <div class="cloud-auth-heading"><h2>Recuperar senha</h2></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>E-mail<input id="cloud-email" type="email" autocomplete="username" required placeholder="voce@empresa.com.br"></label>
         ${feedback(message,messageType)}
@@ -83,7 +81,7 @@ const AuthUI = (() => {
       </form>`);
   }
   function reset(message='',messageType='error'){
-    return shell(`<div class="cloud-auth-heading"><h2>Definir nova senha</h2><p>Crie uma senha forte para concluir a recuperação.</p></div>
+    return shell(`<div class="cloud-auth-heading"><h2>Definir nova senha</h2></div>
       <form id="cloud-auth-form" class="cloud-auth-form">
         <label>Nova senha<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres"></label>
         <label>Confirmar nova senha<input id="cloud-password-confirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repita a senha"></label>

@@ -251,11 +251,11 @@ const CashFlow = {
         </tr>`).join('')}</tbody>
       </table></div></div>`:''}
       ${situation.key==='received'
-        ? '<div class="import-log">Esta medição já está quitada. Para reabrir, exclua um dos lançamentos acima.</div>'
+        ? '<div class="import-log">Medição quitada.</div>'
         : `<div class="form-grid">
         <div><label>Valor Recebido *</label><input id="rc-value" type="number" min="0" step="0.01" value="${U.esc(situation.open||'')}"></div>
         <div><label>Data do Recebimento *</label><input id="rc-date" type="date" value="${U.esc(U.isoDate(new Date()))}"></div>
-        <div class="full"><label class="check-item" style="border:none;padding:0"><input id="rc-settles" type="checkbox"><span><b>Encerrar a medição com este lançamento</b><small>Marque quando o saldo restante não será recebido — retenção contratual, desconto ou diferença de arredondamento.</small></span></label></div>
+        <div class="full"><label class="check-item" style="border:none;padding:0"><input id="rc-settles" type="checkbox"><span><b>Encerrar a medição com este lançamento</b></span></label></div>
         <div class="full"><label>Observações</label><textarea id="rc-notes" rows="2" placeholder="Nº do documento, banco, observação da baixa…"></textarea></div>
       </div>
       <div class="import-log" id="rc-warning" style="margin-top:12px" hidden></div>`}`,
@@ -409,7 +409,7 @@ const CashFlow = {
     });
     const total=rows.reduce((sum,item)=>sum+(Number(item.value)||0),0);
     UI.modal({title:'Recebimentos do Omie aguardando conciliação',wide:true,body:`
-      <p style="color:var(--text2);font-size:.85rem;margin-bottom:12px">Cada recebimento precisa ser vinculado manualmente à medição correspondente. O sistema não escolhe por você.</p>
+      
       <div class="drill-path"><span class="crumb">${rows.length} recebimento(s)</span><span style="margin-left:auto"><b>${U.money2(total)}</b></span></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:52vh"><table>
         <thead><tr><th>Vencimento</th><th>Projeto</th><th>Cliente / Documento</th><th>Situação no Omie</th><th class="num">Valor</th><th></th></tr></thead>
@@ -456,7 +456,7 @@ const CashFlow = {
         }).join('')}</select></div>
         <div><label>Valor Recebido *</label><input id="rc-amount" type="number" min="0" step="0.01" value="${U.esc(receipt.pendingAmount?'':receipt.value)}"></div>
         <div><label>Data do Recebimento *</label><input id="rc-when" type="date" value="${U.esc(receipt.date||U.isoDate(new Date()))}"></div>
-        <div class="full"><label class="check-item" style="border:none;padding:0"><input id="rc-close" type="checkbox"><span><b>Encerrar a medição com este lançamento</b><small>Marque quando o saldo restante não será recebido.</small></span></label></div>
+        <div class="full"><label class="check-item" style="border:none;padding:0"><input id="rc-close" type="checkbox"><span><b>Encerrar a medição com este lançamento</b></span></label></div>
         <div class="full"><label>Observações</label><textarea id="rc-obs" rows="2">${U.esc(receipt.notes||'')}</textarea></div>
       </div>
       <div class="import-log" id="rc-diff" style="margin-top:12px" hidden></div>`,
@@ -666,7 +666,7 @@ const CashFlow = {
     if(!rows.length) return '<div class="empty card"><i data-lucide="calendar-x"></i><br>Informe um período válido para ver o previsto x realizado mês a mês.</div>';
     return `<div class="card" style="margin-bottom:16px">
       <h3 style="margin-bottom:2px">Previsto x realizado por mês</h3>
-      <small style="display:block;margin-bottom:10px;color:var(--text3)">Clique em um mês para abrir o detalhamento por projeto.</small>
+      
       <div class="table-scroll"><table>
         <thead><tr><th>Mês</th><th class="num">Execução prevista</th><th class="num">Execução realizada</th><th class="num">Faturamento previsto</th><th class="num">Faturamento realizado</th><th class="num">Recebimento previsto</th><th class="num">Recebimento realizado</th></tr></thead>
         <tbody>${rows.map(row=>`<tr class="clickable" onclick="CashFlow.openMonthBreakdown(${U.jsArg(row.month)})" title="Ver o detalhamento por projeto de ${U.esc(row.label)}">
@@ -871,7 +871,7 @@ const CashFlow = {
       .filter(p=>!State.filters.project||String(p.id)===String(State.filters.project))
       .filter(p=>this.forecasts(p.id).length);
     $c().innerHTML=`<div class="toolbar">
-      <div><h2>Provisões</h2><small>Planeje, por projeto, as execuções, faturamentos e recebimentos futuros — o recebimento segue a condição de pagamento cadastrada no cliente.</small></div>
+      <div><h2>Provisões</h2></div>
       <div class="spacer"></div>
       ${Views.medicoes.canEdit()?'<button class="btn btn-primary" onclick="CashFlow.forecastForm()"><i data-lucide="calendar-plus"></i>Nova Previsão</button>':''}
       <button class="btn btn-ghost" onclick="CashFlow.printProvisionsReport()"><i data-lucide="file-down"></i>Relatório Previsto x Realizado</button>

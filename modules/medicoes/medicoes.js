@@ -93,7 +93,7 @@ Views.medicoes = {
       ?'Todos os períodos'
       :`${U.date(this.periodFrom)} a ${U.date(this.periodTo)}`;
     $c().innerHTML=`<div class="toolbar">
-      <div><h2>Medições e faturamento</h2><small>HH é consolidado pelos RDOs; obra e fornecimento permanecem manuais.</small></div>
+      <div><h2>Medições e faturamento</h2></div>
       <div class="spacer"></div>
       ${this.canEdit()?'<button class="btn btn-primary" onclick="Views.medicoes.form()"><i data-lucide="plus"></i>Nova Medição</button>':''}
       ${this.canEdit()&&pendingOmie?`<button class="btn btn-ghost" onclick="CashFlow.reconcileQueue()"><i data-lucide="link"></i>Conciliar Omie <span class="tag tag-amber">${pendingOmie}</span></button>`:''}
@@ -116,7 +116,7 @@ Views.medicoes = {
       <div class="kpi accent-amber"><div class="k-label"><i data-lucide="clock-3"></i>Aguardando aprovação</div><div class="k-value">${U.money(totalAwaiting)}</div></div>
       <div class="kpi"><div class="k-label"><i data-lucide="file-clock"></i>Saldo a Medir</div><div class="k-value">${U.money(totalRevenue-measuredEver)}</div><div class="k-sub">Medido acumulado: ${U.money(measuredEver)}</div></div>
     </div>
-    <div style="font-size:.78rem;color:var(--text2);margin:-2px 0 12px">Período exibido: <b>${U.esc(periodLabel)}</b> · Saldo a Medir e percentual medido consideram todas as medições já lançadas.</div>
+    <div style="font-size:.78rem;color:var(--text2);margin:-2px 0 12px">Período: <b>${U.esc(periodLabel)}</b></div>
     ${Object.keys(byProj).length?Object.entries(byProj).map(([projectId,items])=>{
       const project=State.projects.find(x=>String(x.id)===String(projectId));
       const measured=items.reduce((sum,m)=>sum+(Number(m.value)||0),0);
@@ -160,7 +160,7 @@ Views.medicoes = {
     UI.modal({
       title:'Nova Medição',
       body:`<div><label>Projeto *</label><select id="measurement-project">${State.projects.map(project=>`<option value="${U.esc(project.id)}" ${String(project.id)===String(State.filters.project||'')?'selected':''}>${U.esc(U.projLabel(project))} · ${U.esc(project.type||'Obra')}</option>`).join('')}</select></div>
-        <div class="import-log" style="margin-top:12px">Projetos HH usarão os RDOs aprovados do período. Nos demais tipos, o valor continua sendo informado manualmente.</div>`,
+        `,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="measurement-continue">Continuar</button>'
     });
     document.getElementById('measurement-continue').onclick=()=>{
@@ -400,7 +400,7 @@ Views.medicoes = {
   adjustmentEditorMarkup(items=[],locked=false){
     const list=Array.isArray(items)?items:[];
     return `<section class="md-adjust" id="md-adjust">
-      <div class="md-adjust-head"><b>Descontos e valores adicionais</b><small>${locked?'Medição faturada: os ajustes não podem mais ser alterados.':'Ex.: materiais levados junto com a mão de obra, desconto comercial.'}</small></div>
+      <div class="md-adjust-head"><b>Descontos e valores adicionais</b>${locked?'<small>Medição faturada.</small>':''}</div>
       <div class="md-adjust-rows" id="md-adjust-rows">${list.map(item=>this.adjustmentRowMarkup(item,locked)).join('')}</div>
       ${locked?'':'<button type="button" class="btn btn-ghost btn-sm" id="md-adjust-add"><i data-lucide="plus"></i>Adicionar ajuste</button>'}
       <div class="md-adjust-summary" id="md-adjust-summary"></div>

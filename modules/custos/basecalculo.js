@@ -15,7 +15,7 @@
 
 /* ---------- BASE DE CÁLCULO ---------- */
 Views.basecalculo = {
-  title:'Base de Cálculo',
+  title:'Base de cálculo',
   render(){
     const b = Biz.baseRates();
     const target = State.settings.marginTarget ?? 10;
@@ -24,9 +24,9 @@ Views.basecalculo = {
     $c().innerHTML = `
       <div class="card" style="max-width:560px">
         <h2 style="margin-bottom:6px">Percentuais por competência</h2>
-        <p style="color:var(--text2);font-size:.86rem;margin-bottom:16px">Cadastre a base válida em cada mês. Obras concluídas guardam a média do período em que estiveram em andamento e não recebem alterações futuras.</p>
+        
         <div class="form-grid">
-          <div class="full"><label>Competência *</label><input id="bc-effective" type="month" value="${currentMonth}"><small>Selecione um mês anterior para cadastrar ou corrigir o histórico.</small></div>
+          <div class="full"><label>Competência *</label><input id="bc-effective" type="month" value="${currentMonth}"></div>
           <div><label>Impostos (%)</label><input id="bc-tax" type="number" step="0.01" value="${U.esc(b.tax||'')}"></div>
           <div><label>Custo Administrativo (%)</label><input id="bc-admin" type="number" step="0.01" value="${U.esc(b.admin||'')}"></div>
           <div><label>Taxas (%)</label><input id="bc-fees" type="number" step="0.01" value="${U.esc(b.fees||'')}"></div>
@@ -38,17 +38,17 @@ Views.basecalculo = {
       </div>
       <div class="card" style="max-width:560px;margin-top:14px">
         <h3>Total de encargos: <b id="bc-total" style="color:var(--blue)"></b></h3>
-        <small style="color:var(--text3)">Exemplo: em um projeto de venda ${U.money(1000000)}, os encargos representam <b id="bc-example"></b>.</small>
+        <b id="bc-example" hidden></b>
       </div>
       <div class="card" style="max-width:760px;margin-top:14px">
         <h3 style="margin-bottom:8px">Histórico mensal</h3>
-        <p style="color:var(--text2);font-size:.84rem;margin-bottom:12px">Clique em uma competência para revisar os percentuais. O sistema mantém no máximo 240 versões.</p>
+        
         <div class="table-wrap"><div class="table-scroll"><table>
           <thead><tr><th>Competência</th><th class="num">Impostos</th><th class="num">Administrativo</th><th class="num">Taxas</th><th class="num">Outros</th><th class="num">Total</th></tr></thead>
           <tbody>${history.map(item=>`<tr class="clickable" onclick="Views.basecalculo.loadCompetence('${item.effectiveFrom.slice(0,7)}')">
             <td><b>${item.effectiveFrom.slice(5,7)}/${item.effectiveFrom.slice(0,4)}</b></td>
             <td class="num">${U.pct(item.rates.tax,2)}</td><td class="num">${U.pct(item.rates.admin,2)}</td><td class="num">${U.pct(item.rates.fees,2)}</td><td class="num">${U.pct(item.rates.other,2)}</td><td class="num"><b>${U.pct(item.rates.total,2)}</b></td>
-          </tr>`).join('')||'<tr><td colspan="6"><div class="empty">O histórico começa quando a primeira competência for salva.</div></td></tr>'}</tbody>
+          </tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nenhuma competência salva.</div></td></tr>'}</tbody>
         </table></div></div>
       </div>`;
     const update = () => {

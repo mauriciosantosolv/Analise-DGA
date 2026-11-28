@@ -176,7 +176,7 @@ const CrewPlan = {
         <b>${U.date(conflict.start)}</b> e <b>${U.date(conflict.end)}</b>.</p>
       <p>Não é possível criar uma nova alocação${nova?` em <b>${nova}</b>`:''} entre
         <b>${U.date(start)}</b> e <b>${U.date(end)}</b> — os períodos se sobrepõem.</p>
-      <small>Ajuste as datas, conclua ou cancele a alocação existente antes de continuar.</small>
+      
     </div>`;
   },
 
@@ -583,7 +583,7 @@ const CrewPlan = {
 
 /* ================= TELA ================= */
 Views.planejamentoequipe = {
-  title:'Planejamento de Colaboradores',
+  title:'Planejamento de colaboradores',
   mode:'alocacoes',
   zoom:'auto',
   refDate:new Date(),
@@ -658,7 +658,6 @@ Views.planejamentoequipe = {
     const {from:periodFrom,to:periodTo}=this.period();
     $c().innerHTML=`
       <div class="toolbar crewplan-toolbar">
-        <div><h2>Planejamento de Colaboradores</h2><small>Mapa futuro da capacidade da equipe: quem está onde, quando fica livre e quem cabe numa obra nova.</small></div>
         <div class="spacer"></div>
         ${canEdit?`<div class="toolbar-actions">
           <button class="btn btn-ghost" onclick="Views.planejamentoequipe.printPlan()"><i data-lucide="printer"></i>PDF do planejamento</button>
@@ -750,7 +749,7 @@ Views.planejamentoequipe = {
       .map(row=>String(row.employeeId))).size;
     const kpi=(label,value,sub,accent,icon)=>`<div class="kpi ${accent||''}">
       <div class="k-label"><i data-lucide="${icon}"></i>${U.esc(label)}</div>
-      <div class="k-value">${value}</div><div class="k-sub">${U.esc(sub)}</div></div>`;
+      <div class="k-value">${value}</div>${sub?`<div class="k-sub">${U.esc(sub)}</div>`:''}</div>`;
     /* v4.5.1 — a escala foi INVERTIDA. Semana cheia é o resultado bom (não há
        custo de ociosidade) e semana vazia é o custo. Verde = cheio, vermelho =
        ocioso. Vale aqui e nas barras da aba Capacidade — e só nelas: no Gantt
@@ -759,11 +758,11 @@ Views.planejamentoequipe = {
     const fillAccent=pct=>pct>=85?'accent-green':pct>=60?'accent-amber':'accent-red';
     box.innerHTML=`<div class="kpi-grid">
       ${kpi('Colaboradores planejados',planned,`de ${reports.length} em tela`,'','users')}
-      ${kpi('Alocados',count('alocado'),'ocupados o período inteiro','accent-blue','briefcase')}
-      ${kpi('Ociosos',count('disponivel'),'sem obra no período — custo','accent-red','user-x')}
-      ${kpi('Parcialmente ociosos',count('parcial'),'têm dias úteis livres','accent-amber','clock')}
-      ${kpi('Com conflito',count('conflito'),'duas obras no mesmo dia','accent-amber','alert-triangle')}
-      ${kpi('Capacidade da equipe',`${teamPct}%`,`${used} de ${capacity} dias úteis ocupados`,fillAccent(teamPct),'gauge')}
+      ${kpi('Alocados',count('alocado'),'','accent-blue','briefcase')}
+      ${kpi('Ociosos',count('disponivel'),'','accent-red','user-x')}
+      ${kpi('Parcialmente ociosos',count('parcial'),'','accent-amber','clock')}
+      ${kpi('Com conflito',count('conflito'),'','accent-amber','alert-triangle')}
+      ${kpi('Capacidade da equipe',`${teamPct}%`,`${used}/${capacity} dias`,fillAccent(teamPct),'gauge')}
     </div>`;
   },
 
@@ -875,7 +874,7 @@ Views.planejamentoequipe = {
         <span><i class="cp-chip cp-chip-partial"></i>Parcial (contorno tracejado)</span>
         <span><i class="cp-chip cp-conflict"></i>Conflito</span>
         <span><i class="cp-chip cp-off"></i>Férias / sem vínculo</span>
-        <small>Somente dias úteis (seg–sex). Sábados e domingos não consomem capacidade.</small>
+        
       </div>
       ${palette.size?`<div class="cp-legend cp-legend-keys"><b>Obras:</b> ${this.projectKeyMarkup(palette,'cp-obra')}</div>`:''}
       <div class="cp-grid-scroll"><div class="cp-grid">
@@ -1200,7 +1199,7 @@ Views.planejamentoequipe = {
       return '<div class="empty card"><i data-lucide="gauge"></i><br>Sem dias úteis ou sem colaboradores no período selecionado.</div>';
     return `<div class="card">
       <h3>Capacidade da equipe — ${U.esc(this.periodLabel())}</h3>
-      <small class="cp-muted">Percentual dos dias úteis da equipe já comprometidos com obras planejadas. <b>Verde = semana cheia</b> (sem custo de ociosidade); <b>vermelho = semana vazia</b> (dias pagos sem obra). Dias de férias, antes da admissão e após o desligamento saem da conta.</small>
+      <small class="cp-muted"><b>Verde</b> semana cheia · <b>Vermelho</b> semana vazia</small>
       <div class="cp-capacity">
         ${buckets.map((bucket,index)=>`<div class="cp-capacity-row">
           <span class="cp-capacity-label"><b>Semana ${index+1}</b><small>${U.date(bucket.days[0])} → ${U.date(bucket.days[bucket.days.length-1])}</small></span>
@@ -1230,7 +1229,7 @@ Views.planejamentoequipe = {
         <div><label for="cp-role">Função/cargo</label><select id="cp-role"><option value="">Usar a função do cadastro</option>${CrewPlan.roleNames().map(name=>`<option value="${U.esc(name)}" ${U.norm(row.role)===U.norm(name)?'selected':''}>${U.esc(name)}</option>`).join('')}</select></div>
         <div><label for="cp-status">Status</label><select id="cp-status">${CrewPlan.statuses.map(status=>`<option value="${U.esc(status)}" ${row.status===status?'selected':''}>${U.esc(status)}</option>`).join('')}</select></div>
         <div class="full"><label for="cp-notes">Observação</label><textarea id="cp-notes" rows="2">${U.esc(row.notes||'')}</textarea></div>
-        <div class="full"><div class="cp-hint" id="cp-hint"><i data-lucide="info"></i><span>Somente dias úteis (segunda a sexta) consomem capacidade.</span></div></div>
+        <div class="full"><div class="cp-hint" id="cp-hint"><i data-lucide="info"></i></div></div>
       </div>`,
       footer:`${existing?`<button class="btn btn-danger" style="margin-right:auto" onclick="Views.planejamentoequipe.remove(${U.jsArg(existing.id)})"><i data-lucide="trash-2"></i>Excluir</button>`:''}
         <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>
@@ -1241,7 +1240,7 @@ Views.planejamentoequipe = {
           const end=document.getElementById('cp-end').value;
           const hint=document.getElementById('cp-hint');
           const days=CrewPlan.businessDays(start,end);
-          if(hint) hint.innerHTML=`<i data-lucide="info"></i><span>${days?`<b>${days}</b> dia(s) útil(eis) no período — sábados e domingos não consomem capacidade.`:'Informe um período válido (a data final não pode ser anterior à inicial).'}</span>`;
+          if(hint) hint.innerHTML=`<i data-lucide="info"></i><span>${days?`<b>${days}</b> dia(s) útil(eis)`:'Data final anterior à inicial.'}</span>`;
           U.icons();
         };
         ['cp-start','cp-end'].forEach(elId=>{
@@ -1486,7 +1485,7 @@ Views.planejamentoequipe = {
   wizardStep1(){
     const wizard=this.wizard;
     return `<div class="form-grid">
-      <div class="full"><label for="cp-wz-project">Obra *</label><select id="cp-wz-project"><option value="">Selecione uma obra cadastrada…</option>${CrewPlan.planProjects().map(project=>`<option value="${U.esc(project.id)}" ${wizard.projectId===project.id?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select><small class="cp-muted">A obra vem do cadastro de Projetos — o assistente não cria obra nova.</small></div>
+      <div class="full"><label for="cp-wz-project">Obra *</label><select id="cp-wz-project"><option value="">Selecione uma obra cadastrada…</option>${CrewPlan.planProjects().map(project=>`<option value="${U.esc(project.id)}" ${wizard.projectId===project.id?'selected':''}>${U.esc(project.label)}</option>`).join('')}</select></div>
       <div><label for="cp-wz-start">Data prevista de início *</label><input id="cp-wz-start" type="date" value="${U.esc(wizard.start)}"></div>
       <div><label for="cp-wz-mode">Definir o término por</label><select id="cp-wz-mode"><option value="date" ${wizard.useDuration?'':'selected'}>Data de término</option><option value="duration" ${wizard.useDuration?'selected':''}>Duração em dias úteis</option></select></div>
       <div id="cp-wz-end-wrap" ${wizard.useDuration?'hidden':''}><label for="cp-wz-end">Data prevista de término *</label><input id="cp-wz-end" type="date" value="${U.esc(wizard.end||CrewPlan.endAfterBusinessDays(wizard.start,20))}"></div>
@@ -1530,7 +1529,7 @@ Views.planejamentoequipe = {
         </tr>`).join('')||'<tr><td colspan="3"><div class="empty">Nenhuma necessidade informada ainda.</div></td></tr>'}</tbody>
         ${total?`<tfoot><tr><th>Equipe necessária</th><th class="num">${total}</th><th></th></tr></tfoot>`:''}
       </table></div>
-      <small class="cp-muted">As funções vêm do cadastro de Funções dos colaboradores — o assistente não cria estrutura paralela. A contagem considera somente colaboradores ativos com vínculo no período.</small>`;
+      `;
   },
   /* ETAPAS 12 a 15 — análise, sugestão, montagem e déficit */
   wizardStep3(){
@@ -1559,7 +1558,7 @@ Views.planejamentoequipe = {
         }).join('')||`<div class="empty">Nenhum colaborador ativo com ${need.roles.length>1?'alguma dessas funções':'essa função'} no período.</div>`}
       </div>`;
     }).join('');
-    return `<p class="cp-muted">O sistema apenas sugere: a decisão final de alocação continua com o gestor. Colaboradores com conflito aparecem marcados com ⚠ e os sem nenhum dia livre ficam desabilitados.</p>
+    return `
       ${blocks||'<div class="empty">Volte à etapa anterior e informe pelo menos uma função.</div>'}
       ${this.coverageMarkup()}`;
   },
@@ -1619,7 +1618,7 @@ Views.planejamentoequipe = {
         </tr>`).join('')||'<tr><td colspan="4"><div class="empty">Nenhum colaborador selecionado.</div></td></tr>'}</tbody>
       </table></div></div>
       ${wizard.notes?`<p class="cp-muted"><b>Observação:</b> ${U.esc(wizard.notes)}</p>`:''}
-      <div class="cp-hint"><i data-lucide="info"></i><span>Nada foi gravado ainda. As alocações só serão criadas ao confirmar o planejamento.</span></div>`;
+      `;
   },
   wizardNext(){
     const wizard=this.wizard;
@@ -1660,10 +1659,10 @@ Views.planejamentoequipe = {
     });
     if(blocked.length){
       return UI.modal({title:'Conflito de planejamento',replace:true,
-        body:`<p class="cp-muted">Estes colaboradores já estão planejados em outra obra no mesmo período e não podem ser alocados integralmente:</p>
+        body:`<p class="cp-muted">Já alocados em outra obra no mesmo período:</p>
           ${blocked.map(item=>CrewPlan.conflictMessage(item.row.employee,
             {...item.conflict,__newProjectId:wizard.projectId},wizard.start,wizard.end)).join('')}
-          <small class="cp-muted">Volte à etapa de sugestão e desmarque esses colaboradores, ou ajuste as alocações existentes.</small>`,
+          `,
         footer:'<button class="btn btn-primary" id="cp-wz-back-conflict">Voltar à sugestão</button>',
         onOpen:()=>{ document.getElementById('cp-wz-back-conflict').onclick=()=>{
           this.wizard.step=3; this.wizardRender();

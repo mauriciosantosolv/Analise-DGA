@@ -35,7 +35,7 @@ Views.financeiro = {
         <div class="spacer"></div>
         <button class="btn btn-ghost" onclick="Exports.table('purchases')"><i data-lucide="download"></i>Exportar</button>
       </div>
-      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br><small>Para contas pagas e mão de obra, use os botões acima. As importações manuais continuam disponíveis mesmo quando a integração Omie estiver desconectada.</small></div>
+      <div class="drop-zone" id="dz-purchase" style="margin-bottom:16px"><i data-lucide="file-spreadsheet"></i><br><b>Arraste a planilha de compras aqui</b><br></div>
       <div id="fin-body"></div>`;
     if(this.mode==='table'){
       document.getElementById('fin-body').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table id="fin-table"></table></div></div>
@@ -61,7 +61,7 @@ Views.financeiro = {
     document.getElementById('fin-body').innerHTML = bs.length ? bs.map(b=>`
       <div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="width:38px;height:38px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="file-spreadsheet"></i></span>
+          <span style="width:38px;height:38px;border-radius:var(--radius-md);background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="file-spreadsheet"></i></span>
           <div style="flex:1;min-width:180px"><b>${U.esc(b.file)}</b><br><small style="color:var(--text3)">Importado em ${U.date(b.date)} · ${b.items.length} lançamento(s)</small></div>
           <b>${U.money2(b.total)}</b>
           <button class="btn btn-ghost btn-sm" onclick="Views.financeiro.viewBatch(${U.jsArg(encodeURIComponent(b.key))})"><i data-lucide="eye"></i>Ver / Editar</button>
@@ -115,7 +115,7 @@ Views.financeiro = {
     document.getElementById('batch-rows').innerHTML=rows.map(x=>{const p=State.projects.find(pr=>pr.id===x.projectId);return `
       <tr><td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td>
       <td>${Views.financeiro.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td><td>${U.esc(x.supplier||'—')}</td>
-      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
+      <td style="min-width:7rem" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
       <td class="num"><b>${U.money2(x.value)}</b></td>
       <td>${Views.financeiro.lockedReason(x)?`<i data-lucide="lock" title="${U.esc(Views.financeiro.lockedReason(x))}"></i>`:`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
       || '<tr><td colspan="8"><div class="empty">Nenhum lançamento corresponde aos filtros.</div></td></tr>';
@@ -263,7 +263,7 @@ Views.financeiro = {
       footer:'<button class="btn btn-primary" onclick="UI.close()">Fechar</button>'
     });
     UI.modal({title:'Abater gastos do planejamento',wide:true,body:`
-      <p style="color:var(--text2);font-size:.85rem;margin-bottom:12px">Revise os vínculos sugeridos. O valor realizado reduzirá o item planejado; quando consumir todo o saldo, o item sairá dos gastos futuros.</p>
+      
       <div class="table-wrap"><div class="table-scroll" style="max-height:56vh"><table>
         <thead><tr><th style="width:42px">Abater</th><th>Gasto realizado</th><th>Projeto / Categoria</th><th>Planejamento selecionado</th></tr></thead>
         <tbody>${rows.map(({purchase,matches})=>{const p=State.projects.find(x=>x.id===purchase.projectId);return `
@@ -314,7 +314,7 @@ Views.financeiro = {
         <tr class="clickable" onclick="Dash.showPurchase(${U.jsArg(x.id)})">
           <td>${U.date(x.date)}</td><td><b>${U.esc(p?p.proposal:'?')}</b></td>
           <td>${this.sourceTag(x)}</td><td><span class="tag tag-gray">${U.esc(x.category)}</span></td>
-          <td>${U.esc(x.supplier||'—')}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
+          <td>${U.esc(x.supplier||'—')}</td><td style="min-width:7rem" title="${U.esc(x.desc)}">${U.esc(x.desc||'—')}</td>
           <td>${U.esc(x.order||'—')}</td><td class="num"><b>${U.money2(x.value)}</b></td>
           <td onclick="event.stopPropagation()">${Views.financeiro.lockedReason(x)?`<i data-lucide="lock" title="${U.esc(Views.financeiro.lockedReason(x))}"></i>`:`<button class="btn btn-ghost btn-sm" onclick="Dash.purchaseForm(${U.jsArg(x.id)})"><i data-lucide="pencil"></i></button>`}</td></tr>`;}).join('')
         || `<tr><td colspan="9"><div class="empty"><i data-lucide="wallet"></i><br>Nenhum lançamento encontrado.</div></td></tr>`}
@@ -373,10 +373,10 @@ Dash.purchaseForm = function(id){
       <div class="full"><label>Descrição</label><input id="pf-desc" value="${U.esc(x.desc)}"></div>
       <div class="full"><label>Observações</label><textarea id="pf-notes" rows="2">${U.esc(x.notes)}</textarea></div>
       ${isNew?`<div class="full planning-offset-box">
-        <label class="check-item"><input id="pf-offset" type="checkbox"><span><b>Abater este gasto do valor planejado</b><small>Evita lançar o realizado e depois corrigir manualmente o planejamento.</small></span></label>
+        <label class="check-item"><input id="pf-offset" type="checkbox"><span><b>Abater este gasto do valor planejado</b></span></label>
         <div id="pf-plan-wrap" style="display:none;margin-top:10px"><label>Item planejado a reduzir</label><select id="pf-plan"></select></div>
         <small class="planning-offset-help" id="pf-plan-help">Selecione projeto e categoria para localizar planejamentos compatíveis.</small>
-      </div>`:x.planningOffset?`<div class="full planning-offset-box"><b>Este lançamento já abateu ${U.money2(x.planningOffset.amount)} do planejamento.</b><small class="planning-offset-help">Se o lançamento for excluído, o saldo planejado será restaurado automaticamente.</small></div>`:''}
+      </div>`:x.planningOffset?`<div class="full planning-offset-box"><b>Este lançamento já abateu ${U.money2(x.planningOffset.amount)} do planejamento.</b></div>`:''}
     </div>`,
     footer:`${isNew?'':`<button class="btn btn-danger" style="margin-right:auto" onclick="Dash.removePurchase(${U.jsArg(x.id)})"><i data-lucide="trash-2"></i>Excluir</button>`}
             <button class="btn btn-ghost" onclick="UI.close()">Cancelar</button>

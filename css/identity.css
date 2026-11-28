@@ -1,0 +1,308 @@
+/**
+ * Identidade visual CliqueObras (identity.css) — v4.5.21
+ *
+ * Camada final da cascata: aplica a marca (css/variables.css, bloco [A])
+ * sobre os componentes existentes sem mudar classes usadas pelo JS.
+ *
+ * Princípios
+ * - Raio em hierarquia: casca (card, tabela, modal, painel) = --radius-lg;
+ *   controle (botão, campo, aba, item de menu) = --radius-md;
+ *   caixa interna de card = --radius-md; chip/contador = --radius-pill.
+ * - Azul (--primary) só em ação principal, item ativo e foco.
+ *   Navy (--secondary) para seleção em grupos de filtro.
+ * - Sem sombra estática (--shadow-opacity:0) e sem animação de entrada.
+ * - Rótulos em caixa normal: nada de CAIXA ALTA espaçada.
+ * - Alinhamento: título da página, filtros e conteúdo começam na mesma
+ *   margem esquerda (28px no desktop, 14px no celular).
+ *
+ * Dependências: css/variables.css. Vem logo antes de mobile-forms.css (que
+ * precisa ser o último para a regra anti-zoom do iOS).
+ */
+
+/* ===================== Estrutura ===================== */
+main,#topbar,#finance-ticker,#rightbar{background:var(--background)}
+#content{padding:24px 28px 64px}
+
+/* Sidebar */
+#sidebar{background:var(--sidebar);color:var(--sidebar-foreground);border-right:1px solid var(--border)}
+.brand{padding:16px 18px;border-bottom:1px solid var(--border)}
+.brand:hover{background:var(--surface-hover)}
+.brand-logo{border-radius:var(--radius-sm);background:transparent}
+.brand b{font-weight:700;color:var(--foreground)}
+.brand small{color:var(--text3)}
+#nav{padding:6px 12px 12px}
+.nav-sep{text-transform:none;letter-spacing:0;font-size:.76rem;font-weight:600;color:var(--text3);padding:14px 12px 5px}
+.nav-sep:first-child{padding-top:8px}
+.nav-item{gap:11px;padding:6px 12px;border-radius:var(--radius-md);color:var(--text2);font-weight:500;font-size:.88rem;line-height:1.3;border:1px solid transparent;margin-bottom:1px}
+.nav-item svg{color:var(--text3)}
+.nav-item:hover{background:var(--surface-hover);color:var(--foreground)}
+.nav-item:hover svg{color:var(--foreground)}
+.nav-item.active{background:var(--sidebar-accent);color:var(--sidebar-accent-foreground);border-color:var(--border);font-weight:600}
+.nav-item.active svg{color:var(--sidebar-accent-foreground)}
+[data-theme="dark"] .nav-item.active{color:var(--info);border-color:var(--sidebar-border)}
+[data-theme="dark"] .nav-item.active svg{color:var(--info)}
+.nav-logout,.nav-logout svg{color:var(--danger)}
+.nav-logout:hover{background:var(--danger-soft);color:var(--danger)}
+#sidebar-footer{padding:12px 24px;border-top:1px solid var(--border);color:var(--text3);font-size:.74rem}
+.edge-toggle{background:transparent;color:var(--text3)}
+.edge-toggle:hover{background:var(--surface-hover);color:var(--foreground)}
+@media(min-width:861px){
+  #app.nav-collapsed #nav{padding:8px 10px}
+  #app.nav-collapsed .nav-item{padding:9px 0}
+  #app.nav-collapsed .nav-edge-toggle{background:var(--sidebar);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+}
+
+/* Topbar */
+#topbar{padding:14px 28px;border-bottom:1px solid var(--border)}
+#page-title{font-size:1.43rem;font-weight:700;letter-spacing:-.01em}
+#global-search{border-radius:var(--radius-pill);background:var(--card);border-color:var(--border);padding-left:38px}
+#global-search-wrap>svg{left:14px}
+#global-search-clear{border-radius:var(--radius-pill)}
+#search-results{border-radius:var(--radius-md);background:var(--popover);color:var(--popover-foreground);overflow:hidden}
+.icon-btn{border-radius:var(--radius-md);border-color:var(--border);background:var(--background);color:var(--text2)}
+.icon-btn:hover{background:var(--surface-hover);color:var(--foreground)}
+
+/* Ticker */
+#finance-ticker{border-bottom:1px solid var(--border)}
+.ticker-item b{font-weight:700}
+.ticker-empty{padding:0 28px}
+
+/* Painel direito */
+#rightbar{border-left:1px solid var(--border);padding:20px 18px}
+.rb-title{text-transform:none;letter-spacing:0;font-size:.86rem;font-weight:700;color:var(--foreground);margin-bottom:10px}
+.rb-title svg{width:15px;height:15px;color:var(--text3)}
+.rb-item{border-radius:var(--radius-md)}
+.rb-hr-more{border-radius:var(--radius-md)}
+.rb-rail-btn{border-radius:var(--radius-md)}
+.rb-edge-toggle{border-radius:0 0 var(--radius-sm) 0}
+
+/* ===================== Superfícies ===================== */
+.card,.kpi-grid,.table-wrap,.filters-bar,.modal,.cloud-login-card,.drop-zone{border-radius:var(--radius-lg)}
+.card{background:var(--card);color:var(--card-foreground);border-color:var(--border);padding:18px 20px;animation:none}
+.card h2,.card h3{color:var(--foreground)}
+.kpi{animation:none}
+.kpi-grid{background:var(--card);overflow:hidden}
+.kpi{padding:16px 20px}
+.kpi .k-label{font-size:.76rem;color:var(--text2);margin-bottom:6px}
+.kpi .k-value{color:var(--foreground)}
+.kpi .k-sub{font-size:.74rem}
+.kpi-link:hover{background:var(--surface-hover)}
+
+.filters-bar{background:var(--card);padding:12px;gap:8px;align-items:center}
+.filters-bar select,.filters-bar input{border-radius:var(--radius-md);background:var(--background)}
+.toolbar{gap:8px}
+
+/* Caixas internas de card: mesmo raio dos controles */
+.import-log,.check-item,.permission-banner,.planning-offset-box,.alert-item,
+.project-dates>div,.planning-history-summary>div,.omie-connection-grid>div,.omie-disconnected,
+.omie-auto-config,.omie-map-row,.omie-mark,.pdf-ready,.archive-plan>div,.archive-counts>span,
+.company-settings-heading>span,#cfg-letterhead-preview,.filter-project-button,.cal-grid,
+.rdo-photo-preview{border-radius:var(--radius-md)}
+.cal-grid{overflow:hidden}
+.import-log,.alert-item{background:var(--background)}
+.check-item{background:var(--background)}
+.check-item:has(input:checked){border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 6%,var(--background))}
+.archive-card{border-left-width:1px}
+.archive-blockers{border-left-width:1px;border-color:color-mix(in srgb,var(--warning) 40%,var(--border))}
+
+/* ===================== Botões ===================== */
+.btn{border-radius:var(--radius-md);font-weight:600;padding:8px 16px;line-height:1.25}
+.btn-primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+.btn-primary:hover{background:var(--color-primary-hover);border-color:var(--color-primary-hover)}
+.btn-ghost{background:var(--background);border-color:var(--border);color:var(--foreground)}
+.btn-ghost:hover{background:var(--surface-hover);border-color:color-mix(in srgb,var(--border) 60%,var(--foreground))}
+.btn-danger{background:var(--destructive);color:var(--destructive-foreground);border-color:var(--destructive)}
+.btn-danger:hover{background:color-mix(in srgb,var(--destructive) 88%,var(--foreground));filter:none}
+.btn-secondary{background:var(--secondary);color:var(--secondary-foreground);border-color:var(--secondary)}
+.btn-sm{padding:5px 11px;font-size:.8rem}
+.btn:disabled,.btn[disabled]{opacity:.5;cursor:not-allowed}
+
+/* ===================== Abas / segmentos ===================== */
+.tabs{background:var(--card);border-color:var(--border);border-radius:var(--radius-md);padding:3px}
+.tab{border-radius:calc(var(--radius-md) - 3px);border:1px solid transparent}
+.tab.active{background:var(--background);color:var(--foreground);border-color:var(--border)}
+[data-theme="dark"] .tab.active{background:var(--muted)}
+
+/* ===================== Tabelas ===================== */
+.table-wrap{background:var(--card)}
+thead th{background:var(--card);font-size:.76rem;font-weight:600;letter-spacing:0;color:var(--text2)}
+tbody tr:hover{background:var(--surface-hover)}
+@media(max-width:860px){.table-wrap::before{content:none;display:none}}
+
+/* ===================== Status ===================== */
+.tag,.organization-chip,.drill-path .crumb,.cal-ev{border-radius:var(--radius-pill)}
+.tag{padding:3px 10px;font-size:.74rem}
+.progress{border-radius:var(--radius-pill);background:color-mix(in srgb,var(--border) 70%,var(--background))}
+.progress>div{border-radius:var(--radius-pill);background:var(--primary)}
+
+/* ===================== Modal / toast ===================== */
+#modal-overlay{background:var(--overlay)}
+.modal{background:var(--popover);color:var(--popover-foreground);overflow:hidden}
+.modal-head{padding:18px 22px}
+.modal-body{padding:20px 22px}
+.modal-foot{padding:14px 22px;background:var(--card)}
+#toasts .toast{border-radius:var(--radius-md);background:var(--popover);border:1px solid var(--border);border-left-width:1px}
+.toast svg{color:var(--primary)}
+.toast.success svg{color:var(--success)}.toast.error svg{color:var(--danger)}.toast.warn svg{color:var(--warning)}
+
+/* ===================== Diversos ===================== */
+.section-title{margin:26px 0 12px}
+.empty{color:var(--text3);padding:44px 20px}
+.cal-head{text-transform:none;font-size:.74rem;font-weight:600;background:var(--card)}
+.cal-day.today{box-shadow:inset 0 0 0 2px var(--primary)}
+.spinner{border-top-color:var(--primary)}
+.loading-overlay{background:var(--background)}
+.loading-brand{border-radius:var(--radius-lg);box-shadow:none}
+.rdo-photo-preview{background:var(--secondary)}
+[data-theme="dark"] .rdo-photo-preview{background:var(--card)}
+.cp-col-head small,.rdo-review-people>small,.rdo-success>small{text-transform:none;letter-spacing:0}
+kbd{border-radius:var(--radius-sm);font-family:var(--font-mono)}
+.tl-item::before{background:var(--primary)}
+
+/* ===================== Celular ===================== */
+@media(max-width:860px){
+  #content{padding:14px 14px calc(78px + env(safe-area-inset-bottom))}
+  #topbar{padding:9px 14px}
+  #page-title{font-size:1.15rem}
+  .card{padding:14px 16px}
+  .modal{border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+}
+
+/* Dashboard */
+.dash-chart-toggles{margin-bottom:14px;flex-wrap:wrap}
+.chart-title{margin-bottom:12px;font-size:.93rem}
+.section-title h2{font-size:1.07rem}
+.section-title .dash-hidden-note button{color:var(--text3);text-decoration:none;font-weight:600}
+.section-title .dash-hidden-note button:hover{color:var(--primary);text-decoration:underline}
+.cp-hint:not(:has(span)){display:none}
+.role-hint{font-size:.83rem;color:var(--text2);margin-bottom:10px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background)}
+
+/* ===================== Painel TV =====================
+   Usa a paleta escura da marca, independente do tema do sistema. */
+body.tv-mode{background:#000}
+body.tv-mode #finance-ticker{background:#0f0f0f;border-bottom-color:#26272e}
+body.tv-mode #finance-ticker .ticker-item{color:#7b7e8c}
+body.tv-mode #finance-ticker .ticker-item:hover{background:#181818}
+.tv-dashboard{--tv-bg:#000000;--tv-surface:#0f0f0f;--tv-surface2:#181818;--tv-border:#26272e;--tv-muted:#7b7e8c;--tv-text:#ffffff;--tv-blue:#6b93ff;--tv-green:#33f1c8;--tv-amber:#ff895d;--tv-red:#ff534e}
+.tv-logo,.tv-panel-card,.tv-kpi,.tv-filter-bar,.tv-field-date-bar,.tv-field-cost-table-wrap,.tv-measurement-total{border-radius:var(--radius-lg)!important}
+.tv-status,.tv-pause,.tv-exit,.tv-filter-clear,.tv-live,.tv-count,.tv-alert,.tv-health-row,.tv-measurement-row{border-radius:var(--radius-md)!important}
+.tv-bar,.tv-progress{border-radius:var(--radius-pill)!important}
+.tv-status-positive{color:#33f1c8;border-color:rgba(51,241,200,.3);background:rgba(51,241,200,.08)}
+.tv-status-warning{color:#ff895d;border-color:rgba(255,137,93,.3);background:rgba(255,137,93,.08)}
+.tv-status-danger{color:#ff534e;border-color:rgba(255,83,78,.35);background:rgba(255,83,78,.1)}
+.tv-kpi{border-top-width:1px!important}
+
+/* Alinhamento de controles: mesma altura para campo, seleção e botão */
+input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]),select{min-height:38px}
+.btn{min-height:38px}
+.btn-sm{min-height:32px}
+.filter-project-button{font-size:.83rem;background:var(--background);border-color:var(--input)}
+.filters-bar select,.filters-bar input{border-color:var(--input)}
+.company-settings-heading{align-items:center}
+.company-settings-heading h3{margin:0}
+.company-shift-subtitle{align-items:center}
+.company-shift-subtitle small{padding:1px 8px;border-radius:var(--radius-pill);background:var(--neutral-soft);color:var(--neutral);font-weight:600}
+@media(min-width:1281px){
+  #rightbar{padding:20px 18px 20px 40px}
+  .rb-edge-toggle{width:28px;height:44px;background:var(--card);border:1px solid var(--border);border-left:0;border-top:0}
+}
+
+/* Tabelas: códigos não quebram; botões de linha compactos */
+td .btn-sm,td .btn.btn-sm{min-height:30px;padding:4px 8px}
+td .btn-sm svg{width:14px;height:14px}
+/* Painel direito: itens alinhados à margem do título */
+.rightbar-body .rb-item{margin-left:-10px;margin-right:-10px;width:calc(100% + 20px)}
+@media(max-width:860px){.filter-project-button{font-size:16px;min-height:42px}}
+
+/* RDO */
+.rdo-step-heading{align-items:center}
+.rdo-step-heading>span{border-radius:var(--radius-md)}
+.rdo-holiday-toggle{background:var(--background);padding:10px 12px}
+.rdo-holiday-toggle>span{grid-row:auto}
+.rdo-search input,.rdo-team-search input{background:var(--background);border-color:var(--input);border-radius:var(--radius-md)}
+.rdo-search input:focus,.rdo-team-search input:focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 18%,transparent)}
+.rdo-filter-panel{background:var(--card);border-radius:var(--radius-lg)}
+.tv-filter-bar label>span,.tv-latest-table th,.tv-field-date-bar label,.tv-field-cost-table th{text-transform:none!important;letter-spacing:0!important}
+
+/* Exclusão dentro de listas: versão suave (a sólida fica para confirmações) */
+.btn-danger.btn-sm{background:var(--danger-soft);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 25%,transparent)}
+.btn-danger.btn-sm:hover{background:var(--destructive);color:var(--destructive-foreground);border-color:var(--destructive)}
+
+/* Planejamento de colaboradores e RDO: caixas que ficaram de canto reto */
+.crewplan-filters{border-radius:var(--radius-lg);background:var(--card)}
+.cp-card{border-radius:var(--radius-md)}
+.cp-hint,.cp-need-block,.cp-coverage,.cp-preview-head,.cp-role-list,.project-filter-empty,.rdo-review-people li{border-radius:var(--radius-md)}
+.cp-need-block{overflow:hidden}
+.cp-step,.cp-role-family{border-radius:var(--radius-pill)}
+.cp-chip,.cp-cell{border-radius:3px}
+.rdo-stepper>button.active{border-radius:var(--radius-md)}
+
+/* Busca dentro da página (helpers.js → searchBox) */
+.toolbar-search{position:relative;flex:1 1 220px;max-width:340px;min-width:0}
+@media(max-width:860px){.toolbar-search{flex:1 1 100%;max-width:none;order:5}}
+
+/* v4.5.22 — Tabelas cabem na tela (computador): texto quebra linha em vez de
+   empurrar as colunas de valores para fora. Valores (.num) e etiquetas não quebram. */
+@media(min-width:861px){
+  table{font-size:.84rem}
+  thead th{white-space:normal;padding:10px 8px;line-height:1.25;vertical-align:bottom}
+  thead th:first-child,tbody td:first-child{padding-left:14px}
+  thead th:last-child,tbody td:last-child{padding-right:14px}
+  tbody td{padding:9px 8px;overflow-wrap:break-word}
+  tbody td:has(>b:only-child){min-width:6.5rem}
+  td .tag{white-space:nowrap}
+  td .progress{min-width:56px}
+}
+
+/* Células compostas: código + nome; status + tipo; semáforo + nota */
+.cell-obra{min-width:9rem}
+.cell-obra>b{display:block}
+.cell-obra>span{display:block;margin-top:2px;color:var(--text2);font-size:.8rem;line-height:1.35}
+.cell-status small{display:block;margin-top:4px;color:var(--text3);font-size:.74rem}
+.cell-status .tag+.tag{margin-top:4px}
+.cell-health{white-space:nowrap}
+.cell-health .dot{margin-right:7px;vertical-align:1px}
+@media(min-width:1281px) and (max-width:1440px){
+  :root{--rightbar-w:244px}
+  #content{padding-left:24px;padding-right:24px}
+  #topbar{padding-left:24px;padding-right:24px}
+}
+@media(min-width:861px) and (max-width:1440px){
+  table{font-size:.8rem}
+  thead th,tbody td{padding-left:6px;padding-right:6px}
+}
+@media(min-width:861px) and (max-width:1180px){
+  #content{padding-left:20px;padding-right:20px}
+  #topbar{padding-left:20px;padding-right:20px}
+  table{font-size:.8rem}
+  thead th,tbody td{padding-left:6px;padding-right:6px}
+  .cell-obra{min-width:7.5rem}
+}
+
+/* v4.5.22 — Cadastro do colaborador: a janela mantém o mesmo tamanho ao
+   trocar entre Contrato, RH, EPIs e Ocorrências; as abas ficam fixas no topo
+   e só o conteúdo rola. */
+.modal:has(.crew-form-tabs){height:min(88vh,820px)}
+.modal:has(.crew-form-tabs) .modal-body{flex:1 1 auto;min-height:0}
+.crew-form-tabs{position:sticky;top:-20px;z-index:3;box-shadow:0 -10px 0 10px var(--popover)}
+@media(max-width:860px){
+  .modal:has(.crew-form-tabs){height:94vh;height:94%}
+  .crew-form-tabs{top:-14px;box-shadow:0 -8px 0 8px var(--popover)}
+}
+
+/* Ticker: seta em traço grosso (o caractere ↑/↓ da fonte era fino demais) */
+.ticker-item span{display:inline-flex;align-items:center;gap:3px}
+.ticker-arrow{width:13px;height:13px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* KPIs sóbrios: cor só para o que pede atenção (negativo/alerta) */
+.kpi.accent-blue .k-value{color:var(--foreground)}
+.kpi.accent-green .k-value{color:var(--success)}
+@media(min-width:1281px) and (max-width:1366px){:root{--rightbar-w:220px}.cell-obra{min-width:7.5rem}#content{padding-left:20px;padding-right:20px}}
+@media(min-width:861px) and (max-width:1100px){
+  :root{--sidebar-w:216px}
+  #content{padding-left:16px;padding-right:16px}
+  #topbar{padding-left:16px;padding-right:16px}
+  table{font-size:.77rem}
+  thead th,tbody td{padding-left:5px;padding-right:5px}
+}
+.table-scroll{scrollbar-gutter:auto}@media(min-width:861px){td .progress{min-width:48px}}

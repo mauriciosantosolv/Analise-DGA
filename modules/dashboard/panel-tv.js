@@ -368,17 +368,17 @@ const DashboardPanel = {
           </div>
           ${this.filterMarkup()}
           <div class="tv-monitor-grid">
-            <article class="tv-panel-card tv-project-table-card"><div class="tv-section-head"><div><small>VISÃO POR PROJETO</small><h2>Orçado × realizado por obra</h2></div><span class="tv-count">Prioridade: menor saúde financeira</span></div>
+            <article class="tv-panel-card tv-project-table-card"><div class="tv-section-head"><div><h2>Orçado × realizado por obra</h2></div><span class="tv-count">Prioridade: menor saúde financeira</span></div>
               <div class="tv-table-wrap"><table class="tv-project-table"><thead><tr><th>Projeto</th><th>Situação</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo orçado</th><th class="num">Margem</th><th>Consumo</th></tr></thead><tbody>
                 ${allRows.slice(0,10).map(({p,s})=>this.projectRow(p,s)).join('')||`<tr><td colspan="8">${this.empty('Nenhuma obra no filtro atual.')}</td></tr>`}
               </tbody></table></div>
               ${allRows.length>10?`<small class="tv-more">Exibindo as 10 obras que mais exigem atenção · ${allRows.length-10} outra(s) permanecem monitoradas.</small>`:''}
             </article>
             <div class="tv-monitor-side">
-              <article class="tv-panel-card tv-supplier-card"><div class="tv-section-head"><div><small>FORNECEDORES</small><h2>Top gastos</h2></div><span class="tv-count">${suppliers.length} fornecedor(es)</span></div>
+              <article class="tv-panel-card tv-supplier-card"><div class="tv-section-head"><div><h2>Top gastos</h2></div><span class="tv-count">${suppliers.length} fornecedor(es)</span></div>
                 ${suppliers.length?`<div class="tv-supplier-chart" id="tv-supplier-chart-wrap"><canvas id="tv-suppliers-chart" aria-label="Top gastos por fornecedores"></canvas></div><div class="tv-supplier-fallback" id="tv-supplier-fallback" hidden>${suppliers.map(item=>`<div><span>${U.esc(item.name)}</span><b>${U.money2(item.value)}</b></div>`).join('')}</div>`:this.empty('Nenhum gasto no filtro atual.')}
               </article>
-              <article class="tv-panel-card tv-latest-card"><div class="tv-section-head"><div><small>ATUALIZAÇÃO EM TEMPO REAL</small><h2>Últimos lançamentos</h2></div><span class="tv-live"><i></i>Ao vivo</span></div>
+              <article class="tv-panel-card tv-latest-card"><div class="tv-section-head"><div><h2>Últimos lançamentos</h2></div><span class="tv-live"><i></i>Ao vivo</span></div>
                 <div class="tv-latest-wrap">${latest.length?`<table class="tv-latest-table"><thead><tr><th>Data de inclusão</th><th>Projeto / origem</th><th>Conta / fornecedor</th><th class="num">Valor</th></tr></thead><tbody>${latest.map(entry=>this.latestRow(entry)).join('')}</tbody></table>`:this.empty('Nenhum lançamento no filtro atual.')}</div>
               </article>
             </div>
@@ -387,10 +387,10 @@ const DashboardPanel = {
 
         <section class="tv-slide ${this.slide===1?'active':''}" data-tv-slide="1" aria-label="Monitoramento de medições por projeto">
           <div class="tv-overview-grid">
-            <article class="tv-panel-card tv-measurement-monitor"><div class="tv-section-head"><div><small>AVANÇO POR PROJETO</small><h2>Monitoramento de Medições</h2></div><span class="tv-count">Ordem: maior avanço</span></div>
+            <article class="tv-panel-card tv-measurement-monitor"><div class="tv-section-head"><div><h2>Monitoramento de Medições</h2></div><span class="tv-count">Ordem: maior avanço</span></div>
               <div class="tv-measurement-list">${measurements.map(({p,s})=>this.measurementRow(p,s)).join('')||this.empty('Nenhum projeto no filtro atual.')}</div>
             </article>
-            <article class="tv-panel-card tv-measurement-summary"><div class="tv-section-head"><div><small>MEDIÇÕES</small><h2>Andamento da receita</h2></div></div>
+            <article class="tv-panel-card tv-measurement-summary"><div class="tv-section-head"><div><h2>Andamento da receita</h2></div></div>
               <div class="tv-measurement-total"><small>Total medido</small><b>${U.money(data.measured)}</b><div class="tv-bar"><span style="width:${Math.min(100,Math.max(0,data.revenue>0?data.measured/data.revenue*100:0))}%"></span></div><small>${U.pct(data.revenue>0?data.measured/data.revenue*100:null)} da receita contratada</small></div>
               <dl class="tv-breakdown"><div><dt>Faturado</dt><dd>${U.money(data.invoiced)}</dd></div><div><dt>Aprovado</dt><dd>${U.money(data.approved)}</dd></div><div class="${data.awaitingApproval>0?'warning':''}"><dt>Aguardando aprovação</dt><dd>${U.money(data.awaitingApproval)}</dd></div><div><dt>Saldo a medir</dt><dd>${U.money(data.revenue-data.measured)}</dd></div></dl>
             </article>
@@ -399,7 +399,7 @@ const DashboardPanel = {
 
         <section class="tv-slide ${this.slide===2?'active':''}" data-tv-slide="2" aria-label="Monitoramento das equipes em campo">
           <div class="tv-field-layout">
-            <div class="tv-field-date-bar"><span><i data-lucide="calendar-days"></i><b>Análise da equipe em campo</b><small>Selecione outro dia para comparar alocações e custos consumidos.</small></span><label><span>Data analisada</span><input id="tv-field-date" type="date" value="${U.esc(field.today)}"></label></div>
+            <div class="tv-field-date-bar"><span><i data-lucide="calendar-days"></i><b>Análise da equipe em campo</b></span><label><span>Data analisada</span><input id="tv-field-date" type="date" value="${U.esc(field.today)}"></label></div>
             <div class="tv-field-kpis">
               ${this.renderMetric('Equipe alocada',String(field.allocated.length),'users','positive',`${field.projects.length} obra(s) com RDO no dia`)}
               ${this.renderMetric('Colaboradores ociosos',String(field.idle.length),'user-x',field.idle.length?'warning':'positive',`Sem apontamento no dia selecionado`)}
@@ -407,16 +407,16 @@ const DashboardPanel = {
               ${this.renderMetric('Custo da ociosidade',U.money(field.idleCost),'circle-dollar-sign',field.idleCost>0?'danger':'positive',`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h × custo-hora`)}
             </div>
             <div class="tv-field-grid">
-              <article class="tv-panel-card tv-field-allocation-card"><div class="tv-section-head"><div><small>ALOCAÇÃO DO DIA</small><h2>Alocações por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
+              <article class="tv-panel-card tv-field-allocation-card"><div class="tv-section-head"><div><h2>Alocações por obra</h2></div><span class="tv-count">${field.allocated.length} alocado(s)</span></div>
                 ${field.projects.length?`<div class="tv-field-allocation-content"><div class="tv-field-chart"><canvas id="tv-field-allocation-chart" aria-label="Quantidade de alocações por número da obra"></canvas></div><div class="tv-field-cost-table-wrap"><table class="tv-field-cost-table"><thead><tr><th>Obra</th><th>Alocados</th><th>Custo parcial</th></tr></thead><tbody>${field.projects.map(item=>`<tr><td><b>${U.esc(item.name)}</b></td><td>${item.count}</td><td>${U.money(item.cost)}</td></tr>`).join('')}</tbody></table></div></div>`:this.empty('Nenhuma alocação no dia selecionado.')}
               </article>
-              <article class="tv-panel-card tv-field-roster-card tv-field-allocated-card"><div class="tv-section-head"><div><small>EM CAMPO</small><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-allocated-card"><div class="tv-section-head"><div><h2>Equipe alocada</h2></div><span class="tv-count">${field.today.split('-').reverse().join('/')}</span></div>
                 <div class="tv-field-roster">${field.allocated.map(row=>`<div><span><i class="tv-field-dot allocated"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>${row.hours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h</b><small>${U.money(row.cost)} · ${U.esc(row.rdoStatus)}</small></span></div>`).join('')||this.empty('Nenhum colaborador alocado em RDO hoje.')}</div>
               </article>
-              <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><small>AUSÊNCIAS</small><h2>Faltas e folgas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s) · ${field.dayOff.length} folga(s)</span></div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-absence-card"><div class="tv-section-head"><div><h2>Faltas e folgas</h2></div><span class="tv-count ${field.absent.length?'danger':''}">${field.absent.length} falta(s) · ${field.dayOff.length} folga(s)</span></div>
                 <div class="tv-field-roster">${field.absent.map(row=>`<div><span><i class="tv-field-dot absent"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)} · ${U.esc(row.projectName)}</small></span><span><b>Falta</b><small>${U.esc(row.rdoStatus)}</small></span></div>`).join('')}${field.dayOff.map(row=>`<div><span><i class="tv-field-dot day-off"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>Folga</b><small>Sem carga horária</small></span></div>`).join('')||(!field.absent.length?this.empty('Nenhuma falta ou folga registrada no dia.'):'')}</div>
               </article>
-              <article class="tv-panel-card tv-field-roster-card tv-field-idle-card"><div class="tv-section-head"><div><small>DISPONIBILIDADE</small><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
+              <article class="tv-panel-card tv-field-roster-card tv-field-idle-card"><div class="tv-section-head"><div><h2>Equipe ociosa</h2></div><span class="tv-count ${field.missingCosts?'danger':''}">${field.missingCosts?`${field.missingCosts} sem custo`:'Custos cadastrados'}</span></div>
                 <div class="tv-field-roster">${field.idle.map(row=>`<div><span><i class="tv-field-dot idle"></i><b>${U.esc(row.employeeName)}</b><small>${U.esc(row.role)}</small></span><span><b>${U.money(row.cost)}</b><small>${row.missingCost?'Custo-hora não cadastrado':`${field.standardHours.toLocaleString('pt-BR',{maximumFractionDigits:2})}h de ociosidade`}</small></span></div>`).join('')||this.empty('Nenhum colaborador ocioso hoje.')}</div>
               </article>
             </div>
@@ -424,7 +424,7 @@ const DashboardPanel = {
         </section>
       </div>
 
-      <footer class="tv-footer"><div class="tv-progress"><span class="tv-progress-value" id="tv-progress-value"></span></div><div class="tv-pagination" aria-label="Telas do painel">${this.slideNames.map((name,index)=>`<button type="button" class="${this.slide===index?'active':''}" data-tv-dot="${index}" onclick="DashboardPanel.show(${index})" aria-label="Mostrar ${U.esc(name)}"></button>`).join('')}</div><button type="button" class="tv-pause" id="tv-pause" onclick="DashboardPanel.togglePause()"><i data-lucide="${this.paused?'play':'pause'}"></i><span>${this.paused?'Retomar rotação':'Pausar rotação'}</span></button><small>Troca automática a cada 25 segundos</small></footer>
+      <footer class="tv-footer"><div class="tv-progress"><span class="tv-progress-value" id="tv-progress-value"></span></div><div class="tv-pagination" aria-label="Telas do painel">${this.slideNames.map((name,index)=>`<button type="button" class="${this.slide===index?'active':''}" data-tv-dot="${index}" onclick="DashboardPanel.show(${index})" aria-label="Mostrar ${U.esc(name)}"></button>`).join('')}</div><button type="button" class="tv-pause" id="tv-pause" onclick="DashboardPanel.togglePause()"><i data-lucide="${this.paused?'play':'pause'}"></i><span>${this.paused?'Retomar rotação':'Pausar rotação'}</span></button></footer>
     </section>`;
   },
 

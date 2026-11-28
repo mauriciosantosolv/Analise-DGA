@@ -253,7 +253,7 @@ const UI = {
 const $c = () => document.getElementById('content');
 
 /* ---------- helpers de tabela ---------- */
-function searchBox(id, ph){ return `<div style="position:relative;flex:1;max-width:340px"><input id="${id}" placeholder="${ph}" style="padding-left:12px"></div>`; }
+function searchBox(id, ph){ return `<div class="toolbar-search"><input id="${id}" type="search" placeholder="${ph}" autocomplete="off"></div>`; }
 
 function bindSearch(id, fn){ const el = document.getElementById(id); if(el) el.oninput = U.debounce(()=>fn(el.value), 180); }
 

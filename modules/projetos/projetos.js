@@ -37,23 +37,21 @@ Views.projetos = {
       .filter(p => !n || U.norm(`${p.proposal} ${p.name} ${p.client} ${p.type} ${p.status}`).includes(n))
       .sort((a,b) => String(b.proposal).localeCompare(String(a.proposal), undefined, {numeric:true}));
     document.getElementById('proj-table').innerHTML = `
-      <thead><tr><th></th><th>Proposta</th><th>Nome</th><th>Cliente</th><th>Tipo</th><th>Status</th>
-      <th class="num">Venda</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Margem Atual</th><th>Consumo</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Obra</th><th>Cliente</th><th>Status</th>
+      <th class="num">Venda</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Margem</th><th>Consumo</th><th></th></tr></thead>
       <tbody>${rows.map(p => { const s = Biz.projectStats(p); return `
         <tr class="clickable" onclick="Views.projetos.detail(${U.jsArg(p.id)})">
           <td>${lightDot(s.light)}</td>
-          <td><b>${U.esc(p.proposal)}</b></td>
-          <td>${U.esc(p.name||'—')}</td>
-          <td><div style="display:flex;align-items:center;gap:8px">${clientAvatar(p.client)}${U.esc(p.client||'—')}</div></td>
-          <td><span class="tag tag-gray">${U.esc(p.type||'—')}</span></td>
-          <td>${statusTag(p.status)}${ProjectArchive.badge(p)}</td>
+          <td class="cell-obra"><b>${U.esc(p.proposal)}</b><span>${U.esc(p.name||'—')}</span></td>
+          <td>${U.esc(p.client||'—')}</td>
+          <td class="cell-status">${statusTag(p.status)}${ProjectArchive.badge(p)}<small>${U.esc(p.type||'—')}</small></td>
           <td class="num">${U.money(p.saleValue)}</td>
           <td class="num">${U.money(s.budgetTotal)}</td>
           <td class="num">${U.money(s.spent)}</td>
           <td class="num" style="color:${s.marginCurrent!=null && s.marginCurrent<0?'var(--red)':'var(--green)'}">${U.pct(s.marginCurrent)}</td>
-          <td style="min-width:110px"><div class="progress ${s.consumed>100?'crit':s.consumed>85?'warn':''}"><div style="width:${Math.min(100,s.consumed)}%"></div></div><small style="color:var(--text3)">${U.pct(s.consumed)}</small></td>
+          <td style="min-width:58px"><div class="progress ${s.consumed>100?'crit':s.consumed>85?'warn':''}"><div style="width:${Math.min(100,s.consumed)}%"></div></div><small style="color:var(--text3)">${U.pct(s.consumed)}</small></td>
           <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="Views.projetos.form(${U.jsArg(p.id)})"><i data-lucide="pencil"></i></button></td>
-        </tr>`;}).join('') || `<tr><td colspan="12"><div class="empty"><i data-lucide="folder-open"></i><br>Nenhum projeto. Importe uma planilha ou cadastre manualmente.</div></td></tr>`}</tbody>`;
+        </tr>`;}).join('') || `<tr><td colspan="10"><div class="empty"><i data-lucide="folder-open"></i><br>Nenhum projeto. Importe uma planilha ou cadastre manualmente.</div></td></tr>`}</tbody>`;
     U.icons();
   },
   form(id){
@@ -73,7 +71,7 @@ Views.projetos = {
           ['Fornecimento','Fornecimento de material'],
           ['Painel','Painel']
         ].map(([value,label])=>`<option value="${value}" ${value===p.type?'selected':''}>${label}</option>`).join('')}</select>
-          <small>Somente projetos HH geram medição de venda a partir dos diários.</small></div>
+          </div>
         <div><label>Status</label><select id="f-status" ${archived?'disabled':''}>${['Em andamento','Concluído','Paralisado','A executar'].map(t=>`<option value="${t}" ${t===p.status?'selected':''}>${t}${t==='Concluído'?' — requer 100% medido':''}</option>`).join('')}</select></div>
         <div><label>Data de Início</label><input id="f-start" type="date" value="${U.esc(p.start)}"></div>
         <div><label>Prazo Contratual</label><input id="f-deadline" type="date" value="${U.esc(p.deadline)}"></div>
@@ -160,7 +158,7 @@ Views.projetos = {
       </div>
       <div class="card deviation-justification" style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-          <div><h3>Resultado e justificativa do desvio</h3><small style="color:var(--text3)">Este conteúdo aparece ao abrir o projeto pelo ticker ou pelo semáforo financeiro.</small></div>
+          <div><h3>Resultado e justificativa do desvio</h3></div>
           <span class="tag ${s.deviation!=null&&s.deviation>0?'tag-red':s.deviation!=null&&s.deviation<0?'tag-green':'tag-gray'}">${U.esc(deviationLabel)}</span>
         </div>
         <div class="import-log" style="margin-bottom:10px">

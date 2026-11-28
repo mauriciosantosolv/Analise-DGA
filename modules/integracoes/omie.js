@@ -10,7 +10,7 @@ const OmieIntegration = {
 
   card(){
     return `<section class="card settings-card settings-card-wide omie-card">
-      <div class="omie-heading"><span class="omie-mark"><i data-lucide="refresh-cw"></i></span><div><h2>Integração Omie</h2><p>Contas a pagar por projeto, com categorias mapeadas e abatimento automático do planejamento.</p></div><span class="tag tag-gray" id="omie-status-tag">Verificando…</span></div>
+      <div class="omie-heading"><span class="omie-mark"><i data-lucide="refresh-cw"></i></span><div><h2>Integração Omie</h2></div><span class="tag tag-gray" id="omie-status-tag">Verificando…</span></div>
       <div id="omie-integration-content"><div class="empty"><i data-lucide="loader-2"></i><br>Consultando conexão segura…</div></div>
       <div class="permission-banner omie-security-note"><i data-lucide="shield-check"></i><span><b>Área exclusiva do proprietário.</b> O App Secret não é devolvido ao navegador, não entra em backups e permanece isolado na organização ativa.</span></div>
     </section>`;
@@ -46,7 +46,7 @@ const OmieIntegration = {
     const tag=document.getElementById('omie-status-tag');
     if(!this.state||!this.state.connected){
       if(tag){tag.textContent='Desconectado';tag.className='tag tag-gray';}
-      box.innerHTML=`<div class="omie-disconnected"><div><b>Nenhuma conta Omie vinculada</b><small>As importações manuais continuam funcionando normalmente. Conecte o Omie para sincronizar contas a pagar por projeto.</small></div><button class="btn btn-primary" type="button" id="omie-connect"><i data-lucide="link"></i>Conectar Omie</button></div>`;
+      box.innerHTML=`<div class="omie-disconnected"><div><b>Nenhuma conta Omie vinculada</b></div><button class="btn btn-primary" type="button" id="omie-connect"><i data-lucide="link"></i>Conectar Omie</button></div>`;
       document.getElementById('omie-connect').onclick=()=>this.connectForm();
       U.icons(); return;
     }
@@ -85,8 +85,8 @@ const OmieIntegration = {
     if(!this.assertOwner()) return;
     const today=new Date(), start=`${today.getFullYear()}-01-01`;
     UI.modal({title:'Conectar conta Omie',body:`
-      <p style="font-size:.84rem;color:var(--text2);margin-bottom:14px">Informe as credenciais do aplicativo criado no Omie. Elas serão testadas e enviadas diretamente ao cofre seguro da organização.</p>
-      <div class="form-grid"><div class="full"><label>App Key *</label><input id="omie-app-key" type="password" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Chave do aplicativo Omie"></div><div class="full"><label>App Secret *</label><input id="omie-app-secret" type="password" maxlength="200" autocomplete="new-password" spellcheck="false" placeholder="Segredo do aplicativo Omie"></div><div class="full"><label>Importar contas alteradas a partir de</label><input id="omie-initial-date" type="date" value="${start}" max="${U.isoDate(today)}"><small>Contas anteriores a esta data não serão importadas na primeira sincronização.</small></div></div>`,
+      
+      <div class="form-grid"><div class="full"><label>App Key *</label><input id="omie-app-key" type="password" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Chave do aplicativo Omie"></div><div class="full"><label>App Secret *</label><input id="omie-app-secret" type="password" maxlength="200" autocomplete="new-password" spellcheck="false" placeholder="Segredo do aplicativo Omie"></div><div class="full"><label>Importar contas alteradas a partir de</label><input id="omie-initial-date" type="date" value="${start}" max="${U.isoDate(today)}"></div></div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="omie-connect-save"><i data-lucide="shield-check"></i>Testar e conectar</button>',
       onOpen:()=>{document.getElementById('omie-connect-save').onclick=()=>this.connect();}
     });
@@ -137,10 +137,10 @@ const OmieIntegration = {
       });
       this.catalog={projects,categories};
       UI.modal({title:'Mapeamento Omie → CliqueObras',wide:true,body:`
-        <div class="omie-auto-config"><label class="check-item"><input id="omie-auto-sync" type="checkbox" ${data.connection?.autoSync?'checked':''}><span><b>Sincronização automática</b><small>Consulta somente os projetos ativos abaixo.</small></span></label><div><label>Frequência</label><select id="omie-auto-interval"><option value="15" ${Number(data.connection?.autoIntervalMinutes)===15?'selected':''}>A cada 15 minutos</option><option value="60" ${![15,360,1440].includes(Number(data.connection?.autoIntervalMinutes))?'selected':''}>A cada hora</option><option value="360" ${Number(data.connection?.autoIntervalMinutes)===360?'selected':''}>A cada 6 horas</option><option value="1440" ${Number(data.connection?.autoIntervalMinutes)===1440?'selected':''}>Diariamente</option></select></div></div>
+        <div class="omie-auto-config"><label class="check-item"><input id="omie-auto-sync" type="checkbox" ${data.connection?.autoSync?'checked':''}><span><b>Sincronização automática</b></span></label><div><label>Frequência</label><select id="omie-auto-interval"><option value="15" ${Number(data.connection?.autoIntervalMinutes)===15?'selected':''}>A cada 15 minutos</option><option value="60" ${![15,360,1440].includes(Number(data.connection?.autoIntervalMinutes))?'selected':''}>A cada hora</option><option value="360" ${Number(data.connection?.autoIntervalMinutes)===360?'selected':''}>A cada 6 horas</option><option value="1440" ${Number(data.connection?.autoIntervalMinutes)===1440?'selected':''}>Diariamente</option></select></div></div>
         <div class="tabs omie-tabs"><button class="tab active" id="omie-tab-projects">Projetos (${projects.length})</button><button class="tab" id="omie-tab-categories">Categorias (${categories.length})</button></div>
         <div id="omie-map-projects">${this.projectRows(projects)}</div><div id="omie-map-categories" hidden>${this.categoryRows(categories)}</div>
-        <div class="permission-banner" style="margin-top:12px"><i data-lucide="info"></i><span>Lançamentos sem projeto ou categoria mapeada ficam pendentes e não são incluídos no realizado.</span></div>`,
+        <div class="permission-banner" style="margin-top:12px"><i data-lucide="info"></i></div>`,
         footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="omie-mapping-save"><i data-lucide="check"></i>Salvar mapeamentos</button>',
         onOpen:()=>{
           document.getElementById('omie-tab-projects').onclick=()=>this.showMappingTab('projects');
@@ -191,7 +191,7 @@ const OmieIntegration = {
       const data=await this.request('status'); UI.loading(false);
       const projects=(data.projectMappings||[]).filter(item=>item.enabled);
       if(!projects.length) return UI.toast('Configure ao menos um projeto antes de sincronizar.','warn',6000);
-      UI.modal({title:'Sincronização manual do Omie',body:`<p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Escolha os projetos que deseja consultar agora.</p><div class="check-list" id="omie-sync-projects">${projects.map(item=>`<label class="check-item"><input type="checkbox" value="${U.esc(item.omieProjectCode)}" checked><span><b>${U.esc(item.omieProjectName)}</b><small>${U.esc(U.projLabel(State.projects.find(project=>String(project.id)===String(item.cliqueProjectId))))}</small></span></label>`).join('')}</div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="omie-sync-confirm"><i data-lucide="refresh-cw"></i>Sincronizar selecionados</button>',onOpen:()=>{document.getElementById('omie-sync-confirm').onclick=()=>this.sync();}});
+      UI.modal({title:'Sincronização manual do Omie',body:`<div class="check-list" id="omie-sync-projects">${projects.map(item=>`<label class="check-item"><input type="checkbox" value="${U.esc(item.omieProjectCode)}" checked><span><b>${U.esc(item.omieProjectName)}</b><small>${U.esc(U.projLabel(State.projects.find(project=>String(project.id)===String(item.cliqueProjectId))))}</small></span></label>`).join('')}</div>`,footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-primary" id="omie-sync-confirm"><i data-lucide="refresh-cw"></i>Sincronizar selecionados</button>',onOpen:()=>{document.getElementById('omie-sync-confirm').onclick=()=>this.sync();}});
     }catch(error){UI.loading(false);UI.toast(U.esc(error.message||error),'error',7000);}
   },
 

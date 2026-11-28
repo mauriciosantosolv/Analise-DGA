@@ -118,7 +118,7 @@ const OmieRemessa = {
     tabs.appendChild(tab);
     const panel=document.createElement('div');
     panel.id='omie-map-remessa-cats'; panel.hidden=true;
-    panel.innerHTML='<div class="empty">Carregando as categorias usadas nas remessas do Omie…</div>';
+    panel.innerHTML='<div class="empty">Carregando…</div>';
     expenses.insertAdjacentElement('afterend',panel);
     const show=mine=>{
       panel.hidden=!mine; tab.classList.toggle('active',mine);
@@ -158,7 +158,7 @@ const OmieRemessa = {
     const used=items.filter(item=>item.remessas>0), others=items.filter(item=>!item.remessas);
     panel.innerHTML=`<div class="permission-banner" style="margin-bottom:10px"><i data-lucide="info"></i><span>No Omie a <b>remessa de produtos</b> costuma usar uma categoria de <b>receita</b>, que não aparece na aba de despesas. Vincule aqui a categoria da remessa à categoria do CliqueObras — o vínculo vale para o <b>custo por remessa</b> — e clique em <b>Salvar mapeamentos</b>.${data&&data.remessasError?` Não foi possível contar as remessas agora (${U.esc(data.remessasError)}).`:''}</span></div>
       <h3 style="font-size:.9rem;margin:4px 0 8px">Usadas nas remessas (${used.length})</h3>
-      ${used.length?OmieIntegration.categoryRows(used):'<div class="empty">Nenhuma remessa do Omie usa categoria fora da lista de despesas.</div>'}
+      ${used.length?OmieIntegration.categoryRows(used):'<div class="empty">Nenhuma remessa fora da lista de despesas.</div>'}
       ${others.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-size:.85rem">Outras categorias do Omie (${others.length})</summary><div style="margin-top:8px">${OmieIntegration.categoryRows(others)}</div></details>`:''}`;
     items.forEach(item=>{
       const check=panel.querySelector(`.omie-category-enabled[data-index="${item.index}"]`);
@@ -225,7 +225,7 @@ const OmieRemessa = {
         <button class="btn btn-ghost btn-sm omie-remessa-preview" type="button" data-index="${index}" style="justify-self:end;width:auto"><i data-lucide="eye"></i>Prévia</button>
       </div>`).join('')||'<div class="empty">Nenhum projeto ativo no mapeamento Omie.</div>'}</div>
       <h3 style="font-size:.95rem;margin:18px 0 8px">Cartão corporativo</h3>
-      <p style="font-size:.82rem;color:var(--text2);margin-bottom:8px">Marque a(s) conta(s) corrente(s) do Omie que são o cartão corporativo. Nos projetos com remessa, só as contas a pagar lançadas nelas continuam entrando.</p>
+      
       ${cfg.accountsError?`<div class="permission-banner" style="margin-bottom:8px"><i data-lucide="alert-triangle"></i><span>Não foi possível listar as contas correntes do Omie: ${U.esc(cfg.accountsError)}</span></div>`:''}
       <div class="check-list" id="omie-remessa-cards">${accounts.map(account=>`<label class="check-item"><input type="checkbox" class="omie-remessa-card" value="${U.esc(account.code)}" data-name="${U.esc(account.name||'')}" ${saved.has(account.code)?'checked':''}><span><b style="display:block">${U.esc(account.name||'Conta corrente')}</b><small style="display:block">Código ${U.esc(account.code)}${account.type?` · tipo ${U.esc(account.type)}`:''}${account.missing?' · não retornada pelo Omie agora':''}</small></span></label>`).join('')||'<div class="empty">Nenhuma conta corrente retornada.</div>'}</div>`,
       footer:'<button class="btn btn-ghost" onclick="UI.close()">Cancelar</button><button class="btn btn-ghost" id="omie-remessa-probe" type="button"><i data-lucide="list-checks"></i>Diagnóstico da leitura</button><button class="btn btn-primary" id="omie-remessa-save" type="button"><i data-lucide="check"></i>Salvar</button>',
@@ -305,7 +305,7 @@ const OmieRemessa = {
     const accountName=code=>cardNames.get(code)||accountNames.get(code)||(code==='—'?'Sem conta corrente':`Conta ${code}`);
     const statusTag=item=>item.active?'<span class="tag tag-green">Entra</span>':item.status==='CANCELADA'?'<span class="tag tag-gray">Cancelada</span>':item.value<=0&&item.status==='FATURADA'?'<span class="tag tag-gray">Retornada</span>':'<span class="tag tag-amber">Não faturada</span>';
     UI.modal({title:`Prévia · ${project.omieProjectName||project.omieProjectCode}`,wide:true,body:`
-      <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px">Nada é gravado nesta prévia. Ela mostra o que a sincronização lançaria se este projeto estivesse com custo por remessa.</p>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px">Prévia — nada é gravado.</p>
       <h3 style="font-size:.95rem;margin:4px 0 8px">Remessas</h3>
       ${r.error?`<div class="permission-banner"><i data-lucide="alert-triangle"></i><span>Leitura de remessas/retornos falhou: ${U.esc(r.error)}. Use "Diagnóstico da leitura" e me envie o resultado.</span></div>`:`
       <div class="omie-connection-grid" style="margin-bottom:10px">
@@ -340,7 +340,7 @@ const OmieRemessa = {
     }catch(error){ UI.loading(false); return UI.toast('Diagnóstico indisponível: '+U.esc(error.message||error),'error',8000); }
     const text=JSON.stringify(data,null,2);
     UI.modal({title:'Diagnóstico da leitura (Omie)',wide:true,body:`
-      <p style="font-size:.82rem;color:var(--text2);margin-bottom:10px">Leitura real, com os nomes exatos da documentação do Omie: ListarRemessas + StatusRemessa, ListarNotaEnt + StatusNotaEnt e ListarContasCorrentes, e o que o sistema entendeu de cada uma (projeto, categoria, valor, NF, faturada, NF referenciada). Nada é gravado. Se algo vier vazio ou com erro, copie e envie.</p>
+      
       <pre id="omie-remessa-probe-text" style="max-height:52vh;overflow:auto;font-size:.72rem;background:var(--surface2,#f5f5f5);padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word">${U.esc(text)}</pre>`,
       footer:'<button class="btn btn-ghost" id="omie-remessa-probe-copy" type="button"><i data-lucide="copy"></i>Copiar</button><button class="btn btn-primary" onclick="UI.close()">Fechar</button>',
       onOpen:()=>{

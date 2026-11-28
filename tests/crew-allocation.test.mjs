@@ -226,7 +226,7 @@ assert.equal(semanas[1].pct, 40);
 
 /* ================= 6. A TELA FOI REGISTRADA ================= */
 assert.equal(typeof context.Views.planejamentoequipe, 'object', 'Views.planejamentoequipe existe');
-assert.equal(context.Views.planejamentoequipe.title, 'Planejamento de Colaboradores');
+assert.equal(context.Views.planejamentoequipe.title, 'Planejamento de colaboradores');
 assert.equal(typeof context.Views.planejamentoequipe.render, 'function');
 assert.equal(CrewPlan.statuses.join(','), 'Planejado,Concluído,Cancelado');
 assert.equal(CrewPlan.activeStatuses.join(','), 'Planejado', 'só Planejado consome capacidade');

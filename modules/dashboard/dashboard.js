@@ -20,12 +20,12 @@ Views.dashboard = {
   title:'Dashboard',
   // Gráficos disponíveis — o usuário escolhe quais exibir (persistido em settings)
   chartDefs:[
-    {id:'main',    title:'Orçado × Realizado × Projeção × Saldo Orçado', short:'Orçado × Realizado'},
-    {id:'monthly', title:'Evolução Mensal',                        short:'Evolução Mensal'},
-    {id:'cat',     title:'Distribuição por Categoria',             short:'Categorias', hint:' <small style="color:var(--text3)">(clique para detalhar)</small>'},
-    {id:'cash',    title:'Fluxo de Caixa Futuro (planejado)',      short:'Fluxo de Caixa', sm:true},
-    {id:'margin',  title:'Margem por Projeto',                     short:'Margem', sm:true},
-    {id:'top',     title:'Top Gastos (fornecedores)',              short:'Top Gastos', sm:true}
+    {id:'main',    title:'Orçado × realizado × projeção × saldo', short:'Orçado × realizado'},
+    {id:'monthly', title:'Evolução mensal',                       short:'Evolução mensal'},
+    {id:'cat',     title:'Distribuição por categoria',            short:'Categorias'},
+    {id:'cash',    title:'Fluxo de caixa planejado',              short:'Fluxo de caixa', sm:true},
+    {id:'margin',  title:'Margem por projeto',                    short:'Margem', sm:true},
+    {id:'top',     title:'Maiores fornecedores',                  short:'Fornecedores', sm:true}
   ],
   chartVisibility(){
     return Object.assign({main:true,monthly:true,cat:true,cash:true,margin:true,top:true},
@@ -110,47 +110,46 @@ Views.dashboard = {
       ${Dash.filtersBar()}
       ${Dash.projectBanner()}
       <div class="kpi-grid">
-        ${kpi('Receita Contratada', U.money(revenue), 'banknote', 'accent-blue')}
-        ${kpi('Total Medido', U.money(measured), 'ruler', 'accent-green', '', goAction('medicoes'))}
-        ${kpi('Saldo a Medir', U.money(revenue-measured), 'file-clock')}
-        ${kpi('Orçamento Total', U.money(budgetTotal), 'calculator', '', '', goAction('orcamentos'))}
+        ${kpi('Receita contratada', U.money(revenue), 'banknote', 'accent-blue')}
+        ${kpi('Total medido', U.money(measured), 'ruler', measured>0?'accent-green':'', '', goAction('medicoes'))}
+        ${kpi('Saldo a medir', U.money(revenue-measured), 'file-clock')}
+        ${kpi('Orçamento total', U.money(budgetTotal), 'calculator', '', '', goAction('orcamentos'))}
         ${kpi('Realizado', U.money(spent), 'wallet', '', '', goAction('financeiro'))}
         ${kpi('Projetado', U.money(projected), 'trending-up', '', '', goAction('planejamento'))}
-        ${kpi('Saldo Orçado', U.money(balance), 'piggy-bank', balance<0?'accent-red':'accent-green')}
-        ${kpi('Margem Atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
-        ${kpi('Lucro Estimado', U.money(profit), 'coins', profit<0?'accent-red':'accent-green')}
-        ${kpi('Projetos Ativos', active.length, 'hard-hat')}
-        ${kpi('Projetos Críticos', critical.length, 'siren', critical.length?'accent-red':'')}
-        ${kpi('Gastos Próximos (7d)', U.money(next7), 'calendar-clock', '', '', goAction('planejamento','{upcoming7:true}'))}
+        ${kpi('Saldo orçado', U.money(balance), 'piggy-bank', balance<0?'accent-red':balance>0?'accent-green':'')}
+        ${kpi('Margem atual', U.pct(marginCurrent), 'gauge', marginCurrent!=null&&marginCurrent<0?'accent-red':'accent-blue')}
+        ${kpi('Lucro estimado', U.money(profit), 'coins', profit<0?'accent-red':profit>0?'accent-green':'')}
+        ${kpi('Projetos ativos', active.length, 'hard-hat')}
+        ${kpi('Projetos críticos', critical.length, 'siren', critical.length?'accent-red':'')}
+        ${kpi('Gastos em 7 dias', U.money(next7), 'calendar-clock', '', '', goAction('planejamento','{upcoming7:true}'))}
       </div>
 
-      <div class="toolbar" style="margin-bottom:10px">
-        <small style="color:var(--text3);font-weight:700;letter-spacing:.05em">GRÁFICOS:</small>
-        ${this.chartDefs.map(d=>`<button class="tab ${vis[d.id]?'active':''}" style="border:1px solid var(--border2)" onclick="Views.dashboard.toggleChart(${U.jsArg(d.id)})" title="Mostrar/ocultar ${U.esc(d.title)}">${U.esc(d.short)}</button>`).join('')}
+      <div class="tabs dash-chart-toggles" role="group" aria-label="Gráficos exibidos">
+        ${this.chartDefs.map(d=>`<button class="tab ${vis[d.id]?'active':''}" aria-pressed="${vis[d.id]?'true':'false'}" onclick="Views.dashboard.toggleChart(${U.jsArg(d.id)})" title="${U.esc(d.title)}">${U.esc(d.short)}</button>`).join('')}
       </div>
       <div class="two-col">
-        ${this.chartDefs.filter(d=>vis[d.id]).map(d=>`<div class="card chart-card"><h3 style="margin-bottom:10px">${d.title}${d.hint||''}</h3><div class="chart-box ${d.sm?'sm':''}"><canvas id="ch-${d.id}"></canvas></div></div>`).join('')
-          || '<div class="empty card">Todos os gráficos estão ocultos — use os botões acima para exibi-los.</div>'}
+        ${this.chartDefs.filter(d=>vis[d.id]).map(d=>`<div class="card chart-card"><h3 class="chart-title">${d.title}</h3><div class="chart-box ${d.sm?'sm':''}"><canvas id="ch-${d.id}"></canvas></div></div>`).join('')
+          || '<div class="empty card">Nenhum gráfico selecionado.</div>'}
       </div>
 
-      <div class="section-title"><h2>Semáforo Financeiro das Obras</h2>
-        ${hiddenFinished?`<small class="dash-hidden-note">${hiddenFinished} projeto(s) concluído(s) oculto(s) — veja o resultado em <button type="button" onclick="App.go('projetos')">Projetos</button></small>`:''}
+      <div class="section-title"><h2>Semáforo financeiro das obras</h2>
+        ${hiddenFinished?`<small class="dash-hidden-note"><button type="button" onclick="App.go('projetos')">${hiddenFinished} concluído(s) oculto(s)</button></small>`:''}
         <button class="btn btn-ghost btn-sm" onclick="Views.projetos.compare()"><i data-lucide="git-compare"></i>Comparar</button></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
-        <thead><tr><th></th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo Orçado</th><th class="num">Margem</th><th class="num">Saúde</th><th>Consumo</th></tr></thead>
+        <thead><tr><th>Saúde</th><th>Obra</th><th>Status</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projeção</th><th class="num">Saldo orçado</th><th class="num">Margem</th><th>Consumo</th></tr></thead>
         <tbody>${stats.sort((a,b)=>a.s.health-b.s.health).map(({p,s})=>`
           <tr class="clickable" onclick="Views.projetos.detail(${U.jsArg(p.id)})">
-            <td>${lightDot(s.light)}</td><td><b>${U.esc(U.projLabel(p))}</b></td><td>${statusTag(p.status)}</td>
+            <td class="cell-health">${lightDot(s.light)}<b>${s.health}</b></td><td class="cell-obra"><b>${U.esc(U.projLabel(p))}</b></td><td>${statusTag(p.status)}</td>
             <td class="num">${U.money(s.budgetTotal)}</td><td class="num">${U.money(s.spent)}</td>
             <td class="num">${U.money(s.projected)}</td>
             <td class="num" style="color:${s.balance<0?'var(--red)':'inherit'}">${U.money(s.balance)}</td>
-            <td class="num">${U.pct(s.marginCurrent)}</td><td class="num"><b>${s.health}</b></td>
-            <td style="min-width:100px"><div class="progress ${s.consumed>100?'crit':s.consumed>85?'warn':''}"><div style="width:${Math.min(100,s.consumed)}%"></div></div></td>
-          </tr>`).join('') || '<tr><td colspan="10"><div class="empty">Sem projetos para exibir</div></td></tr>'}</tbody></table></div></div>
+            <td class="num">${U.pct(s.marginCurrent)}</td>
+            <td style="min-width:58px"><div class="progress ${s.consumed>100?'crit':s.consumed>85?'warn':''}"><div style="width:${Math.min(100,s.consumed)}%"></div></div></td>
+          </tr>`).join('') || '<tr><td colspan="9"><div class="empty">Sem projetos para exibir</div></td></tr>'}</tbody></table></div></div>
 
-      <div class="section-title"><h2>Dashboard das Categorias</h2></div>
+      <div class="section-title"><h2>Categorias</h2></div>
       <div class="table-wrap"><div class="table-scroll" style="max-height:400px"><table>
-        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo Orçado</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
+        <thead><tr><th>Categoria</th><th class="num">Orçado</th><th class="num">Realizado</th><th class="num">Projetado</th><th class="num">Saldo orçado</th><th class="num">% Comprom.</th><th class="num">Peso</th><th>Tendência</th><th></th></tr></thead>
         <tbody>${cats.map(c=>`
           <tr class="clickable" onclick="Dash.drill({category:${U.jsArg(c.name)}})">
             <td><b>${U.esc(c.name)}</b></td><td class="num">${U.money(c.budget)}</td><td class="num">${U.money(c.spent)}</td>
@@ -173,6 +172,7 @@ Views.dashboard = {
     const mobile=typeof matchMedia==='function' && matchMedia('(max-width: 600px)').matches;
     const itemLimit=mobile?6:12;
     const compactTicks={autoSkip:true,maxTicksLimit:mobile?5:9,font:{size:mobile?9:11}};
+    const pal = Dash.palette();
     const tt = { callbacks:{ label: ctx => ` ${ctx.dataset.label||ctx.label}: ${U.money2(ctx.parsed.y ?? ctx.parsed)}` } };
 
     // Orçado x Realizado x Projeção x Saldo Orçado por projeto
@@ -181,10 +181,10 @@ Views.dashboard = {
       type:'bar',
       data:{ labels: top.map(x=>x.p.proposal),
         datasets:[
-          {label:'Orçado', data:top.map(x=>x.s.budgetTotal), backgroundColor:'#2563EB'},
-          {label:'Realizado', data:top.map(x=>x.s.spent), backgroundColor:'#16A34A'},
-          {label:'Projeção', data:top.map(x=>x.s.projected), backgroundColor:'#D97706'},
-          {label:'Saldo Orçado', data:top.map(x=>x.s.balance), backgroundColor:'#94A3B8'}]},
+          {label:'Orçado', data:top.map(x=>x.s.budgetTotal), backgroundColor:pal.budget},
+          {label:'Realizado', data:top.map(x=>x.s.spent), backgroundColor:pal.spent},
+          {label:'Projeção', data:top.map(x=>x.s.projected), backgroundColor:pal.projected},
+          {label:'Saldo orçado', data:top.map(x=>x.s.balance), backgroundColor:pal.balance}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{position:'bottom'}},
         onClick:(e,els)=>{ if(els.length){ const p = top[els[0].index].p; Views.projetos.detail(p.id); } },
         scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
@@ -196,7 +196,7 @@ Views.dashboard = {
     // Evolução mensal (com drill por mês)
     if(document.getElementById('ch-monthly')) Dash.charts.monthly = new Chart(document.getElementById('ch-monthly'), {
       type:'bar',
-      data:{ labels:series.labels, datasets:[{label:'Gastos no mês', data:series.values, backgroundColor:'#2563EB', borderRadius:6}]},
+      data:{ labels:series.labels, datasets:[{label:'Gastos no mês', data:series.values, backgroundColor:pal.supplier, borderRadius:3}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
         onClick:(e,els)=>{ if(els.length) Dash.drill({month:series.labels[els[0].index]}); },
         scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
@@ -207,7 +207,7 @@ Views.dashboard = {
     const catTop = cats.filter(c=>c.committed>0).slice(0,mobile?6:10);
     if(document.getElementById('ch-cat')) Dash.charts.cat = new Chart(document.getElementById('ch-cat'), {
       type:'doughnut',
-      data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.committed), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0}]},
+      data:{ labels:catTop.map(c=>c.name), datasets:[{data:catTop.map(c=>c.committed), backgroundColor:catTop.map((c,i)=>Dash.color(i)), borderWidth:0, spacing:2, hoverOffset:4}]},
       options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
         plugins:{ legend:{position:mobile?'bottom':'right', labels:{boxWidth:12, font:{size:mobile?9:11},padding:mobile?8:10}},
           tooltip:{ callbacks:{ label: ctx => { const c=catTop[ctx.dataIndex]; return ` ${ctx.label}: ${U.money2(ctx.parsed)} (realizado ${U.money2(c.spent)} + projetado ${U.money2(c.projected)})`; } } } },
@@ -221,7 +221,7 @@ Views.dashboard = {
     const futKeys = Object.keys(futMap).sort();
     if(document.getElementById('ch-cash')) Dash.charts.cash = new Chart(document.getElementById('ch-cash'), {
       type:'bar',
-      data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:'#7C3AED', borderRadius:6}]},
+      data:{ labels:futKeys.map(d=>U.date(d)), datasets:[{label:'Planejado', data:futKeys.map(k=>futMap[k]), backgroundColor:pal.planned, borderRadius:3}]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{tooltip:tt, legend:{display:false}},
         onClick:(e,els)=>{ if(els.length) Views.planejamento.showDay(futKeys[els[0].index],futAll); },
         scales:{ x:{ticks:compactTicks}, y:{ ticks:{...compactTicks,callback:v=>U.money(v)} } } }
@@ -232,7 +232,7 @@ Views.dashboard = {
     if(document.getElementById('ch-margin')) Dash.charts.margin = new Chart(document.getElementById('ch-margin'), {
       type:'bar',
       data:{ labels:withMargin.map(x=>x.p.proposal),
-        datasets:[{label:'Margem %', data:withMargin.map(x=>x.s.marginCurrent), backgroundColor:withMargin.map(x=>x.s.marginCurrent<0?'#DC2626':x.s.marginCurrent<10?'#D97706':'#16A34A'), borderRadius:6}]},
+        datasets:[{label:'Margem %', data:withMargin.map(x=>x.s.marginCurrent), backgroundColor:withMargin.map(x=>x.s.marginCurrent<0?pal.negative:x.s.marginCurrent<10?pal.warning:pal.positive), borderRadius:3}]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>` ${U.pct(ctx.parsed.x)}` } } },
         onClick:(e,els)=>{ if(els.length) Views.projetos.detail(withMargin[els[0].index].p.id); },
@@ -245,7 +245,7 @@ Views.dashboard = {
     const sups = Object.entries(supMap).sort((a,b)=>b[1]-a[1]).slice(0,mobile?6:10);
     if(document.getElementById('ch-top')) Dash.charts.top = new Chart(document.getElementById('ch-top'), {
       type:'bar',
-      data:{ labels:sups.map(s=>s[0].length>(mobile?18:26)?s[0].slice(0,mobile?17:25)+'…':s[0]), datasets:[{label:'Total', data:sups.map(s=>s[1]), backgroundColor:'#0891B2', borderRadius:6}]},
+      data:{ labels:sups.map(s=>s[0].length>(mobile?18:26)?s[0].slice(0,mobile?17:25)+'…':s[0]), datasets:[{label:'Total', data:sups.map(s=>s[1]), backgroundColor:pal.supplier, borderRadius:3}]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${U.money2(ctx.parsed.x)}`}}},
         onClick:(e,els)=>{ if(els.length) Dash.drill({supplier:sups[els[0].index][0]}); },
         scales:{ x:{ ticks:{...compactTicks,callback:v=>U.money(v)} },y:{ticks:compactTicks} } }

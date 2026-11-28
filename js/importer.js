@@ -434,7 +434,7 @@ const Importer = (() => {
       // Mão de obra já foi abatida automaticamente; não reoferece o vínculo manual.
       const canOffset=!res.autoOffset && lastImportedIds.length
         && (typeof Cloud==='undefined' || !Cloud.active() || Cloud.canEditStore('planning'));
-      UI.modal({title:'Resumo da Importação', body:`${renderSummary(res.summary)}${canOffset?'<p style="margin-top:12px;color:var(--text2);font-size:.84rem">Você pode vincular os novos gastos aos itens planejados de mesmo projeto e categoria.</p>':''}`, footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>${canOffset?'<button class="btn btn-primary" onclick="Importer.reconcileLast()"><i data-lucide="calendar-check"></i>Abater do planejamento</button>':''}`});
+      UI.modal({title:'Resumo da Importação', body:`${renderSummary(res.summary)}${canOffset?'':''}`, footer:`<button class="btn btn-ghost" onclick="UI.close()">Fechar</button>${canOffset?'<button class="btn btn-primary" onclick="Importer.reconcileLast()"><i data-lucide="calendar-check"></i>Abater do planejamento</button>':''}`});
       UI.toast(`${res.summary.added} registros adicionados`, 'success');
       App.render();
     }catch(err){ UI.loading(false); UI.toast('Falha ao ler a planilha: '+U.esc(err.message), 'error', 6000); }

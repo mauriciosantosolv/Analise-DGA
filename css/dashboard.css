@@ -103,7 +103,7 @@ kbd{background:var(--surface2);border:1px solid var(--border);border-bottom-widt
 }
 @media print{
   body.printing-project>#app{display:none!important}
-  body.printing-project>#project-print-report{display:block!important;color:#172033;background:#fff;font-family:Inter,Arial,sans-serif;font-size:10px;page:project-report}
+  body.printing-project>#project-print-report{display:block!important;color:#172033;background:#fff;font-family:'Open Sans',Arial,sans-serif;font-size:10px;page:project-report}
   .print-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:2px solid #2563eb;padding-bottom:12px;margin-bottom:12px}
   .print-head h1{font-size:24px;margin:3px 0}.print-head p{margin:0;color:#526079}
   .print-project-identity{display:flex;align-items:center;gap:12px;min-width:0}.print-project-identity>img,.print-project-identity>span{display:grid;width:54px;height:54px;flex:0 0 auto;place-items:center;border:1px solid #dbe2ea;border-radius:10px;background:#f8fafc;object-fit:contain;color:#1e3a5f;font-weight:800}.print-project-identity>div{min-width:0}

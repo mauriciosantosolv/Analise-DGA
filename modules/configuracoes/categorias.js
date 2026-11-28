@@ -35,7 +35,7 @@ Views.categorias = {
           const icon=['tag','wrench','truck','home','utensils','shirt','fuel','hard-hat','cable','zap','package','shield','plane','car','coffee','briefcase','calculator'].includes(c.icon)?c.icon:'tag';
           return `<div class="card ${c.id?'clickable':''}" style="${c.id?'cursor:pointer':''}" ${c.id?`onclick="Views.categorias.form(${U.jsArg(c.id)})"`:''}>
             <div style="display:flex;gap:10px;align-items:center">
-              <span style="width:34px;height:34px;border-radius:9px;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center"><i data-lucide="${icon}" style="width:16px;height:16px"></i></span>
+              <span style="width:34px;height:34px;border-radius:var(--radius-md);background:${color}22;color:${color};display:flex;align-items:center;justify-content:center"><i data-lucide="${icon}" style="width:16px;height:16px"></i></span>
               <div style="flex:1;min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(c.name)}</b>
               <small style="color:var(--text3)">${U.money(total.spent)} realizado · ${U.money(total.projected)} projetado</small>
               ${c.calculated?'<span class="tag tag-gray" style="margin-top:5px">Calculada pela base</span>':''}</div></div></div>`;
